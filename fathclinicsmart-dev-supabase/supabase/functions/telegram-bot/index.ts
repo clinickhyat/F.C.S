@@ -22,7 +22,6 @@ function validateGulfPhone(raw: string): { ok: boolean; normalized?: string } {
 }
 
 serve(async (req) => {
-  // ============ الأمن 1: فحص IP تيليجرام ============
   const clientIP = req.headers.get('x-forwarded-for') || req.headers.get('cf-connecting-ip') || 'unknown';
   const isTelegram = clientIP.startsWith('149.154.') ||
                      clientIP.startsWith('91.108.4.') ||
@@ -33,7 +32,6 @@ serve(async (req) => {
     console.log(`Blocked request from IP: ${clientIP}`);
     return new Response('Forbidden', { status: 403 });
   }
-  // ============ نهاية الأمن 1 ============
 
   if (req.method === 'OPTIONS') return new Response(null, { headers: corsHeaders });
 
@@ -59,7 +57,6 @@ serve(async (req) => {
         const { data: userData } = await supabase.auth.getUser(jwt);
         const uid = userData?.user?.id;
         if (uid) {
-          // الأمن 2: قراءة التوكن من vault
           const { data: ownerClinic } = await supabase.from('clinics').select('id').eq('owner_id', uid).maybeSingle();
           if (ownerClinic) {
             const { data: vaultData } = await supabase.from('vault').select('bot_token').eq('clinic_id', ownerClinic.id).maybeSingle();
@@ -165,7 +162,6 @@ serve(async (req) => {
       const parts = text.split(' ');
       const param = parts.length > 1 ? parts[1] : null;
 
-      // الأمن 3: رابط link_ برمز مؤقت
       if (param && param.startsWith('link_')) {
         const token = param.replace('link_', '');
         const { data: linkData } = await supabase
@@ -963,13 +959,25 @@ function stripEmojis(s: string): string {
     .trim();
 }
 
-// ============ دالة الصوت المُصلحة (طلب واحد لـ gTTS) ============
+// ============ دالة الصوت المُصلحة (اختيار عشوائي بين VoiceRSS و gTTS مع المسار الصحيح) ============
 async function sendVoiceReply(supabase: any, botToken: string, chatId: number, clinicId: string, htmlText: string): Promise<boolean> {
   const plain = stripEmojis(htmlText.replace(/<[^>]+>/g, '').replace(/\s+/g, ' ')).trim();
   if (!plain) return false;
   const textForTTS = plain.length > 400 ? plain.slice(0, 397) + '...' : plain;
 
-  const sendTelegramVoice = async (buffer: Uint8Array | ArrayBuffer, ext: string) => {
+  // اختيار عشوائي: 0 = gTTS, 1 = VoiceRSS
+  const randomChoice = Math.random() < 0.5 ? 0 : 1;
+
+  const sendAudio = async (buffer: Uint8Array | ArrayBuffer, ext: string) => {
+    const fd = new FormData();
+    fd.append('chat_id', String(chatId));
+    fd.append('audio', new Blob([buffer]), `voice.${ext}`);
+    fd.append('title', plain.length > 50 ? plain.slice(0,50) + '...' : plain);
+    const res = await fetch(`https://api.telegram.org/bot${botToken}/sendAudio`, { method: 'POST', body: fd });
+    return await res.json();
+  };
+
+  const sendVoice = async (buffer: Uint8Array | ArrayBuffer, ext: string) => {
     const fd = new FormData();
     fd.append('chat_id', String(chatId));
     fd.append('voice', new Blob([buffer]), `voice.${ext}`);
@@ -977,57 +985,44 @@ async function sendVoiceReply(supabase: any, botToken: string, chatId: number, c
     return await res.json();
   };
 
-  // المحاولة 1: gTTS بطلب واحد (بدون تقطيع)
-  try {
+  const tryGtts = async () => {
     const url = `https://translate.google.com/translate_tts?ie=UTF-8&tl=ar&client=tw-ob&q=${encodeURIComponent(textForTTS)}&textlen=${textForTTS.length}`;
     const r = await fetch(url, { headers: { 'User-Agent': 'Mozilla/5.0' } });
     if (r.ok) {
       const buffer = await r.arrayBuffer();
-      const result = await sendTelegramVoice(buffer, 'mp3');
+      const result = await sendAudio(buffer, 'mp3');
       if (result.ok) {
         await logTelemetryBot(supabase, clinicId, 'voice_sent', 'ok', { layer: 'gTTS' });
         return true;
       }
     }
-  } catch (e) { console.log("gTTS failed, trying VoiceRSS"); }
+    return false;
+  };
 
-  // المحاولة 2: VoiceRSS (إذا وُجد مفتاح)
-  try {
+  const tryVoiceRss = async () => {
     const apiKey = Deno.env.get("VOICERSS_API_KEY");
-    if (apiKey) {
-      const url = `https://api.voicerss.org/?key=${apiKey}&hl=ar-sa&src=${encodeURIComponent(textForTTS)}&f=48khz_16bit_mono`;
-      const res = await fetch(url);
-      if (res.ok) {
-        const buffer = await res.arrayBuffer();
-        const result = await sendTelegramVoice(buffer, 'ogg');
-        if (result.ok) {
-          await logTelemetryBot(supabase, clinicId, 'voice_sent', 'ok', { layer: 'VoiceRSS' });
-          return true;
-        }
+    if (!apiKey) return false;
+    const url = `https://api.voicerss.org/?key=${apiKey}&hl=ar-sa&src=${encodeURIComponent(textForTTS)}&f=48khz_16bit_mono`;
+    const res = await fetch(url);
+    if (res.ok) {
+      const buffer = await res.arrayBuffer();
+      const result = await sendVoice(buffer, 'ogg');
+      if (result.ok) {
+        await logTelemetryBot(supabase, clinicId, 'voice_sent', 'ok', { layer: 'VoiceRSS' });
+        return true;
       }
     }
-  } catch (e) { console.log("VoiceRSS failed"); }
+    return false;
+  };
 
-  // المحاولة 3: Piper (احتياط)
-  try {
-    const piperUrl = Deno.env.get("PIPER_CLOUD_URL");
-    const piperToken = Deno.env.get("PIPER_TOKEN") || "";
-    if (piperUrl) {
-      const res = await fetch(piperUrl, {
-        method: "POST",
-        headers: { "Content-Type": "application/json", "X-Token": piperToken },
-        body: JSON.stringify({ text: textForTTS })
-      });
-      if (res.ok) {
-        const buffer = await res.arrayBuffer();
-        const result = await sendTelegramVoice(buffer, 'wav');
-        if (result.ok) {
-          await logTelemetryBot(supabase, clinicId, 'voice_sent', 'ok', { layer: 'Piper' });
-          return true;
-        }
-      }
-    }
-  } catch (e) { console.log("Piper failed"); }
+  // المحاولة حسب الترتيب العشوائي
+  if (randomChoice === 0) {
+    if (await tryGtts()) return true;
+    if (await tryVoiceRss()) return true;
+  } else {
+    if (await tryVoiceRss()) return true;
+    if (await tryGtts()) return true;
+  }
 
   await logTelemetryBot(supabase, clinicId, 'voice_failed', 'error', { reason: 'all_layers_failed' });
   return false;
