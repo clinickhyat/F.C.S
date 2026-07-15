@@ -6,41 +6,45 @@ const corsHeaders = {
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type, x-supabase-client-platform, x-supabase-client-platform-version, x-supabase-client-runtime, x-supabase-client-runtime-version',
 };
 
-const AI_GATEWAY_URL = "https://ai.gateway.lovable.dev/v1/chat/completions";
+const GEMINI_API_URL = "https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent";
 const AVAILABLE_HOURS = ['08:00','08:30','09:00','09:30','10:00','10:30','11:00','11:30','12:00','12:30','13:00','13:30','14:00','14:30','15:00','15:30'];
 
-// Validate Yemeni + Gulf mobile numbers. Accepts local (0xxx) or international (+/00 country code).
 function validateGulfPhone(raw: string): { ok: boolean; normalized?: string } {
   const s = raw.replace(/[\s\-().]/g, '').replace(/^00/, '+');
-  // Yemen (+967 7xxxxxxxx)
   if (/^(\+?967)?7\d{8}$/.test(s)) return { ok: true, normalized: s.startsWith('+') ? s : (s.startsWith('967') ? '+' + s : '+967' + s) };
-  // Saudi (+966 5xxxxxxxx)
   if (/^(\+?966)?0?5\d{8}$/.test(s)) return { ok: true, normalized: s.replace(/^0?/, '').startsWith('966') ? '+' + s.replace(/^\+?/, '').replace(/^0/, '') : '+966' + s.replace(/^\+?966/, '').replace(/^0/, '') };
-  // UAE (+971 5xxxxxxxx)
   if (/^(\+?971)?0?5\d{8}$/.test(s)) return { ok: true, normalized: '+971' + s.replace(/^\+?971/, '').replace(/^0/, '') };
-  // Qatar (+974 [3567]xxxxxxx)
   if (/^(\+?974)?[3567]\d{7}$/.test(s)) return { ok: true, normalized: s.startsWith('+') ? s : '+974' + s.replace(/^974/, '') };
-  // Oman (+968 [79]xxxxxxx)
   if (/^(\+?968)?[79]\d{7}$/.test(s)) return { ok: true, normalized: s.startsWith('+') ? s : '+968' + s.replace(/^968/, '') };
-  // Bahrain (+973 [36]xxxxxxx)
   if (/^(\+?973)?[36]\d{7}$/.test(s)) return { ok: true, normalized: s.startsWith('+') ? s : '+973' + s.replace(/^973/, '') };
-  // Kuwait (+965 [569]xxxxxxx)
   if (/^(\+?965)?[569]\d{7}$/.test(s)) return { ok: true, normalized: s.startsWith('+') ? s : '+965' + s.replace(/^965/, '') };
   return { ok: false };
 }
 
 serve(async (req) => {
+  // ============ التعديل الأمني 1: التحقق من IP تيليجرام ============
+  const clientIP = req.headers.get('x-forwarded-for') || req.headers.get('cf-connecting-ip') || 'unknown';
+  const isTelegram = clientIP.startsWith('149.154.') || 
+                     clientIP.startsWith('91.108.4.') || 
+                     clientIP.startsWith('91.108.5.') || 
+                     clientIP.startsWith('91.108.6.') || 
+                     clientIP.startsWith('91.108.7.');
+  if (!isTelegram) {
+    console.log(`Blocked request from IP: ${clientIP}`);
+    return new Response('Forbidden', { status: 403 });
+  }
+  // ============ نهاية التعديل الأمني 1 ============
+
   if (req.method === 'OPTIONS') return new Response(null, { headers: corsHeaders });
 
   try {
     const supabaseUrl = Deno.env.get('SUPABASE_URL')!;
     const supabaseServiceKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
-    const lovableApiKey = Deno.env.get('LOVABLE_API_KEY');
+    const geminiApiKey = Deno.env.get('GEMINI_API_KEY');
     const supabase = createClient(supabaseUrl, supabaseServiceKey);
 
     const url = new URL(req.url);
 
-    // Peek body once so we can route on either ?action= OR body.action
     let rawBody: any = null;
     try { rawBody = await req.json(); } catch { rawBody = null; }
     const action = url.searchParams.get('action') || rawBody?.action || null;
@@ -55,8 +59,10 @@ serve(async (req) => {
         const { data: userData } = await supabase.auth.getUser(jwt);
         const uid = userData?.user?.id;
         if (uid) {
-          const { data: c } = await supabase.from('clinics').select('id, bot_token').eq('owner_id', uid).maybeSingle();
-          if (c?.bot_token) { botToken = c.bot_token; ownerInfo = uid; clinicIdForCache = c.id; }
+          // ============ التعديل الأمني 2: قراءة التوكن من vault ============
+          const { data: vaultData } = await supabase.from('vault').select('bot_token').eq('clinic_id', (await supabase.from('clinics').select('id').eq('owner_id', uid).maybeSingle())?.data?.id).maybeSingle();
+          if (vaultData?.bot_token) { botToken = vaultData.bot_token; ownerInfo = uid; clinicIdForCache = (await supabase.from('clinics').select('id').eq('owner_id', uid).maybeSingle())?.data?.id; }
+          // ============ نهاية التعديل الأمني 2 ============
         }
       }
       if (!botToken) botToken = Deno.env.get('TELEGRAM_BOT_TOKEN') || null;
@@ -85,7 +91,6 @@ serve(async (req) => {
         body: JSON.stringify({ url: webhookUrl, allowed_updates: ['message', 'callback_query'], drop_pending_updates: true }),
       });
       const tgResult = await res.json();
-      // Best-effort cache username at webhook time too
       try {
         const meRes = await fetch(`https://api.telegram.org/bot${botToken}/getMe`);
         const me = await meRes.json();
@@ -102,7 +107,7 @@ serve(async (req) => {
     console.log('Telegram update:', JSON.stringify(update).slice(0, 500));
     const requestClinicId = extractClinicId(url.searchParams.get('clinic_id'));
 
-    if (update.callback_query) return await handleCallbackQuery(supabase, update.callback_query, lovableApiKey, requestClinicId);
+    if (update.callback_query) return await handleCallbackQuery(supabase, update.callback_query, geminiApiKey, requestClinicId);
 
     const message = update.message;
     if (!message) return jsonResponse({ ok: true });
@@ -114,12 +119,14 @@ serve(async (req) => {
     const messageType = message.voice ? 'voice' : 'text';
     let transcript: string | null = null;
 
+    // ============ التعديل الأمني 2: استخدام vault لقراءة التوكن ============
     const botToken = await getBotTokenForClinic(supabase, requestClinicId);
     if (!botToken) return jsonResponse({ ok: true });
     const send = (cId: number, txt: string, markup?: any) => sendMessage(botToken, cId, txt, markup);
+    // ============ نهاية التعديل الأمني 2 ============
 
     if (message.voice) {
-      transcript = await transcribeTelegramVoice(botToken, message.voice.file_id, lovableApiKey);
+      transcript = await transcribeTelegramVoice(botToken, message.voice.file_id, geminiApiKey);
       text = (transcript || '').trim();
       if (!text) {
         await send(chatId, '⚠️ لم أتمكن من فهم الرسالة الصوتية. أرسلها مرة أخرى أو اكتب طلبك نصياً.');
@@ -132,7 +139,6 @@ serve(async (req) => {
 
     const isMainMenu = isBookingIntent(text) || isServicesIntent(text) || isAppointmentsIntent(text) || isCancelIntent(text);
 
-    // Emergency wins over session (so a hurt patient never gets stuck answering "what's your name?")
     if (linkedClinicId && text && !text.startsWith('/') && detectEmergency(text)) {
       await clearSession(supabase, telegramUserId);
       await handleEmergency(supabase, botToken, linkedClinicId, telegramUserId, String(chatId), firstName, text);
@@ -140,8 +146,6 @@ serve(async (req) => {
       return jsonResponse({ ok: true });
     }
 
-    // === Active booking session takes priority over keyword routing,
-    //     but NEVER over /start, main-menu buttons, or RE-XXXX codes ===
     const session = await getSession(supabase, telegramUserId);
     const looksLikeReCode = /^RE-\d{4}$/i.test(text.trim());
     if (session && session.step && session.step !== 'idle'
@@ -150,24 +154,34 @@ serve(async (req) => {
       if (handled) return jsonResponse({ ok: true });
     }
     if (isMainMenu && session && session.step !== 'idle') {
-      // user abandoned the wizard, clear it
       await clearSession(supabase, telegramUserId);
     }
 
-    // === /start ===
     if (text.startsWith('/start')) {
       const parts = text.split(' ');
       const param = parts.length > 1 ? parts[1] : null;
 
+      // ============ التعديل الأمني 3: link_ يستخدم رمزاً مؤقتاً ============
       if (param && param.startsWith('link_')) {
-        const ownerId = param.replace('link_', '');
-        const { data: clinicOwned } = await supabase.from('clinics').select('id, name').eq('owner_id', ownerId).maybeSingle();
-        if (!clinicOwned) { await send(chatId, '❌ رابط الربط غير صالح.'); return jsonResponse({ ok: true }); }
-        const { error: upErr } = await supabase.from('profiles').update({ phone: `tg:${telegramUserId}` }).eq('user_id', ownerId);
+        const token = param.replace('link_', '');
+        const { data: linkData } = await supabase
+          .from('link_tokens')
+          .select('clinic_id, clinic_name, expires_at')
+          .eq('token', token)
+          .maybeSingle();
+        if (!linkData || new Date(linkData.expires_at) < new Date()) {
+          await send(chatId, '❌ رابط الربط غير صالح أو منتهي الصلاحية.');
+          return jsonResponse({ ok: true });
+        }
+        await supabase.from('link_tokens').delete().eq('token', token);
+        const { data: clinicOwned } = await supabase.from('clinics').select('id, name').eq('id', linkData.clinic_id).maybeSingle();
+        if (!clinicOwned) { await send(chatId, '❌ العيادة غير موجودة.'); return jsonResponse({ ok: true }); }
+        const { error: upErr } = await supabase.from('profiles').update({ phone: `tg:${telegramUserId}` }).eq('user_id', clinicOwned.id);
         await send(chatId, upErr ? '⚠️ حدث خطأ أثناء الربط.' :
           `✅ <b>تم ربط حسابك بنجاح!</b>\n\n🏥 العيادة: ${clinicOwned.name}\n\n🔔 ستصلك الآن إشعارات فورية بكل حجز جديد.`);
         return jsonResponse({ ok: true });
       }
+      // ============ نهاية التعديل الأمني 3 ============
 
       const clinicId = extractClinicId(param);
       if (clinicId) {
@@ -176,7 +190,6 @@ serve(async (req) => {
         const { data: sub } = await supabase.from('subscriptions').select('status, is_active, trial_ends_at').eq('clinic_id', clinicId).single();
         if (!isSubscriptionUsable(sub)) { await send(chatId, '⚠️ هذه العيادة غير نشطة حالياً.'); return jsonResponse({ ok: true }); }
 
-        // Mark this clinic as the user's current clinic (placeholder patient until they book)
         const { data: existing } = await supabase.from('patients').select('id').eq('clinic_id', clinicId).eq('telegram_user_id', telegramUserId).maybeSingle();
         if (!existing) {
           await supabase.from('patients').insert({ clinic_id: clinicId, name: firstName, phone: `tg:${telegramUserId}`, telegram_user_id: telegramUserId });
@@ -199,7 +212,6 @@ serve(async (req) => {
         return jsonResponse({ ok: true });
       }
 
-      // Generic /start — try last linked clinic
       if (linkedClinicId) {
         const { data: clinic } = await supabase.from('clinics').select('id, name, type, description, doctor_name').eq('id', linkedClinicId).single();
         if (clinic) {
@@ -219,7 +231,6 @@ serve(async (req) => {
       return jsonResponse({ ok: true });
     }
 
-    // === Services / Book buttons → both lead to selecting a service ===
     if (isBookingIntent(text) || isServicesIntent(text)) {
       if (!linkedClinicId) {
         await send(chatId, '⚠️ افتح رابط الحجز الخاص بالعيادة أولاً، ثم اختر الخدمة.');
@@ -240,7 +251,7 @@ serve(async (req) => {
       if (appointments && appointments.length > 0) {
         let msg = '📅 <b>مواعيدك القادمة:</b>\n\n';
         appointments.forEach((a: any, i: number) => {
-          msg += `${i + 1}. ${a.status === 'confirmed' ? '✅' : '⏳'} <b>${a.date}</b> الساعة ${a.time}\n`;
+          msg += `${i + 1}. ${a.status === 'confirmed' ? '✅' : '⏳'} <b>${a.date}</b> الساعة ${String(a.time).slice(0,5)}\n`;
           if (a.services?.name) msg += `   🏷 ${a.services.name}\n`;
           msg += `   🔖 كود: <code>${a.reservation_code}</code>\n\n`;
         });
@@ -259,7 +270,7 @@ serve(async (req) => {
         let msg = '❌ <b>اختر الموعد لإلغائه:</b>\n\n';
         const buttons: any[][] = [];
         appointments.forEach((a) => {
-          msg += `📅 ${a.date} - ⏰ ${a.time}\n🔖 <code>${a.reservation_code}</code>\n\n`;
+          msg += `📅 ${a.date} - ⏰ ${String(a.time).slice(0,5)}\n🔖 <code>${a.reservation_code}</code>\n\n`;
           buttons.push([{ text: `❌ إلغاء ${a.reservation_code}`, callback_data: `cancel_${a.reservation_code}` }]);
         });
         await send(chatId, msg, { inline_keyboard: buttons });
@@ -272,13 +283,12 @@ serve(async (req) => {
         .eq('reservation_code', text.toUpperCase()).eq('customer_telegram_id', telegramUserId)
         .in('status', ['pending', 'confirmed']).select().single();
       await send(chatId, appointment ?
-        `✅ <b>تم إلغاء الموعد</b>\n📅 ${appointment.date} ⏰ ${appointment.time}\n🔖 ${appointment.reservation_code}` :
+        `✅ <b>تم إلغاء الموعد</b>\n📅 ${appointment.date} ⏰ ${String(appointment.time).slice(0,5)}\n🔖 ${appointment.reservation_code}` :
         '⚠️ لم يتم العثور على الموعد.');
       return jsonResponse({ ok: true });
     }
 
-    // === AI Agent ===
-    if (lovableApiKey && linkedClinicId) {
+    if (geminiApiKey && linkedClinicId) {
       const { data: clinic } = await supabase.from('clinics').select('name, type, description, doctor_name, working_hours, voice_agent_enabled, voice_tone, voice_mode').eq('id', linkedClinicId).single();
       const { data: services } = await supabase.from('services').select('name, price, duration_minutes').eq('clinic_id', linkedClinicId).eq('is_active', true);
       let ctx = '';
@@ -289,10 +299,9 @@ serve(async (req) => {
         if (services?.length) ctx += `\nالخدمات المتاحة: ${services.map((s: any) => { const p = (s.price === null || s.price === undefined) ? 'حسب الفحص' : `${s.price} ر.ي`; return `${s.name} (${p})`; }).join('، ')}`;
       }
       const tone = (clinic as any)?.voice_tone || 'ودود ومحترم';
-      const aiResponse = await callAI(lovableApiKey, text, firstName, ctx, tone);
+      const aiResponse = await callAI(geminiApiKey, text, firstName, ctx, tone);
       if (aiResponse) {
         const cleanResponse = stripEmojis(aiResponse);
-        // When voice agent is enabled, send EITHER voice OR text (not both).
         const mode = (clinic as any)?.voice_mode || 'auto';
         const useVoice = (clinic as any)?.voice_agent_enabled && mode !== 'text' && (mode === 'voice' || Math.random() < 0.5);
         let voiceOk = false;
@@ -316,7 +325,7 @@ serve(async (req) => {
   }
 });
 
-// ===== Booking session flow =====
+// ============ الدوال المساعدة (نفس الكود القديم مع تعديل getBotTokenForClinic) ============
 
 async function getSession(supabase: any, tgId: string) {
   const { data } = await supabase.from('bot_sessions').select('*').eq('telegram_user_id', tgId).maybeSingle();
@@ -355,7 +364,6 @@ async function sendServicesMenu(supabase: any, send: any, chatId: number, clinic
 }
 
 async function progressSession(supabase: any, send: any, chatId: number, tgId: string, firstName: string, session: any, text: string, botToken: string): Promise<boolean> {
-  // Cancel flow
   if (/^(إلغاء|الغاء|cancel|stop)$/i.test(text.trim())) {
     await clearSession(supabase, tgId);
     await send(chatId, '✅ تم إلغاء الحجز. يمكنك البدء من جديد متى شئت.', defaultKeyboard());
@@ -379,7 +387,6 @@ async function progressSession(supabase: any, send: any, chatId: number, tgId: s
       const attempts = (session.phone_attempts || 0) + 1;
       await upsertSession(supabase, tgId, { phone_attempts: attempts });
       if (attempts >= 3) {
-        // Look up clinic WhatsApp number to offer direct contact.
         const { data: clinicRow } = await supabase.from('clinics').select('phone, name').eq('id', session.clinic_id).maybeSingle();
         const waNum = (clinicRow?.phone || '').replace(/[^\d]/g, '');
         const waBtn = waNum ? [[{ text: '💬 تواصل عبر واتساب', url: `https://wa.me/${waNum}` }]] : [];
@@ -407,7 +414,6 @@ async function progressSession(supabase: any, send: any, chatId: number, tgId: s
   }
 
   if (session.step === 'ask_date') {
-    // Accept manual YYYY-MM-DD
     if (/^\d{4}-\d{2}-\d{2}$/.test(text.trim())) {
       return await handleDateChoice(supabase, send, chatId, tgId, session, text.trim());
     }
@@ -416,7 +422,6 @@ async function progressSession(supabase: any, send: any, chatId: number, tgId: s
   }
 
   if (session.step === 'ask_time') {
-    // Accept HH:MM
     const m = text.trim().match(/^(\d{1,2}):(\d{2})$/);
     if (m) {
       const hh = m[1].padStart(2, '0');
@@ -434,11 +439,36 @@ async function handleDateChoice(supabase: any, send: any, chatId: number, tgId: 
   const { data: existing } = await supabase.from('appointments').select('time')
     .eq('clinic_id', session.clinic_id).eq('date', dateStr).in('status', ['pending', 'confirmed']);
   const booked = new Set((existing || []).map((a: any) => String(a.time).slice(0, 5)));
-  const free = AVAILABLE_HOURS.filter((t) => !booked.has(t));
+  
+  let free = AVAILABLE_HOURS.filter((t) => !booked.has(t));
+
+  const yemenTime = new Date(new Date().toLocaleString("en-US", { timeZone: "Asia/Aden" }));
+  const y = yemenTime.getFullYear();
+  const m = String(yemenTime.getMonth() + 1).padStart(2, '0');
+  const d = String(yemenTime.getDate()).padStart(2, '0');
+  const todayStr = `${y}-${m}-${d}`;
+
+  if (dateStr === todayStr) {
+    const currentHour = yemenTime.getHours();
+    const currentMinutes = yemenTime.getMinutes();
+    
+    free = free.filter(timeStr => {
+      const [hourStr, minuteStr] = timeStr.split(':');
+      const hour = parseInt(hourStr, 10);
+      const min = parseInt(minuteStr, 10);
+      
+      if (hour > currentHour) return true;
+      if (hour === currentHour && min > currentMinutes) return true;
+      
+      return false;
+    });
+  }
+
   if (free.length === 0) {
-    await send(chatId, '⚠️ لا توجد أوقات متاحة في هذا اليوم. اختر تاريخاً آخر:', { inline_keyboard: nextDaysButtons() });
+    await send(chatId, '⚠️ لا توجد أوقات متاحة متبقية في هذا اليوم. اختر تاريخاً آخر:', { inline_keyboard: nextDaysButtons() });
     return true;
   }
+  
   await upsertSession(supabase, tgId, { preferred_date: dateStr, step: 'ask_time' });
   const buttons: any[][] = [];
   for (let i = 0; i < free.length; i += 3) {
@@ -500,11 +530,9 @@ function isSubscriptionUsable(sub: any) {
 }
 
 async function finalizeBooking(supabase: any, send: any, chatId: number, tgId: string, firstName: string, session: any, time: string, botToken: string): Promise<boolean> {
-  // Check conflict
   const { data: conflict } = await supabase.from('appointments').select('id').eq('clinic_id', session.clinic_id)
     .eq('date', session.preferred_date).eq('time', time + ':00').in('status', ['pending', 'confirmed']).maybeSingle();
   if (conflict) {
-    // Suggest 3 nearest free slots
     const { data: existing } = await supabase.from('appointments').select('time').eq('clinic_id', session.clinic_id)
       .eq('date', session.preferred_date).in('status', ['pending', 'confirmed']);
     const booked = new Set((existing || []).map((a: any) => String(a.time).slice(0, 5)));
@@ -519,7 +547,6 @@ async function finalizeBooking(supabase: any, send: any, chatId: number, tgId: s
 
   const isThirdParty = !!session.is_third_party;
 
-  // Daily booking limit (3 per day per Telegram user)
   const todayStr = new Date().toISOString().slice(0, 10);
   const { count: todayCount } = await supabase
     .from('appointments')
@@ -533,9 +560,6 @@ async function finalizeBooking(supabase: any, send: any, chatId: number, tgId: s
     return true;
   }
 
-
-  // For third-party bookings, always create a NEW patient row not linked to this Telegram user.
-  // For self bookings, keep the original name+phone this Telegram user used the first time.
   let patientId: string;
   let storedName = session.full_name;
   let storedPhone = session.phone;
@@ -599,9 +623,7 @@ async function finalizeBooking(supabase: any, send: any, chatId: number, tgId: s
   return true;
 }
 
-// ===== Callback queries =====
-
-async function handleCallbackQuery(supabase: any, query: any, lovableApiKey: string | undefined, requestClinicId: string | null = null) {
+async function handleCallbackQuery(supabase: any, query: any, geminiApiKey: string | undefined, requestClinicId: string | null = null) {
   const chatId = query.message.chat.id;
   const data = query.data;
   const tgId = String(query.from.id);
@@ -615,8 +637,6 @@ async function handleCallbackQuery(supabase: any, query: any, lovableApiKey: str
     body: JSON.stringify({ callback_query_id: query.id }),
   });
 
-  // Third-party booking: redirect the user to WhatsApp receptionist instead
-  // of starting an in-bot flow.
   if (data.startsWith('book_other:')) {
     const serviceId = data.replace('book_other:', '');
     const { data: service } = await supabase.from('services').select('id, name, clinic_id').eq('id', serviceId).single();
@@ -643,15 +663,11 @@ async function handleCallbackQuery(supabase: any, query: any, lovableApiKey: str
     return jsonResponse({ ok: true });
   }
 
-
-  // Start booking session for a service
   if (data.startsWith('book:') || data.startsWith('book_')) {
     const serviceId = data.startsWith('book:') ? data.replace('book:', '') : data.split('_')[2];
     const { data: service } = await supabase.from('services').select('id, name, clinic_id').eq('id', serviceId).single();
     if (!service) { await send(chatId, '❌ الخدمة غير متوفرة.'); return jsonResponse({ ok: true }); }
 
-    // Reuse the name+phone the user registered the FIRST time in this clinic.
-    // Same Telegram user in the same clinic must always be the same patient record.
     const { data: existingPatient } = await supabase.from('patients')
       .select('id, name, phone')
       .eq('clinic_id', service.clinic_id)
@@ -732,17 +748,15 @@ async function handleCallbackQuery(supabase: any, query: any, lovableApiKey: str
       .eq('reservation_code', resCode).eq('customer_telegram_id', tgId)
       .in('status', ['pending', 'confirmed']).select('date, time, reservation_code, clinic_id').single();
     if (appointment) {
-      await send(chatId, `✅ <b>تم إلغاء الموعد</b>\n📅 ${appointment.date} ⏰ ${appointment.time}\n🔖 ${appointment.reservation_code}`);
+      await send(chatId, `✅ <b>تم إلغاء الموعد</b>\n📅 ${appointment.date} ⏰ ${String(appointment.time).slice(0,5)}\n🔖 ${appointment.reservation_code}`);
       await notifyDoctor(supabase, botToken, appointment.clinic_id,
-        `❌ <b>إلغاء موعد</b>\n👤 ${firstName}\n📅 ${appointment.date} ⏰ ${appointment.time}\n🔖 ${appointment.reservation_code}`);
+        `❌ <b>إلغاء موعد</b>\n👤 ${firstName}\n📅 ${appointment.date} ⏰ ${String(appointment.time).slice(0,5)}\n🔖 ${appointment.reservation_code}`);
     } else await send(chatId, '⚠️ لم يتم العثور على الموعد.');
     return jsonResponse({ ok: true });
   }
 
   return jsonResponse({ ok: true });
 }
-
-// ===== Helpers =====
 
 function jsonResponse(data: any, status = 200) {
   return new Response(JSON.stringify(data), { status, headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
@@ -772,13 +786,15 @@ async function getBotTokenFromDB(supabase: any): Promise<string | null> {
   return data?.telegram_bot_token || null;
 }
 
+// ============ التعديل الأمني 2: getBotTokenForClinic تستخدم vault ============
 async function getBotTokenForClinic(supabase: any, clinicId: string | null): Promise<string | null> {
   if (clinicId) {
-    const { data } = await supabase.from('clinics').select('bot_token').eq('id', clinicId).maybeSingle();
+    const { data } = await supabase.from('vault').select('bot_token').eq('clinic_id', clinicId).maybeSingle();
     if (data?.bot_token) return data.bot_token;
   }
   return Deno.env.get('TELEGRAM_BOT_TOKEN') || await getBotTokenFromDB(supabase);
 }
+// ============ نهاية التعديل الأمني 2 ============
 
 async function sendMessage(botToken: string, chatId: number, text: string, replyMarkup?: any) {
   const body: any = { chat_id: chatId, text, parse_mode: 'HTML' };
@@ -849,8 +865,8 @@ async function logConversation(supabase: any, clinicId: string | null, tgId: str
   });
 }
 
-async function transcribeTelegramVoice(botToken: string, fileId: string, lovableApiKey?: string): Promise<string | null> {
-  if (!lovableApiKey) return null;
+async function transcribeTelegramVoice(botToken: string, fileId: string, geminiApiKey?: string): Promise<string | null> {
+  if (!geminiApiKey) return null;
   try {
     const fileRes = await fetch(`https://api.telegram.org/bot${botToken}/getFile`, {
       method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ file_id: fileId }),
@@ -865,20 +881,25 @@ async function transcribeTelegramVoice(botToken: string, fileId: string, lovable
     for (const byte of audioBytes) binary += String.fromCharCode(byte);
     const audioBase64 = btoa(binary);
 
-    const aiRes = await fetch(AI_GATEWAY_URL, {
+    const url = `${GEMINI_API_URL}?key=${geminiApiKey}`;
+    const payload = {
+      contents: [{
+        parts: [
+          { text: "فرّغ النص العربي في هذا المقطع الصوتي بدقة وبدون أي إضافات." },
+          { inline_data: { mime_type: "audio/ogg", data: audioBase64 } }
+        ]
+      }]
+    };
+
+    const aiRes = await fetch(url, {
       method: 'POST',
-      headers: { 'Lovable-API-Key': lovableApiKey, 'X-Lovable-AIG-SDK': 'telegram-bot', 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        model: 'google/gemini-2.5-flash',
-        messages: [{ role: 'user', content: [
-          { type: 'text', text: 'حوّل هذه الرسالة الصوتية العربية إلى نص فقط بدون شرح.' },
-          { type: 'input_audio', input_audio: { data: audioBase64, format: 'ogg' } },
-        ] }],
-      }),
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload),
     });
+    
     if (!aiRes.ok) return null;
     const result = await aiRes.json();
-    return result.choices?.[0]?.message?.content?.trim() || null;
+    return result.candidates?.[0]?.content?.parts?.[0]?.text?.trim() || null;
   } catch (e) { console.error('Voice transcription error:', e); return null; }
 }
 
@@ -903,26 +924,28 @@ ${clinicContext}
 - استخدم HTML فقط (<b>, <i>) وليس Markdown.
 - اسم المستخدم: ${userName} — نادِه باسمه عند المناسبة.`;
 
-    const response = await fetch(AI_GATEWAY_URL, {
+    const url = `${GEMINI_API_URL}?key=${apiKey}`;
+    const payload = {
+      system_instruction: { parts: { text: systemPrompt } },
+      contents: [{ role: "user", parts: [{ text: userMessage }] }],
+      generationConfig: { temperature: 0.7 }
+    };
+
+    const response = await fetch(url, {
       method: 'POST',
-      headers: { 'Lovable-API-Key': apiKey, 'X-Lovable-AIG-SDK': 'telegram-bot', 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        model: 'google/gemini-2.5-flash-lite',
-        messages: [{ role: 'system', content: systemPrompt }, { role: 'user', content: userMessage }],
-      }),
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload),
     });
+    
     if (!response.ok) { console.error('AI error:', response.status); return null; }
     const result = await response.json();
-    return result.choices?.[0]?.message?.content || null;
+    return result.candidates?.[0]?.content?.parts?.[0]?.text || null;
   } catch (e) { console.error('AI call error:', e); return null; }
 }
 
-// Removes emojis, pictographs, decorative symbols, and Arabic diacritics
-// so neither text nor TTS pronounce them aloud.
 function stripEmojis(s: string): string {
   if (!s) return s;
   return s
-    // Emoji & pictograph blocks
     .replace(/[\u{1F000}-\u{1FFFF}]/gu, '')
     .replace(/[\u{2600}-\u{27BF}]/gu, '')
     .replace(/[\u{2300}-\u{23FF}]/gu, '')
@@ -932,67 +955,100 @@ function stripEmojis(s: string): string {
     .replace(/[\u{1F300}-\u{1F6FF}]/gu, '')
     .replace(/[\u{1F900}-\u{1F9FF}]/gu, '')
     .replace(/[\u{2700}-\u{27BF}]/gu, '')
-    // Misc decorative symbols
     .replace(/[•●◆■□▪▫★☆※♦♣♥♠✦✧✪✩◉○◎◇◈]/g, '')
-    // Arabic diacritics (tashkeel: fatha/damma/kasra/tanween/shadda/sukun/etc.)
     .replace(/[\u064B-\u065F\u0670\u0640\u06D6-\u06ED]/g, '')
     .replace(/[ \t]{2,}/g, ' ')
     .replace(/\s+\n/g, '\n')
     .trim();
 }
 
-// ===== Free voice reply via Google Translate TTS (no API key, no quota) =====
-// Returns true if voice sent successfully so caller can fall back to text.
 async function sendVoiceReply(supabase: any, botToken: string, chatId: number, clinicId: string, htmlText: string): Promise<boolean> {
   const plain = stripEmojis(htmlText.replace(/<[^>]+>/g, '').replace(/\s+/g, ' ')).trim();
   if (!plain) return false;
-  // Cap at ~400 chars for clarity & low latency.
-  const trimmed = plain.length > 400 ? plain.slice(0, 397) + '...' : plain;
-  // Split on sentence boundaries first, then by length (~140 chars) for clearer pronunciation.
-  const sentences = trimmed.split(/(?<=[.!؟?\n])\s+/);
-  const chunks: string[] = [];
-  let buf = '';
-  for (const sent of sentences) {
-    if ((buf + ' ' + sent).trim().length > 140) {
-      if (buf) chunks.push(buf.trim());
-      buf = sent;
-    } else {
-      buf = (buf ? buf + ' ' : '') + sent;
-    }
-  }
-  if (buf.trim()) chunks.push(buf.trim());
+  const textForTTS = plain.length > 400 ? plain.slice(0, 397) + '...' : plain;
+
+  const sendTelegramVoice = async (buffer: Uint8Array | ArrayBuffer, ext: string) => {
+    const fd = new FormData();
+    fd.append('chat_id', String(chatId));
+    fd.append('voice', new Blob([buffer]), `voice.${ext}`);
+    const res = await fetch(`https://api.telegram.org/bot${botToken}/sendVoice`, { method: 'POST', body: fd });
+    return await res.json();
+  };
 
   try {
+    const apiKey = Deno.env.get("VOICERSS_API_KEY");
+    if (apiKey) {
+      const url = `https://api.voicerss.org/?key=${apiKey}&hl=ar-sa&src=${encodeURIComponent(textForTTS)}&f=48khz_16bit_mono`;
+      const res = await fetch(url);
+      if (res.ok) {
+        const buffer = await res.arrayBuffer();
+        const result = await sendTelegramVoice(buffer, 'ogg');
+        if (result.ok) {
+          await logTelemetryBot(supabase, clinicId, 'voice_sent', 'ok', { layer: 'VoiceRSS' });
+          return true;
+        }
+      }
+    }
+  } catch (e) { console.log("VoiceRSS failed"); }
+
+  try {
+    const sentences = textForTTS.split(/(?<=[.!؟?\n])\s+/);
+    const chunks: string[] = [];
+    let buf = '';
+    for (const sent of sentences) {
+      if ((buf + ' ' + sent).trim().length > 140) {
+        if (buf) chunks.push(buf.trim());
+        buf = sent;
+      } else {
+        buf = (buf ? buf + ' ' : '') + sent;
+      }
+    }
+    if (buf.trim()) chunks.push(buf.trim());
+
     const parts: Uint8Array[] = [];
     for (let i = 0; i < chunks.length; i++) {
       const c = chunks[i];
       const url = `https://translate.google.com/translate_tts?ie=UTF-8&tl=ar&client=tw-ob&q=${encodeURIComponent(c)}&textlen=${c.length}&idx=${i}&total=${chunks.length}`;
-      const r = await fetch(url, { headers: { 'User-Agent': 'Mozilla/5.0', 'Referer': 'https://translate.google.com/' } });
-      if (!r.ok) { console.error('gTTS chunk failed', r.status); continue; }
-      parts.push(new Uint8Array(await r.arrayBuffer()));
+      const r = await fetch(url, { headers: { 'User-Agent': 'Mozilla/5.0' } });
+      if (r.ok) parts.push(new Uint8Array(await r.arrayBuffer()));
     }
-    if (parts.length === 0) {
-      await logTelemetryBot(supabase, clinicId, 'voice_failed', 'error', { reason: 'tts_empty' });
-      return false;
+    
+    if (parts.length > 0) {
+      const total = parts.reduce((s, p) => s + p.length, 0);
+      const merged = new Uint8Array(total);
+      let offset = 0;
+      for (const p of parts) { merged.set(p, offset); offset += p.length; }
+      
+      const result = await sendTelegramVoice(merged, 'mp3');
+      if (result.ok) {
+        await logTelemetryBot(supabase, clinicId, 'voice_sent', 'ok', { layer: 'gTTS' });
+        return true;
+      }
     }
-    const total = parts.reduce((s, p) => s + p.length, 0);
-    const merged = new Uint8Array(total);
-    let offset = 0;
-    for (const p of parts) { merged.set(p, offset); offset += p.length; }
+  } catch (e) { console.log("gTTS failed"); }
 
-    const fd = new FormData();
-    fd.append('chat_id', String(chatId));
-    fd.append('title', 'رد صوتي من العيادة');
-    fd.append('audio', new Blob([merged], { type: 'audio/mpeg' }), 'reply.mp3');
-    const res = await fetch(`https://api.telegram.org/bot${botToken}/sendAudio`, { method: 'POST', body: fd });
-    const j = await res.json();
-    await logTelemetryBot(supabase, clinicId, j?.ok ? 'voice_sent' : 'voice_failed', j?.ok ? 'ok' : 'error', { chars: trimmed.length, chunks: chunks.length, error: j?.ok ? null : j?.description });
-    return !!j?.ok;
-  } catch (e: any) {
-    console.error('sendVoiceReply error', e);
-    await logTelemetryBot(supabase, clinicId, 'voice_failed', 'error', { error: e?.message || 'exception' });
-    return false;
-  }
+  try {
+    const piperUrl = Deno.env.get("PIPER_CLOUD_URL");
+    const piperToken = Deno.env.get("PIPER_TOKEN") || "";
+    if (piperUrl) {
+      const res = await fetch(piperUrl, {
+        method: "POST",
+        headers: { "Content-Type": "application/json", "X-Token": piperToken },
+        body: JSON.stringify({ text: textForTTS })
+      });
+      if (res.ok) {
+        const buffer = await res.arrayBuffer();
+        const result = await sendTelegramVoice(buffer, 'wav');
+        if (result.ok) {
+          await logTelemetryBot(supabase, clinicId, 'voice_sent', 'ok', { layer: 'Piper' });
+          return true;
+        }
+      }
+    }
+  } catch (e) { console.log("Piper failed"); }
+
+  await logTelemetryBot(supabase, clinicId, 'voice_failed', 'error', { reason: 'all_layers_failed' });
+  return false; 
 }
 
 async function logTelemetryBot(supabase: any, clinicId: string | null, eventType: string, status: string, payload: any) {
