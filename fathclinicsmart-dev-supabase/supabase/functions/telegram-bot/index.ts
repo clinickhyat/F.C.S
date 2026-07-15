@@ -22,7 +22,6 @@ function validateGulfPhone(raw: string): { ok: boolean; normalized?: string } {
 }
 
 serve(async (req) => {
-  // ============ الأمن 1: فحص IP تيليجرام (مع استثناء للإجراءات الإدارية) ============
   const clientIP = req.headers.get('x-forwarded-for') || req.headers.get('cf-connecting-ip') || 'unknown';
   const isTelegram = clientIP.startsWith('149.154.') ||
                      clientIP.startsWith('91.108.4.') ||
@@ -30,7 +29,6 @@ serve(async (req) => {
                      clientIP.startsWith('91.108.6.') ||
                      clientIP.startsWith('91.108.7.');
 
-  // السماح بطلبات GET (مثل اختبار المتصفح) والإجراءات الإدارية من أي IP
   const url = new URL(req.url);
   const action = url.searchParams.get('action') || null;
   const isAdminAction = action === 'webhook-info' || action === 'bot-info' || action === 'set-webhook' || req.method === 'GET';
@@ -39,7 +37,6 @@ serve(async (req) => {
     console.log(`Blocked request from IP: ${clientIP} for non-admin action`);
     return new Response('Forbidden', { status: 403 });
   }
-  // ============ نهاية الأمن 1 ============
 
   if (req.method === 'OPTIONS') return new Response(null, { headers: corsHeaders });
 
@@ -308,14 +305,15 @@ serve(async (req) => {
         const cleanResponse = stripEmojis(aiResponse);
         const mode = (clinic as any)?.voice_mode || 'auto';
         const useVoice = (clinic as any)?.voice_agent_enabled && mode !== 'text' && (mode === 'voice' || Math.random() < 0.5);
-        let voiceOk = false;
+
+        // إرسال الرد النصي فوراً
+        await send(chatId, cleanResponse, defaultKeyboard());
+        await logConversation(supabase, linkedClinicId, telegramUserId, String(chatId), 'outgoing', 'ai_response', null, null, cleanResponse, 'ok', null);
+
+        // إرسال الصوت في الخلفية (لن يمنع انتهاء الدالة)
         if (useVoice) {
-          voiceOk = await sendVoiceReply(supabase, botToken, chatId, linkedClinicId, cleanResponse);
+          EdgeRuntime.waitUntil(sendVoiceReply(supabase, botToken, chatId, linkedClinicId, cleanResponse));
         }
-        if (!useVoice || !voiceOk) {
-          await send(chatId, cleanResponse, defaultKeyboard());
-        }
-        await logConversation(supabase, linkedClinicId, telegramUserId, String(chatId), 'outgoing', useVoice && voiceOk ? 'ai_voice' : 'ai_response', null, null, cleanResponse, 'ok', null);
         return jsonResponse({ ok: true });
       }
     }
@@ -329,7 +327,7 @@ serve(async (req) => {
   }
 });
 
-// ============ دوال مساعدة ============
+// ============ الدوال المساعدة ============
 
 async function getSession(supabase: any, tgId: string) {
   const { data } = await supabase.from('bot_sessions').select('*').eq('telegram_user_id', tgId).maybeSingle();
@@ -964,7 +962,7 @@ function stripEmojis(s: string): string {
     .trim();
 }
 
-// ============ دالة الصوت المُصلحة بالكامل ============
+// ============ دالة الصوت النهائية (تُرسل في الخلفية) ============
 async function sendVoiceReply(supabase: any, botToken: string, chatId: number, clinicId: string, htmlText: string): Promise<boolean> {
   const plain = stripEmojis(htmlText.replace(/<[^>]+>/g, '').replace(/\s+/g, ' ')).trim();
   if (!plain) return false;
@@ -976,13 +974,10 @@ async function sendVoiceReply(supabase: any, botToken: string, chatId: number, c
     fd.append('audio', new Blob([buffer]), `voice.${ext}`);
     fd.append('title', plain.length > 60 ? plain.slice(0,60) + '...' : plain);
     fd.append('performer', 'Smart Clinic');
-    // تقدير المدة بالثواني (bitrate تقريبي 16kbps)
     const estimatedSeconds = Math.ceil(buffer.byteLength / 2000);
     fd.append('duration', String(estimatedSeconds));
     const res = await fetch(`https://api.telegram.org/bot${botToken}/sendAudio`, { method: 'POST', body: fd });
-    const json = await res.json();
-    console.log('sendAudio response:', JSON.stringify(json));
-    return json;
+    return await res.json();
   };
 
   const sendVoice = async (buffer: Uint8Array | ArrayBuffer, ext: string) => {
@@ -990,80 +985,40 @@ async function sendVoiceReply(supabase: any, botToken: string, chatId: number, c
     fd.append('chat_id', String(chatId));
     fd.append('voice', new Blob([buffer]), `voice.${ext}`);
     const res = await fetch(`https://api.telegram.org/bot${botToken}/sendVoice`, { method: 'POST', body: fd });
-    const json = await res.json();
-    console.log('sendVoice response:', JSON.stringify(json));
-    return json;
+    return await res.json();
   };
 
-  const tryGtts = async () => {
-    try {
-      const url = `https://translate.google.com/translate_tts?ie=UTF-8&tl=ar&client=tw-ob&q=${encodeURIComponent(textForTTS)}&textlen=${textForTTS.length}`;
-      const r = await fetch(url, { headers: { 'User-Agent': 'Mozilla/5.0' } });
-      if (!r.ok) {
-        console.log('gTTS fetch failed with status', r.status);
-        return false;
-      }
+  // جرب gTTS أولاً (أسرع) ثم VoiceRSS
+  try {
+    const url = `https://translate.google.com/translate_tts?ie=UTF-8&tl=ar&client=tw-ob&q=${encodeURIComponent(textForTTS)}&textlen=${textForTTS.length}`;
+    const r = await fetch(url, { headers: { 'User-Agent': 'Mozilla/5.0' } });
+    if (r.ok) {
       const buffer = await r.arrayBuffer();
-      console.log('gTTS buffer size:', buffer.byteLength);
       const result = await sendAudio(buffer, 'mp3');
       if (result.ok) {
         await logTelemetryBot(supabase, clinicId, 'voice_sent', 'ok', { layer: 'gTTS' });
         return true;
       }
-      console.log('sendAudio failed, trying sendVoice as fallback');
-      // محاولة إرسال MP3 كرسالة صوتية كخطة بديلة (قد يفشل لكن نجرب)
-      const result2 = await sendVoice(buffer, 'mp3');
-      if (result2.ok) {
-        await logTelemetryBot(supabase, clinicId, 'voice_sent', 'ok', { layer: 'gTTS_voice' });
-        return true;
-      }
-    } catch (e) {
-      console.log('gTTS exception:', e);
     }
-    return false;
-  };
+  } catch (_) {}
 
-  const tryVoiceRss = async () => {
-    try {
-      const apiKey = Deno.env.get("VOICERSS_API_KEY");
-      if (!apiKey) return false;
+  // جرب VoiceRSS
+  try {
+    const apiKey = Deno.env.get("VOICERSS_API_KEY");
+    if (apiKey) {
       const url = `https://api.voicerss.org/?key=${apiKey}&hl=ar-sa&src=${encodeURIComponent(textForTTS)}&f=48khz_16bit_mono`;
       const res = await fetch(url);
-      if (!res.ok) {
-        console.log('VoiceRSS fetch failed with status', res.status);
-        return false;
+      if (res.ok) {
+        const buffer = await res.arrayBuffer();
+        const result = await sendVoice(buffer, 'ogg');
+        if (result.ok) {
+          await logTelemetryBot(supabase, clinicId, 'voice_sent', 'ok', { layer: 'VoiceRSS' });
+          return true;
+        }
       }
-      const buffer = await res.arrayBuffer();
-      console.log('VoiceRSS buffer size:', buffer.byteLength);
-      const result = await sendVoice(buffer, 'ogg');
-      if (result.ok) {
-        await logTelemetryBot(supabase, clinicId, 'voice_sent', 'ok', { layer: 'VoiceRSS' });
-        return true;
-      }
-      console.log('sendVoice failed, trying sendAudio as fallback');
-      const result2 = await sendAudio(buffer, 'ogg');
-      if (result2.ok) {
-        await logTelemetryBot(supabase, clinicId, 'voice_sent', 'ok', { layer: 'VoiceRSS_audio' });
-        return true;
-      }
-    } catch (e) {
-      console.log('VoiceRSS exception:', e);
     }
-    return false;
-  };
+  } catch (_) {}
 
-  // اختيار عشوائي: 0 = gTTS أولاً, 1 = VoiceRSS أولاً
-  const randomChoice = Math.random() < 0.5 ? 0 : 1;
-
-  if (randomChoice === 0) {
-    if (await tryGtts()) return true;
-    if (await tryVoiceRss()) return true;
-  } else {
-    if (await tryVoiceRss()) return true;
-    if (await tryGtts()) return true;
-  }
-
-  console.log('All voice methods failed');
   await logTelemetryBot(supabase, clinicId, 'voice_failed', 'error', { reason: 'all_layers_failed' });
   return false;
 }
