@@ -22,18 +22,18 @@ function validateGulfPhone(raw: string): { ok: boolean; normalized?: string } {
 }
 
 serve(async (req) => {
-  // ============ التعديل الأمني 1: التحقق من IP تيليجرام ============
+  // ============ الأمن 1: فحص IP تيليجرام ============
   const clientIP = req.headers.get('x-forwarded-for') || req.headers.get('cf-connecting-ip') || 'unknown';
-  const isTelegram = clientIP.startsWith('149.154.') || 
-                     clientIP.startsWith('91.108.4.') || 
-                     clientIP.startsWith('91.108.5.') || 
-                     clientIP.startsWith('91.108.6.') || 
+  const isTelegram = clientIP.startsWith('149.154.') ||
+                     clientIP.startsWith('91.108.4.') ||
+                     clientIP.startsWith('91.108.5.') ||
+                     clientIP.startsWith('91.108.6.') ||
                      clientIP.startsWith('91.108.7.');
   if (!isTelegram) {
     console.log(`Blocked request from IP: ${clientIP}`);
     return new Response('Forbidden', { status: 403 });
   }
-  // ============ نهاية التعديل الأمني 1 ============
+  // ============ نهاية الأمن 1 ============
 
   if (req.method === 'OPTIONS') return new Response(null, { headers: corsHeaders });
 
@@ -59,10 +59,16 @@ serve(async (req) => {
         const { data: userData } = await supabase.auth.getUser(jwt);
         const uid = userData?.user?.id;
         if (uid) {
-          // ============ التعديل الأمني 2: قراءة التوكن من vault ============
-          const { data: vaultData } = await supabase.from('vault').select('bot_token').eq('clinic_id', (await supabase.from('clinics').select('id').eq('owner_id', uid).maybeSingle())?.data?.id).maybeSingle();
-          if (vaultData?.bot_token) { botToken = vaultData.bot_token; ownerInfo = uid; clinicIdForCache = (await supabase.from('clinics').select('id').eq('owner_id', uid).maybeSingle())?.data?.id; }
-          // ============ نهاية التعديل الأمني 2 ============
+          // الأمن 2: قراءة التوكن من vault
+          const { data: ownerClinic } = await supabase.from('clinics').select('id').eq('owner_id', uid).maybeSingle();
+          if (ownerClinic) {
+            const { data: vaultData } = await supabase.from('vault').select('bot_token').eq('clinic_id', ownerClinic.id).maybeSingle();
+            if (vaultData?.bot_token) {
+              botToken = vaultData.bot_token;
+              ownerInfo = uid;
+              clinicIdForCache = ownerClinic.id;
+            }
+          }
         }
       }
       if (!botToken) botToken = Deno.env.get('TELEGRAM_BOT_TOKEN') || null;
@@ -119,11 +125,9 @@ serve(async (req) => {
     const messageType = message.voice ? 'voice' : 'text';
     let transcript: string | null = null;
 
-    // ============ التعديل الأمني 2: استخدام vault لقراءة التوكن ============
     const botToken = await getBotTokenForClinic(supabase, requestClinicId);
     if (!botToken) return jsonResponse({ ok: true });
     const send = (cId: number, txt: string, markup?: any) => sendMessage(botToken, cId, txt, markup);
-    // ============ نهاية التعديل الأمني 2 ============
 
     if (message.voice) {
       transcript = await transcribeTelegramVoice(botToken, message.voice.file_id, geminiApiKey);
@@ -161,7 +165,7 @@ serve(async (req) => {
       const parts = text.split(' ');
       const param = parts.length > 1 ? parts[1] : null;
 
-      // ============ التعديل الأمني 3: link_ يستخدم رمزاً مؤقتاً ============
+      // الأمن 3: رابط link_ برمز مؤقت
       if (param && param.startsWith('link_')) {
         const token = param.replace('link_', '');
         const { data: linkData } = await supabase
@@ -181,7 +185,6 @@ serve(async (req) => {
           `✅ <b>تم ربط حسابك بنجاح!</b>\n\n🏥 العيادة: ${clinicOwned.name}\n\n🔔 ستصلك الآن إشعارات فورية بكل حجز جديد.`);
         return jsonResponse({ ok: true });
       }
-      // ============ نهاية التعديل الأمني 3 ============
 
       const clinicId = extractClinicId(param);
       if (clinicId) {
@@ -325,7 +328,7 @@ serve(async (req) => {
   }
 });
 
-// ============ الدوال المساعدة (نفس الكود القديم مع تعديل getBotTokenForClinic) ============
+// ============ دوال مساعدة ============
 
 async function getSession(supabase: any, tgId: string) {
   const { data } = await supabase.from('bot_sessions').select('*').eq('telegram_user_id', tgId).maybeSingle();
@@ -439,7 +442,7 @@ async function handleDateChoice(supabase: any, send: any, chatId: number, tgId: 
   const { data: existing } = await supabase.from('appointments').select('time')
     .eq('clinic_id', session.clinic_id).eq('date', dateStr).in('status', ['pending', 'confirmed']);
   const booked = new Set((existing || []).map((a: any) => String(a.time).slice(0, 5)));
-  
+
   let free = AVAILABLE_HOURS.filter((t) => !booked.has(t));
 
   const yemenTime = new Date(new Date().toLocaleString("en-US", { timeZone: "Asia/Aden" }));
@@ -451,15 +454,15 @@ async function handleDateChoice(supabase: any, send: any, chatId: number, tgId: 
   if (dateStr === todayStr) {
     const currentHour = yemenTime.getHours();
     const currentMinutes = yemenTime.getMinutes();
-    
+
     free = free.filter(timeStr => {
       const [hourStr, minuteStr] = timeStr.split(':');
       const hour = parseInt(hourStr, 10);
       const min = parseInt(minuteStr, 10);
-      
+
       if (hour > currentHour) return true;
       if (hour === currentHour && min > currentMinutes) return true;
-      
+
       return false;
     });
   }
@@ -468,7 +471,7 @@ async function handleDateChoice(supabase: any, send: any, chatId: number, tgId: 
     await send(chatId, '⚠️ لا توجد أوقات متاحة متبقية في هذا اليوم. اختر تاريخاً آخر:', { inline_keyboard: nextDaysButtons() });
     return true;
   }
-  
+
   await upsertSession(supabase, tgId, { preferred_date: dateStr, step: 'ask_time' });
   const buttons: any[][] = [];
   for (let i = 0; i < free.length; i += 3) {
@@ -786,7 +789,6 @@ async function getBotTokenFromDB(supabase: any): Promise<string | null> {
   return data?.telegram_bot_token || null;
 }
 
-// ============ التعديل الأمني 2: getBotTokenForClinic تستخدم vault ============
 async function getBotTokenForClinic(supabase: any, clinicId: string | null): Promise<string | null> {
   if (clinicId) {
     const { data } = await supabase.from('vault').select('bot_token').eq('clinic_id', clinicId).maybeSingle();
@@ -794,7 +796,6 @@ async function getBotTokenForClinic(supabase: any, clinicId: string | null): Pro
   }
   return Deno.env.get('TELEGRAM_BOT_TOKEN') || await getBotTokenFromDB(supabase);
 }
-// ============ نهاية التعديل الأمني 2 ============
 
 async function sendMessage(botToken: string, chatId: number, text: string, replyMarkup?: any) {
   const body: any = { chat_id: chatId, text, parse_mode: 'HTML' };
@@ -896,7 +897,7 @@ async function transcribeTelegramVoice(botToken: string, fileId: string, geminiA
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(payload),
     });
-    
+
     if (!aiRes.ok) return null;
     const result = await aiRes.json();
     return result.candidates?.[0]?.content?.parts?.[0]?.text?.trim() || null;
@@ -936,7 +937,7 @@ ${clinicContext}
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(payload),
     });
-    
+
     if (!response.ok) { console.error('AI error:', response.status); return null; }
     const result = await response.json();
     return result.candidates?.[0]?.content?.parts?.[0]?.text || null;
@@ -962,6 +963,7 @@ function stripEmojis(s: string): string {
     .trim();
 }
 
+// ============ دالة الصوت المُصلحة (طلب واحد لـ gTTS) ============
 async function sendVoiceReply(supabase: any, botToken: string, chatId: number, clinicId: string, htmlText: string): Promise<boolean> {
   const plain = stripEmojis(htmlText.replace(/<[^>]+>/g, '').replace(/\s+/g, ' ')).trim();
   if (!plain) return false;
@@ -975,6 +977,21 @@ async function sendVoiceReply(supabase: any, botToken: string, chatId: number, c
     return await res.json();
   };
 
+  // المحاولة 1: gTTS بطلب واحد (بدون تقطيع)
+  try {
+    const url = `https://translate.google.com/translate_tts?ie=UTF-8&tl=ar&client=tw-ob&q=${encodeURIComponent(textForTTS)}&textlen=${textForTTS.length}`;
+    const r = await fetch(url, { headers: { 'User-Agent': 'Mozilla/5.0' } });
+    if (r.ok) {
+      const buffer = await r.arrayBuffer();
+      const result = await sendTelegramVoice(buffer, 'mp3');
+      if (result.ok) {
+        await logTelemetryBot(supabase, clinicId, 'voice_sent', 'ok', { layer: 'gTTS' });
+        return true;
+      }
+    }
+  } catch (e) { console.log("gTTS failed, trying VoiceRSS"); }
+
+  // المحاولة 2: VoiceRSS (إذا وُجد مفتاح)
   try {
     const apiKey = Deno.env.get("VOICERSS_API_KEY");
     if (apiKey) {
@@ -991,42 +1008,7 @@ async function sendVoiceReply(supabase: any, botToken: string, chatId: number, c
     }
   } catch (e) { console.log("VoiceRSS failed"); }
 
-  try {
-    const sentences = textForTTS.split(/(?<=[.!؟?\n])\s+/);
-    const chunks: string[] = [];
-    let buf = '';
-    for (const sent of sentences) {
-      if ((buf + ' ' + sent).trim().length > 140) {
-        if (buf) chunks.push(buf.trim());
-        buf = sent;
-      } else {
-        buf = (buf ? buf + ' ' : '') + sent;
-      }
-    }
-    if (buf.trim()) chunks.push(buf.trim());
-
-    const parts: Uint8Array[] = [];
-    for (let i = 0; i < chunks.length; i++) {
-      const c = chunks[i];
-      const url = `https://translate.google.com/translate_tts?ie=UTF-8&tl=ar&client=tw-ob&q=${encodeURIComponent(c)}&textlen=${c.length}&idx=${i}&total=${chunks.length}`;
-      const r = await fetch(url, { headers: { 'User-Agent': 'Mozilla/5.0' } });
-      if (r.ok) parts.push(new Uint8Array(await r.arrayBuffer()));
-    }
-    
-    if (parts.length > 0) {
-      const total = parts.reduce((s, p) => s + p.length, 0);
-      const merged = new Uint8Array(total);
-      let offset = 0;
-      for (const p of parts) { merged.set(p, offset); offset += p.length; }
-      
-      const result = await sendTelegramVoice(merged, 'mp3');
-      if (result.ok) {
-        await logTelemetryBot(supabase, clinicId, 'voice_sent', 'ok', { layer: 'gTTS' });
-        return true;
-      }
-    }
-  } catch (e) { console.log("gTTS failed"); }
-
+  // المحاولة 3: Piper (احتياط)
   try {
     const piperUrl = Deno.env.get("PIPER_CLOUD_URL");
     const piperToken = Deno.env.get("PIPER_TOKEN") || "";
@@ -1048,7 +1030,7 @@ async function sendVoiceReply(supabase: any, botToken: string, chatId: number, c
   } catch (e) { console.log("Piper failed"); }
 
   await logTelemetryBot(supabase, clinicId, 'voice_failed', 'error', { reason: 'all_layers_failed' });
-  return false; 
+  return false;
 }
 
 async function logTelemetryBot(supabase: any, clinicId: string | null, eventType: string, status: string, payload: any) {
