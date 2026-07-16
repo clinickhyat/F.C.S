@@ -306,22 +306,20 @@ serve(async (req) => {
         const mode = (clinic as any)?.voice_mode || 'separate';
         const useVoice = (clinic as any)?.voice_agent_enabled && mode !== 'text' && (mode === 'voice' || (messageType === 'voice' && mode !== 'text') || (mode === 'separate' && Math.random() < 0.5));
 
-        // --- التعديل الوحيد: إرسال النص فوراً، ثم استدعاء دالة الصوت ---
-        // إرسال الرد النصي فوراً إلى المستخدم
+        // إرسال الرد النصي فوراً
         await send(chatId, cleanResponse, defaultKeyboard());
         await logConversation(supabase, linkedClinicId, telegramUserId, String(chatId), 'outgoing', 'ai_response', null, null, cleanResponse, 'ok', null);
 
-        // إذا كان الصوت مفعلاً، استدعِ دالة الصوت المستقلة (fire-and-forget)
+        // إرسال الصوت في الخلفية لتجنب مشكلة EarlyDrop
         if (useVoice) {
-          const voiceFunctionUrl = `${supabaseUrl}/functions/v1/send-voice`;
-          fetch(voiceFunctionUrl, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${supabaseServiceKey}` },
-            body: JSON.stringify({ botToken, chatId, text: cleanResponse }),
-          }).catch(e => console.log('Voice dispatch error:', e));
+          EdgeRuntime.waitUntil((async () => {
+            try {
+              await sendVoiceReply(botToken, chatId, cleanResponse);
+            } catch (e) {
+              console.error('Voice error:', e);
+            }
+          })());
         }
-        // --- نهاية التعديل ---
-
         return jsonResponse({ ok: true });
       }
     }
@@ -335,7 +333,7 @@ serve(async (req) => {
   }
 });
 
-// ============ جميع الدوال المساعدة ============
+// ============ الدوال المساعدة ============
 
 async function getSession(supabase: any, tgId: string) {
   const { data } = await supabase.from('bot_sessions').select('*').eq('telegram_user_id', tgId).maybeSingle();
@@ -968,4 +966,31 @@ function stripEmojis(s: string): string {
     .replace(/[ \t]{2,}/g, ' ')
     .replace(/\s+\n/g, '\n')
     .trim();
+}
+
+// دالة الصوت – ترسل الصوت في الخلفية لتجنب EarlyDrop
+async function sendVoiceReply(botToken: string, chatId: number, htmlText: string): Promise<void> {
+  const plain = stripEmojis(htmlText.replace(/<[^>]+>/g, '').replace(/\s+/g, ' ')).trim();
+  if (!plain) return;
+
+  // نقصر النص على 200 حرف للأداء
+  const textForTTS = plain.length > 200 ? plain.slice(0, 197) + '...' : plain;
+
+  try {
+    const url = `https://translate.google.com/translate_tts?ie=UTF-8&tl=ar&client=tw-ob&q=${encodeURIComponent(textForTTS)}&textlen=${textForTTS.length}`;
+    const r = await fetch(url, { headers: { 'User-Agent': 'Mozilla/5.0' } });
+    if (!r.ok) return;
+
+    const buffer = await r.arrayBuffer();
+    const fd = new FormData();
+    fd.append('chat_id', String(chatId));
+    fd.append('audio', new Blob([buffer], { type: 'audio/mpeg' }), 'voice.mp3');
+    fd.append('title', plain.length > 60 ? plain.slice(0, 60) + '...' : plain);
+
+    const res = await fetch(`https://api.telegram.org/bot${botToken}/sendAudio`, { method: 'POST', body: fd });
+    const json = await res.json();
+    if (!json.ok) console.error('Voice send error:', JSON.stringify(json));
+  } catch (e) {
+    console.error('Voice error:', e);
+  }
 }
