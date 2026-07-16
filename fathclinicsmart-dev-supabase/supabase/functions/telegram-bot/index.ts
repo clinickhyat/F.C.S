@@ -306,20 +306,22 @@ serve(async (req) => {
         const mode = (clinic as any)?.voice_mode || 'separate';
         const useVoice = (clinic as any)?.voice_agent_enabled && mode !== 'text' && (mode === 'voice' || (messageType === 'voice' && mode !== 'text') || (mode === 'separate' && Math.random() < 0.5));
 
-        // إرسال الرد النصي فوراً
+        // --- التعديل الوحيد: إرسال النص فوراً، ثم استدعاء دالة الصوت ---
+        // إرسال الرد النصي فوراً إلى المستخدم
         await send(chatId, cleanResponse, defaultKeyboard());
         await logConversation(supabase, linkedClinicId, telegramUserId, String(chatId), 'outgoing', 'ai_response', null, null, cleanResponse, 'ok', null);
 
-        // إرسال الصوت في الخلفية بصورة غير متزامنة (fire-and-forget)
+        // إذا كان الصوت مفعلاً، استدعِ دالة الصوت المستقلة (fire-and-forget)
         if (useVoice) {
-          EdgeRuntime.waitUntil((async () => {
-            try {
-              await sendVoiceReply(supabase, botToken, chatId, linkedClinicId, cleanResponse);
-            } catch (e) {
-              console.error('Background voice error:', e);
-            }
-          })());
+          const voiceFunctionUrl = `${supabaseUrl}/functions/v1/send-voice`;
+          fetch(voiceFunctionUrl, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${supabaseServiceKey}` },
+            body: JSON.stringify({ botToken, chatId, text: cleanResponse }),
+          }).catch(e => console.log('Voice dispatch error:', e));
         }
+        // --- نهاية التعديل ---
+
         return jsonResponse({ ok: true });
       }
     }
@@ -333,7 +335,7 @@ serve(async (req) => {
   }
 });
 
-// ============ الدوال المساعدة (كما هي من الكود القديم) ============
+// ============ جميع الدوال المساعدة ============
 
 async function getSession(supabase: any, tgId: string) {
   const { data } = await supabase.from('bot_sessions').select('*').eq('telegram_user_id', tgId).maybeSingle();
@@ -966,74 +968,4 @@ function stripEmojis(s: string): string {
     .replace(/[ \t]{2,}/g, ' ')
     .replace(/\s+\n/g, '\n')
     .trim();
-}
-
-// دالة الصوت القديمة التي كانت تعمل (gTTS + VoiceRSS)
-async function sendVoiceReply(supabase: any, botToken: string, chatId: number, clinicId: string, htmlText: string): Promise<boolean> {
-  const plain = stripEmojis(htmlText.replace(/<[^>]+>/g, '').replace(/\s+/g, ' ')).trim();
-  if (!plain) return false;
-  const textForTTS = plain.length > 400 ? plain.slice(0, 397) + '...' : plain;
-
-  const sendAudio = async (buffer: Uint8Array | ArrayBuffer, ext: string) => {
-    const fd = new FormData();
-    fd.append('chat_id', String(chatId));
-    fd.append('audio', new Blob([buffer], { type: ext === 'mp3' ? 'audio/mpeg' : 'audio/ogg' }), `voice.${ext}`);
-    fd.append('title', plain.length > 60 ? plain.slice(0,60) + '...' : plain);
-    fd.append('performer', 'Smart Clinic');
-    const res = await fetch(`https://api.telegram.org/bot${botToken}/sendAudio`, { method: 'POST', body: fd });
-    return await res.json();
-  };
-
-  const sendVoice = async (buffer: Uint8Array | ArrayBuffer, ext: string) => {
-    const fd = new FormData();
-    fd.append('chat_id', String(chatId));
-    fd.append('voice', new Blob([buffer]), `voice.${ext}`);
-    const res = await fetch(`https://api.telegram.org/bot${botToken}/sendVoice`, { method: 'POST', body: fd });
-    return await res.json();
-  };
-
-  const randomChoice = Math.random() < 0.5 ? 0 : 1;
-
-  try {
-    if (randomChoice === 0) {
-      const url = `https://translate.google.com/translate_tts?ie=UTF-8&tl=ar&client=tw-ob&q=${encodeURIComponent(textForTTS)}&textlen=${textForTTS.length}`;
-      const r = await fetch(url, { headers: { 'User-Agent': 'Mozilla/5.0' } });
-      if (r.ok) {
-        const buffer = await r.arrayBuffer();
-        const result = await sendAudio(buffer, 'mp3');
-        if (result.ok) return true;
-      }
-      const apiKey = Deno.env.get("VOICERSS_API_KEY");
-      if (apiKey) {
-        const url2 = `https://api.voicerss.org/?key=${apiKey}&hl=ar-sa&src=${encodeURIComponent(textForTTS)}&f=48khz_16bit_mono`;
-        const res2 = await fetch(url2);
-        if (res2.ok) {
-          const buffer = await res2.arrayBuffer();
-          const result = await sendVoice(buffer, 'ogg');
-          if (result.ok) return true;
-        }
-      }
-    } else {
-      const apiKey = Deno.env.get("VOICERSS_API_KEY");
-      if (apiKey) {
-        const url2 = `https://api.voicerss.org/?key=${apiKey}&hl=ar-sa&src=${encodeURIComponent(textForTTS)}&f=48khz_16bit_mono`;
-        const res2 = await fetch(url2);
-        if (res2.ok) {
-          const buffer = await res2.arrayBuffer();
-          const result = await sendVoice(buffer, 'ogg');
-          if (result.ok) return true;
-        }
-      }
-      const url = `https://translate.google.com/translate_tts?ie=UTF-8&tl=ar&client=tw-ob&q=${encodeURIComponent(textForTTS)}&textlen=${textForTTS.length}`;
-      const r = await fetch(url, { headers: { 'User-Agent': 'Mozilla/5.0' } });
-      if (r.ok) {
-        const buffer = await r.arrayBuffer();
-        const result = await sendAudio(buffer, 'mp3');
-        if (result.ok) return true;
-      }
-    }
-  } catch (e) {
-    console.error('sendVoiceReply error:', e);
-  }
-  return false;
 }
