@@ -1,11 +1,11 @@
 import { createClient } from '@supabase/supabase-js';
 import type { Database } from './types';
 
-const SUPABASE_URL = import.meta.env.VITE_SUPABASE_URL || '';
+const SUPABASE_URL = '/supabase';
 const SUPABASE_KEY = import.meta.env.VITE_SUPABASE_ANON_KEY || '';
 
-if (!SUPABASE_URL || !SUPABASE_KEY) {
-  console.warn('Supabase URL or Anon Key is missing.');
+if (!SUPABASE_KEY) {
+  console.warn('Supabase Anon Key is missing.');
 }
 
 export const supabase = createClient<Database>(SUPABASE_URL, SUPABASE_KEY, {
