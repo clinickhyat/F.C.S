@@ -1,7 +1,6 @@
 import { createClient } from '@supabase/supabase-js';
 import type { Database } from './types';
 
-// استخدم الرابط الكامل (هذا يمنع الصفحة البيضاء)
 const SUPABASE_URL = import.meta.env.VITE_SUPABASE_URL || '';
 const SUPABASE_KEY = import.meta.env.VITE_SUPABASE_ANON_KEY || '';
 
