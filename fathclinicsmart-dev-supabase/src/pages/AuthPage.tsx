@@ -9,6 +9,8 @@ import { useAuth } from "@/lib/auth";
 import { useToast } from "@/hooks/use-toast";
 import { Stethoscope, Mail, Lock, User, ArrowLeft, Loader2 } from "lucide-react";
 import { z } from "zod";
+// استيراد مباشر للـ supabase client
+import { supabase } from "@/integrations/supabase/client";
 
 const loginSchema = z.object({
   email: z.string().email("البريد الإلكتروني غير صالح"),
@@ -32,7 +34,7 @@ export default function AuthPage() {
   const [errors, setErrors] = useState<Record<string, string>>({});
 
   const navigate = useNavigate();
-  const { signIn, signUp, user } = useAuth();
+  const { user } = useAuth();
   const { toast } = useToast();
 
   const isLogin = mode === "login";
@@ -63,13 +65,16 @@ export default function AuthPage() {
     setLoading(true);
     try {
       if (isLogin) {
-        const { error } = await signIn(email, password);
+        // استدعاء مباشر لـ supabase (مثل اختبار HTML الناجح)
+        const { data, error } = await supabase.auth.signInWithPassword({
+          email,
+          password,
+        });
+        
         if (error) {
           toast({
             title: "خطأ في تسجيل الدخول",
-            description: error.message.includes("Invalid login credentials")
-              ? "البريد الإلكتروني أو كلمة المرور غير صحيحة"
-              : error.message,
+            description: error.message,
             variant: "destructive",
           });
         } else {
@@ -77,7 +82,18 @@ export default function AuthPage() {
           navigate("/dashboard");
         }
       } else {
-        const { error } = await signUp(email, password, fullName, "owner");
+        const { data, error } = await supabase.auth.signUp({
+          email,
+          password,
+          options: {
+            emailRedirectTo: `${window.location.origin}/`,
+            data: {
+              full_name: fullName,
+              account_type: "owner",
+            },
+          },
+        });
+        
         if (error) {
           if (error.message.includes("already registered")) {
             toast({ title: "حساب موجود", description: "هذا البريد الإلكتروني مسجل مسبقاً. يرجى تسجيل الدخول", variant: "destructive" });
@@ -90,6 +106,12 @@ export default function AuthPage() {
           navigate("/dashboard");
         }
       }
+    } catch (err: any) {
+      toast({
+        title: "خطأ غير متوقع",
+        description: err?.message || "حدث خطأ أثناء تسجيل الدخول",
+        variant: "destructive",
+      });
     } finally {
       setLoading(false);
     }
