@@ -1,8 +1,8 @@
 {
   "rewrites": [
     {
-      "source": "/supabase/(.*)",
-      "destination": "https://ebuumyqofptnjjaujlyd.supabase.co/$1"
+      "source": "/supabase/:path*",
+      "destination": "https://ebuumyqofptnjjaujlyd.supabase.co/:path*"
     },
     {
       "source": "/(.*)",
