@@ -1,40 +1,38 @@
 import { createClient } from '@supabase/supabase-js';
 import type { Database } from './types';
 
-// 1. الرابط الكامل (لإرضاء المكتبة ومنع الصفحة البيضاء)
+// الرابط الأصلي (مثبت داخل الكود)
 const REAL_URL = 'https://ebuumyqofptnjjaujlyd.supabase.co';
 const PROXY_PATH = '/supabase';
-
-// 2. المفتاح من متغيرات البيئة (تأكد من وجوده في Vercel)
 const SUPABASE_KEY = import.meta.env.VITE_SUPABASE_ANON_KEY || '';
 
 if (!SUPABASE_KEY) {
   console.warn('⚠️ Supabase Anon Key is missing.');
 }
 
-// 3. وكيل قوي يعترض الطلبات ويغير مسارها إلى /supabase
+// وكيل احترافي يعترض جميع الطلبات
 const proxyFetch = async (input: RequestInfo | URL, init?: RequestInit): Promise<Response> => {
   try {
-    // استخرج الرابط كـ string
-    let url = typeof input === 'string' ? input : (input instanceof Request ? input.url : input.toString());
+    // احصل على الرابط كاملًا (حتى لو كان نسبيًا)
+    const url = new URL(input.toString(), window.location.origin);
     
-    // إذا كان الطلب موجهاً إلى Supabase، غيّر مساره إلى الوكيل المحلي
-    if (url.startsWith(REAL_URL)) {
-      const path = url.slice(REAL_URL.length);
-      const proxyUrl = `${PROXY_PATH}${path}`;
-      console.log('🔄 Proxy request:', proxyUrl); // للتأكد من عمل الوكيل
+    // إذا كان الطلب إلى Supabase الأصلي (حتى لو كان المسار نسبيًا)، حوّله إلى الوكيل
+    if (url.hostname === 'ebuumyqofptnjjaujlyd.supabase.co') {
+      // أضف المسار الكامل (مثل /auth/v1/... أو /rest/v1/...)
+      const fullPath = url.pathname + url.search;
+      const proxyUrl = `${PROXY_PATH}${fullPath}`;
+      console.log('🔄 Proxy request:', proxyUrl);
       return fetch(proxyUrl, init);
     }
     
-    // الطلبات الأخرى (نادرة) تمر طبيعية
+    // الطلبات الأخرى (مثل الصور الخارجية) تمر عادية
     return fetch(input, init);
   } catch (error) {
-    console.error('❌ Proxy error, falling back to direct fetch:', error);
+    console.error('❌ Proxy error:', error);
     return fetch(input, init);
   }
 };
 
-// 4. تهيئة العميل مع خيار fetch المخصص
 export const supabase = createClient<Database>(REAL_URL, SUPABASE_KEY, {
   auth: {
     storage: localStorage,
