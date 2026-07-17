@@ -9,6 +9,7 @@ import { useAuth } from "@/lib/auth";
 import { useToast } from "@/hooks/use-toast";
 import { Stethoscope, Mail, Lock, User, ArrowLeft, Loader2 } from "lucide-react";
 import { z } from "zod";
+import { supabase } from "@/integrations/supabase/client";
 
 const loginSchema = z.object({
   email: z.string().email("البريد الإلكتروني غير صالح"),
@@ -32,7 +33,7 @@ export default function AuthPage() {
   const [errors, setErrors] = useState<Record<string, string>>({});
 
   const navigate = useNavigate();
-  const { signIn, signUp, user } = useAuth();
+  const { signUp, user } = useAuth();
   const { toast } = useToast();
 
   const isLogin = mode === "login";
@@ -63,16 +64,26 @@ export default function AuthPage() {
     setLoading(true);
     try {
       if (isLogin) {
-        const { error } = await signIn(email, password);
-        if (error) {
+        // استخدام دالة الوكيل auth-login بدلاً من supabase.auth.signInWithPassword
+        const response = await fetch(`${import.meta.env.VITE_SUPABASE_URL}/functions/v1/auth-login`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ email, password }),
+        });
+        const result = await response.json();
+        
+        if (!result.ok) {
           toast({
             title: "خطأ في تسجيل الدخول",
-            description: error.message.includes("Invalid login credentials")
-              ? "البريد الإلكتروني أو كلمة المرور غير صحيحة"
-              : error.message,
+            description: result.error || "فشل تسجيل الدخول",
             variant: "destructive",
           });
         } else {
+          // حفظ الجلسة في العميل المحلي
+          await supabase.auth.setSession({
+            access_token: result.access_token,
+            refresh_token: result.refresh_token,
+          });
           toast({ title: "مرحباً بك!", description: "تم تسجيل الدخول بنجاح" });
           navigate("/dashboard");
         }
@@ -90,6 +101,12 @@ export default function AuthPage() {
           navigate("/dashboard");
         }
       }
+    } catch (err: any) {
+      toast({
+        title: "خطأ غير متوقع",
+        description: err?.message || "حدث خطأ أثناء تسجيل الدخول",
+        variant: "destructive",
+      });
     } finally {
       setLoading(false);
     }
