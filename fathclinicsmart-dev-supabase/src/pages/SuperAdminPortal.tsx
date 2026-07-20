@@ -6,7 +6,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Footer } from "@/components/layout/Footer";
 import { useToast } from "@/hooks/use-toast";
-import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from "@/components/ui/dialog";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import {
   BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer,
@@ -17,7 +17,7 @@ import {
   Check, X, RefreshCw, Search, Crown, Activity,
   Globe, Save, Webhook, Bot, Link2, Settings,
   TrendingUp, Zap, BarChart3, PieChart as PieChartIcon,
-  Bell, Wifi, Database, Server, ArrowUpRight, CalendarDays
+  Bell, Wifi, Database, Server, ArrowUpRight, CalendarDays, Download, Trash2
 } from "lucide-react";
 
 interface ClinicData {
@@ -66,8 +66,10 @@ export default function SuperAdminPortal() {
   // Heartbeat
   const [heartbeat, setHeartbeat] = useState<{ last_ping: string; ping_count: number } | null>(null);
 
-  // Export state
+  // Export states
   const [exporting, setExporting] = useState(false);
+  const [showDeleteDialog, setShowDeleteDialog] = useState(false);
+  const [deleting, setDeleting] = useState(false);
 
   useEffect(() => {
     if (!authLoading && !user) {
@@ -165,7 +167,6 @@ export default function SuperAdminPortal() {
         headers: {} as any,
       });
       
-      // Call with action param
       const projectId = import.meta.env.VITE_SUPABASE_PROJECT_ID;
       const supabaseUrl = import.meta.env.VITE_SUPABASE_URL;
       const res = await fetch(`${supabaseUrl}/functions/v1/telegram-bot?action=set-webhook`, {
@@ -245,7 +246,6 @@ export default function SuperAdminPortal() {
     setActivationClinic(null);
   };
 
-  // === ميزة webhook الموحد (منقولة من SuperAdminPage القديمة) ===
   const updateAllWebhooks = async () => {
     if (!webhookUrl.trim()) {
       toast({ title: "خطأ", description: "يرجى إدخال رابط الـ Webhook", variant: "destructive" });
@@ -278,35 +278,92 @@ export default function SuperAdminPortal() {
       setUpdatingWebhook(false);
     }
   };
-  // === نهاية ميزة webhook الموحد ===
 
   const handleSignOut = async () => {
     await signOut();
     navigate("/");
   };
 
-  // === دالة التصدير والأرشفة (تستخدم export-proxy) ===
+  // === دالة تصدير CSV ===
   const handleExport = async () => {
     setExporting(true);
     try {
-      const { data, error } = await supabase.functions.invoke('export-proxy', {
-        method: 'POST',
-      });
+      const supabaseUrl = import.meta.env.VITE_SUPABASE_URL;
+      const { data: { session } } = await supabase.auth.getSession();
       
-      if (error) {
-        toast({ title: "خطأ", description: error.message || "فشل في الاتصال بخدمة التصدير", variant: "destructive" });
-      } else if (data.ok) {
-        toast({ title: "تم التصدير ✓", description: `تم تصدير وحذف ${data.exported} موعد بنجاح` });
+      if (!session?.access_token) {
+        toast({ title: "خطأ", description: "يجب تسجيل الدخول أولاً", variant: "destructive" });
+        setExporting(false);
+        return;
+      }
+
+      const response = await fetch(`${supabaseUrl}/functions/v1/weekly-export`, {
+        method: 'GET',
+        headers: {
+          'Authorization': `Bearer ${session.access_token}`,
+        },
+      });
+
+      if (response.headers.get('Content-Type')?.includes('text/csv')) {
+        // تنزيل الملف
+        const blob = await response.blob();
+        const url = window.URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = 'smartclinic_export.csv';
+        document.body.appendChild(a);
+        a.click();
+        a.remove();
+        window.URL.revokeObjectURL(url);
+        
+        toast({ title: "تم التحميل ✓", description: "تم تحميل ملف CSV بنجاح" });
+        // إظهار نافذة تأكيد الحذف
+        setShowDeleteDialog(true);
       } else {
-        toast({ title: "تنبيه", description: data.message || "لا توجد بيانات للتصدير" });
+        const result = await response.json();
+        toast({ title: "تنبيه", description: result.message || "لا توجد بيانات للتصدير" });
       }
     } catch (error: any) {
-      toast({ title: "خطأ", description: error.message || "فشل في الاتصال بخدمة التصدير", variant: "destructive" });
+      toast({ title: "خطأ", description: "فشل في الاتصال بخدمة التصدير", variant: "destructive" });
     } finally {
       setExporting(false);
     }
   };
-  // === نهاية دالة التصدير ===
+
+  // === دالة حذف البيانات القديمة ===
+  const handleDeleteOld = async () => {
+    setDeleting(true);
+    try {
+      const supabaseUrl = import.meta.env.VITE_SUPABASE_URL;
+      const { data: { session } } = await supabase.auth.getSession();
+      
+      if (!session?.access_token) {
+        toast({ title: "خطأ", description: "يجب تسجيل الدخول أولاً", variant: "destructive" });
+        setDeleting(false);
+        return;
+      }
+
+      const response = await fetch(`${supabaseUrl}/functions/v1/weekly-export?action=delete`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${session.access_token}`,
+        },
+      });
+
+      const result = await response.json();
+      if (result.ok) {
+        toast({ title: "تم الحذف ✓", description: `تم حذف ${result.deleted} موعد قديم بنجاح` });
+      } else {
+        toast({ title: "خطأ", description: result.message || "فشل في حذف البيانات", variant: "destructive" });
+      }
+    } catch (error: any) {
+      toast({ title: "خطأ", description: "فشل في الاتصال بخدمة الحذف", variant: "destructive" });
+    } finally {
+      setDeleting(false);
+      setShowDeleteDialog(false);
+    }
+  };
 
   const filteredClinics = clinics.filter(clinic =>
     clinic.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
@@ -395,7 +452,6 @@ export default function SuperAdminPortal() {
               </div>
             </div>
             <div className="flex items-center gap-2">
-              {/* Live indicator */}
               <div className="flex items-center gap-2 bg-white/5 rounded-xl px-3 py-1.5">
                 <div className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse" />
                 <span className="text-xs text-white/70">Live</span>
@@ -569,7 +625,6 @@ export default function SuperAdminPortal() {
                     <p className="text-muted-foreground">لا توجد بيانات</p>
                   )}
                 </div>
-                {/* Legend */}
                 <div className="flex justify-center gap-6 mt-2">
                   {subscriptionPieData.map((d, i) => (
                     <div key={i} className="flex items-center gap-2">
@@ -728,7 +783,6 @@ export default function SuperAdminPortal() {
         {/* ===== CLINICS TAB ===== */}
         {activeTab === 'clinics' && (
           <>
-            {/* Search */}
             <div className="card-modern p-4 animate-slide-up">
               <div className="relative">
                 <Search className="absolute right-3 top-1/2 -translate-y-1/2 w-5 h-5 text-muted-foreground" />
@@ -741,7 +795,6 @@ export default function SuperAdminPortal() {
               </div>
             </div>
 
-            {/* Bot Links */}
             <div className="card-modern p-5 animate-slide-up delay-100">
               <div className="flex items-center gap-3 mb-4">
                 <div className="w-10 h-10 rounded-xl bg-blue-500/10 flex items-center justify-center">
@@ -764,7 +817,6 @@ export default function SuperAdminPortal() {
               </div>
             </div>
 
-            {/* Clinics Table */}
             <div className="card-modern overflow-hidden animate-slide-up delay-200">
               <div className="p-5 border-b border-border flex items-center justify-between">
                 <div>
@@ -840,7 +892,6 @@ export default function SuperAdminPortal() {
         {/* ===== SETTINGS TAB ===== */}
         {activeTab === 'settings' && (
           <>
-            {/* Telegram Bot Setup */}
             <div className="card-modern p-6 animate-slide-up">
               <div className="flex items-center gap-3 mb-6">
                 <div className="w-12 h-12 rounded-2xl bg-gradient-to-br from-blue-500 to-cyan-500 flex items-center justify-center shadow-lg">
@@ -901,23 +952,22 @@ export default function SuperAdminPortal() {
               </div>
             </div>
 
-            {/* === إضافة: بطاقة التصدير والأرشفة === */}
+            {/* === بطاقة التصدير والأرشفة === */}
             <div className="card-modern p-6 animate-slide-up delay-50">
               <div className="flex items-center gap-3 mb-4">
                 <div className="w-10 h-10 rounded-xl bg-amber-500/10 flex items-center justify-center">
-                  <Database className="w-5 h-5 text-amber-500" />
+                  <Download className="w-5 h-5 text-amber-500" />
                 </div>
                 <div>
                   <h3 className="font-bold text-foreground">تصدير وأرشفة البيانات</h3>
-                  <p className="text-xs text-muted-foreground">تصدير المواعيد الأقدم من 30 يوم إلى Google Sheets وحذفها من قاعدة البيانات</p>
+                  <p className="text-xs text-muted-foreground">تحميل المواعيد الأقدم من 30 يوم كملف CSV مع خيار حذفها من قاعدة البيانات</p>
                 </div>
               </div>
               <Button onClick={handleExport} disabled={exporting} variant="default" className="w-full">
-                {exporting ? <Loader2 className="w-4 h-4 animate-spin" /> : <Database className="w-4 h-4" />}
-                تصدير وأرشفة الأسبوع
+                {exporting ? <Loader2 className="w-4 h-4 animate-spin" /> : <Download className="w-4 h-4" />}
+                تحميل ملف CSV
               </Button>
             </div>
-            {/* === نهاية إضافة بطاقة التصدير === */}
 
             {/* System Info */}
             <div className="card-modern p-6 animate-slide-up delay-100">
@@ -965,6 +1015,31 @@ export default function SuperAdminPortal() {
         )}
       </main>
 
+      {/* نافذة تأكيد الحذف */}
+      <Dialog open={showDeleteDialog} onOpenChange={setShowDeleteDialog}>
+        <DialogContent className="max-w-md" dir="rtl">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <Trash2 className="w-5 h-5 text-destructive" />
+              حذف البيانات المصدرة
+            </DialogTitle>
+            <DialogDescription>
+              تم تحميل ملف CSV بنجاح. هل تريد حذف جميع المواعيد الأقدم من 30 يومًا من قاعدة البيانات؟
+              <br />
+              <span className="text-destructive font-medium">هذا الإجراء لا يمكن التراجع عنه.</span>
+            </DialogDescription>
+          </DialogHeader>
+          <DialogFooter className="flex gap-2 justify-end pt-2">
+            <Button variant="outline" onClick={() => setShowDeleteDialog(false)}>إلغاء</Button>
+            <Button variant="destructive" onClick={handleDeleteOld} disabled={deleting}>
+              {deleting ? <Loader2 className="w-4 h-4 animate-spin" /> : <Trash2 className="w-4 h-4" />}
+              نعم، احذف البيانات
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* نافذة تفعيل الاشتراك */}
       <Dialog open={!!activationClinic} onOpenChange={(open) => !open && setActivationClinic(null)}>
         <DialogContent className="max-w-md" dir="rtl">
           <DialogHeader>
