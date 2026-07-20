@@ -245,12 +245,47 @@ export default function SuperAdminPortal() {
     setActivationClinic(null);
   };
 
+  // === ميزة webhook الموحد (منقولة من SuperAdminPage القديمة) ===
+  const updateAllWebhooks = async () => {
+    if (!webhookUrl.trim()) {
+      toast({ title: "خطأ", description: "يرجى إدخال رابط الـ Webhook", variant: "destructive" });
+      return;
+    }
+
+    setUpdatingWebhook(true);
+
+    try {
+      const response = await supabase.functions.invoke('admin-operations', {
+        body: { 
+          action: 'update-webhooks',
+          webhookUrl 
+        }
+      });
+
+      if (response.error) {
+        toast({ title: "خطأ", description: response.error.message || "فشل في تحديث الـ webhooks", variant: "destructive" });
+      } else {
+        const { successCount, failCount } = response.data;
+        toast({ 
+          title: "تم التحديث", 
+          description: `تم تحديث ${successCount} بوت بنجاح${failCount > 0 ? ` | فشل ${failCount}` : ""}` 
+        });
+      }
+    } catch (error) {
+      console.error('Error updating webhooks:', error);
+      toast({ title: "خطأ", description: "فشل في تحديث الـ webhooks", variant: "destructive" });
+    } finally {
+      setUpdatingWebhook(false);
+    }
+  };
+  // === نهاية ميزة webhook الموحد ===
+
   const handleSignOut = async () => {
     await signOut();
     navigate("/");
   };
 
-  // === إضافة: دالة التصدير والأرشفة ===
+  // === دالة التصدير والأرشفة ===
   const handleExport = async () => {
     setExporting(true);
     try {
@@ -268,7 +303,7 @@ export default function SuperAdminPortal() {
       setExporting(false);
     }
   };
-  // === نهاية إضافة دالة التصدير ===
+  // === نهاية دالة التصدير ===
 
   const filteredClinics = clinics.filter(clinic =>
     clinic.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
