@@ -66,6 +66,9 @@ export default function SuperAdminPortal() {
   // Heartbeat
   const [heartbeat, setHeartbeat] = useState<{ last_ping: string; ping_count: number } | null>(null);
 
+  // Export state
+  const [exporting, setExporting] = useState(false);
+
   useEffect(() => {
     if (!authLoading && !user) {
       navigate("/auth");
@@ -246,6 +249,26 @@ export default function SuperAdminPortal() {
     await signOut();
     navigate("/");
   };
+
+  // === إضافة: دالة التصدير والأرشفة ===
+  const handleExport = async () => {
+    setExporting(true);
+    try {
+      const supabaseUrl = import.meta.env.VITE_SUPABASE_URL;
+      const response = await fetch(`${supabaseUrl}/functions/v1/weekly-export`);
+      const result = await response.json();
+      if (result.ok) {
+        toast({ title: "تم التصدير ✓", description: `تم تصدير وحذف ${result.exported} موعد بنجاح` });
+      } else {
+        toast({ title: "تنبيه", description: result.message || "لا توجد بيانات للتصدير" });
+      }
+    } catch (error) {
+      toast({ title: "خطأ", description: "فشل في الاتصال بخدمة التصدير", variant: "destructive" });
+    } finally {
+      setExporting(false);
+    }
+  };
+  // === نهاية إضافة دالة التصدير ===
 
   const filteredClinics = clinics.filter(clinic =>
     clinic.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
@@ -839,6 +862,24 @@ export default function SuperAdminPortal() {
                 </div>
               </div>
             </div>
+
+            {/* === إضافة: بطاقة التصدير والأرشفة === */}
+            <div className="card-modern p-6 animate-slide-up delay-50">
+              <div className="flex items-center gap-3 mb-4">
+                <div className="w-10 h-10 rounded-xl bg-amber-500/10 flex items-center justify-center">
+                  <Database className="w-5 h-5 text-amber-500" />
+                </div>
+                <div>
+                  <h3 className="font-bold text-foreground">تصدير وأرشفة البيانات</h3>
+                  <p className="text-xs text-muted-foreground">تصدير المواعيد الأقدم من 30 يوم إلى Google Sheets وحذفها من قاعدة البيانات</p>
+                </div>
+              </div>
+              <Button onClick={handleExport} disabled={exporting} variant="default" className="w-full">
+                {exporting ? <Loader2 className="w-4 h-4 animate-spin" /> : <Database className="w-4 h-4" />}
+                تصدير وأرشفة الأسبوع
+              </Button>
+            </div>
+            {/* === نهاية إضافة بطاقة التصدير === */}
 
             {/* System Info */}
             <div className="card-modern p-6 animate-slide-up delay-100">
