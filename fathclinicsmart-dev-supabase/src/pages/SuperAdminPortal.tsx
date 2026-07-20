@@ -285,33 +285,20 @@ export default function SuperAdminPortal() {
     navigate("/");
   };
 
-  // === دالة التصدير والأرشفة (مُحدثة لاستخدام fetch المباشر مع التوكين) ===
+  // === دالة التصدير والأرشفة (تستخدم export-proxy) ===
   const handleExport = async () => {
     setExporting(true);
     try {
-      const supabaseUrl = import.meta.env.VITE_SUPABASE_URL;
-      const { data: { session } } = await supabase.auth.getSession();
-      
-      if (!session?.access_token) {
-        toast({ title: "خطأ", description: "يجب تسجيل الدخول أولاً", variant: "destructive" });
-        setExporting(false);
-        return;
-      }
-
-      const response = await fetch(`${supabaseUrl}/functions/v1/weekly-export`, {
+      const { data, error } = await supabase.functions.invoke('export-proxy', {
         method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${session.access_token}`,
-        },
       });
       
-      const result = await response.json();
-      
-      if (result.ok) {
-        toast({ title: "تم التصدير ✓", description: `تم تصدير وحذف ${result.exported} موعد بنجاح` });
+      if (error) {
+        toast({ title: "خطأ", description: error.message || "فشل في الاتصال بخدمة التصدير", variant: "destructive" });
+      } else if (data.ok) {
+        toast({ title: "تم التصدير ✓", description: `تم تصدير وحذف ${data.exported} موعد بنجاح` });
       } else {
-        toast({ title: "تنبيه", description: result.message || "لا توجد بيانات للتصدير" });
+        toast({ title: "تنبيه", description: data.message || "لا توجد بيانات للتصدير" });
       }
     } catch (error: any) {
       toast({ title: "خطأ", description: error.message || "فشل في الاتصال بخدمة التصدير", variant: "destructive" });
