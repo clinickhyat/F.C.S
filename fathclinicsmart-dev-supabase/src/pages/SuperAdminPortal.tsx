@@ -285,20 +285,23 @@ export default function SuperAdminPortal() {
     navigate("/");
   };
 
-  // === دالة التصدير والأرشفة ===
+  // === دالة التصدير والأرشفة (مُحدثة لاستخدام supabase.functions.invoke) ===
   const handleExport = async () => {
     setExporting(true);
     try {
-      const supabaseUrl = import.meta.env.VITE_SUPABASE_URL;
-      const response = await fetch(`${supabaseUrl}/functions/v1/weekly-export`);
-      const result = await response.json();
-      if (result.ok) {
-        toast({ title: "تم التصدير ✓", description: `تم تصدير وحذف ${result.exported} موعد بنجاح` });
+      const { data, error } = await supabase.functions.invoke('weekly-export', {
+        method: 'POST',
+      });
+      
+      if (error) {
+        toast({ title: "خطأ", description: error.message || "فشل في الاتصال بخدمة التصدير", variant: "destructive" });
+      } else if (data.ok) {
+        toast({ title: "تم التصدير ✓", description: `تم تصدير وحذف ${data.exported} موعد بنجاح` });
       } else {
-        toast({ title: "تنبيه", description: result.message || "لا توجد بيانات للتصدير" });
+        toast({ title: "تنبيه", description: data.message || "لا توجد بيانات للتصدير" });
       }
-    } catch (error) {
-      toast({ title: "خطأ", description: "فشل في الاتصال بخدمة التصدير", variant: "destructive" });
+    } catch (error: any) {
+      toast({ title: "خطأ", description: error.message || "فشل في الاتصال بخدمة التصدير", variant: "destructive" });
     } finally {
       setExporting(false);
     }
