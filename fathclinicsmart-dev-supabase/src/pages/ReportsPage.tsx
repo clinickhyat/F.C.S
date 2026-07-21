@@ -54,10 +54,8 @@ import autoTable from "jspdf-autotable";
 import html2canvas from "html2canvas";
 import { QRCodeCanvas } from "qrcode.react";
 
-// ألوان هوية الشركة
 const COLORS = {
   primary: "#1a2a6c",
-  secondary: "#c9a84c",
   gold: "#c9a84c",
   blue: "#1a73e8",
   green: "#34a853",
@@ -106,7 +104,6 @@ export default function ReportsPage() {
   const chartRef = useRef<HTMLDivElement>(null);
   const qrRef = useRef<HTMLDivElement>(null);
 
-  // 1. جلب بيانات العيادة (الاسم، الشعار، اسم البوت)
   useEffect(() => {
     if (!authLoading && !user) {
       navigate("/auth");
@@ -139,7 +136,6 @@ export default function ReportsPage() {
     fetchClinicAndData();
   }, [user, authLoading, navigate]);
 
-  // 2. جلب بيانات التقارير حسب الفلترة
   const fetchReportData = async (clinicId: string) => {
     try {
       let start = "";
@@ -274,21 +270,18 @@ export default function ReportsPage() {
     }
   };
 
-  // إعادة جلب عند تغيير الفلترة
   useEffect(() => {
     if (activeClinicId) {
       fetchReportData(activeClinicId);
     }
   }, [filterType, selectedMonth, selectedYear, startDate, endDate]);
 
-  // 3. تصدير PDF احترافي مع QR والشعار
   const handleDownloadPDF = async () => {
     if (!reportData || !chartRef.current) return;
 
     toast({ title: "⏳ جاري إنشاء التقرير..." });
 
     try {
-      // التقاط QR كصورة
       let qrImageData: string | null = null;
       if (qrRef.current) {
         const qrCanvas = qrRef.current.querySelector("canvas");
@@ -314,8 +307,6 @@ export default function ReportsPage() {
       const pageHeight = doc.internal.pageSize.getHeight();
       let y = 20;
 
-      // ========== الهيدر (شعار + QR + اسم العيادة) ==========
-      // الشعار (يمين)
       if (clinicLogo) {
         try {
           const logoImg = await fetch(clinicLogo).then((r) => r.blob());
@@ -332,12 +323,10 @@ export default function ReportsPage() {
         doc.text("🏥", 15, 30);
       }
 
-      // QR (يسار) - باستخدام الصورة الملتقطة
       if (qrImageData) {
         doc.addImage(qrImageData, "PNG", pageWidth - 45, 10, 30, 30);
       }
 
-      // اسم العيادة في المنتصف
       doc.setFontSize(22);
       doc.setTextColor(COLORS.primary);
       doc.text(clinicName, pageWidth / 2, 25, { align: "center" });
@@ -346,7 +335,6 @@ export default function ReportsPage() {
       doc.setTextColor(COLORS.muted);
       doc.text("التقرير الشامل للعيادة", pageWidth / 2, 35, { align: "center" });
 
-      // التاريخ
       doc.setFontSize(10);
       doc.setTextColor(COLORS.muted);
       const dateStr = new Date().toLocaleDateString("ar-SA", {
@@ -358,13 +346,11 @@ export default function ReportsPage() {
 
       y = 52;
 
-      // خط فاصل ذهبي
       doc.setDrawColor(201, 168, 76);
       doc.setLineWidth(0.5);
       doc.line(15, y, pageWidth - 15, y);
       y += 8;
 
-      // ========== بطاقات KPI ==========
       doc.setFontSize(9);
       doc.setTextColor("#333");
       const kpis = [
@@ -392,7 +378,6 @@ export default function ReportsPage() {
       });
       y += 20;
 
-      // ========== إضافة الرسوم البيانية ==========
       for (let i = 0; i < chartImages.length; i++) {
         if (i > 0 && i % 2 === 0) {
           doc.addPage();
@@ -408,7 +393,6 @@ export default function ReportsPage() {
         y += imgHeight + 8;
       }
 
-      // ========== جدول الخدمات ==========
       doc.addPage();
       y = 20;
       doc.setFontSize(16);
@@ -436,7 +420,6 @@ export default function ReportsPage() {
         },
       });
 
-      // ========== تذييل عام ==========
       const totalPages = doc.getNumberOfPages();
       for (let i = 1; i <= totalPages; i++) {
         doc.setPage(i);
@@ -458,7 +441,6 @@ export default function ReportsPage() {
     }
   };
 
-  // 4. تصدير CSV
   const handleDownloadCSV = () => {
     if (!reportData) return;
     let csv = "التاريخ,المواعيد,الإيرادات\n";
@@ -484,13 +466,11 @@ export default function ReportsPage() {
     );
   }
 
-  // رابط QR (نفس طريقة SettingsPage)
   const effectiveBotUsername = botUsername || "SmartClinc_bot";
   const qrLink = activeClinicId ? `https://t.me/${effectiveBotUsername}?start=clinic_${activeClinicId}` : "";
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-slate-50 to-blue-50/30 flex flex-col">
-      {/* Header */}
       <header className="bg-white/80 backdrop-blur-lg border-b border-slate-200/60 sticky top-0 z-50 shadow-sm print:hidden">
         <div className="container mx-auto px-4 py-3 flex flex-wrap items-center justify-between gap-2">
           <Button variant="ghost" onClick={() => navigate("/dashboard")} className="text-slate-600">
@@ -510,28 +490,13 @@ export default function ReportsPage() {
             </h1>
           </div>
           <div className="flex gap-2">
-            <Button
-              onClick={handleDownloadPDF}
-              variant="default"
-              size="sm"
-              className="bg-primary hover:bg-primary/90"
-            >
+            <Button onClick={handleDownloadPDF} variant="default" size="sm" className="bg-primary hover:bg-primary/90">
               <FileText className="w-4 h-4 ml-1" /> PDF
             </Button>
-            <Button
-              onClick={handleDownloadCSV}
-              variant="outline"
-              size="sm"
-              className="border-green-200 text-green-700 hover:bg-green-50"
-            >
+            <Button onClick={handleDownloadCSV} variant="outline" size="sm" className="border-green-200 text-green-700 hover:bg-green-50">
               <Download className="w-4 h-4 ml-1" /> CSV
             </Button>
-            <Button
-              onClick={() => window.print()}
-              variant="outline"
-              size="sm"
-              className="border-purple-200 text-purple-700 hover:bg-purple-50"
-            >
+            <Button onClick={() => window.print()} variant="outline" size="sm" className="border-purple-200 text-purple-700 hover:bg-purple-50">
               <Printer className="w-4 h-4 ml-1" /> طباعة
             </Button>
           </div>
@@ -539,15 +504,11 @@ export default function ReportsPage() {
       </header>
 
       <main className="flex-1 container mx-auto px-4 py-6 space-y-6">
-        {/* فلترة */}
         <Card className="border-0 shadow-lg bg-white/80 backdrop-blur-sm print:hidden">
           <CardContent className="p-4">
             <div className="flex flex-wrap items-center gap-4">
               <Filter className="w-5 h-5 text-primary" />
-              <Select
-                value={filterType}
-                onValueChange={(v: "month" | "year" | "range") => setFilterType(v)}
-              >
+              <Select value={filterType} onValueChange={(v: "month" | "year" | "range") => setFilterType(v)}>
                 <SelectTrigger className="w-[140px]">
                   <SelectValue placeholder="اختر النطاق" />
                 </SelectTrigger>
@@ -613,7 +574,6 @@ export default function ReportsPage() {
 
         {reportData ? (
           <div ref={chartRef}>
-            {/* بطاقات KPI */}
             <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-4">
               {[
                 { label: "إجمالي المرضى", value: reportData.totalPatients, icon: Users, color: "from-blue-500 to-blue-700" },
@@ -639,12 +599,10 @@ export default function ReportsPage() {
               ))}
             </div>
 
-            {/* QR Code - مخفي في الواجهة ولكن يُلتقط للـ PDF */}
             <div ref={qrRef} className="hidden">
               <QRCodeCanvas value={qrLink} size={200} level="M" includeMargin={false} />
             </div>
 
-            {/* الرسوم البيانية */}
             <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 mt-6">
               <Card className="border-0 shadow-lg bg-white/90 backdrop-blur-sm chart-container">
                 <CardHeader>
@@ -659,14 +617,7 @@ export default function ReportsPage() {
                       <CartesianGrid strokeDasharray="3 3" stroke="#e2e8f0" />
                       <XAxis dataKey="date" tick={{ fontSize: 10 }} />
                       <YAxis />
-                      <Tooltip
-                        contentStyle={{
-                          backgroundColor: "white",
-                          borderRadius: "8px",
-                          border: "none",
-                          boxShadow: "0 4px 12px rgba(0,0,0,0.1)",
-                        }}
-                      />
+                      <Tooltip contentStyle={{ backgroundColor: "white", borderRadius: "8px", border: "none", boxShadow: "0 4px 12px rgba(0,0,0,0.1)" }} />
                       <Line type="monotone" dataKey="count" stroke={COLORS.blue} strokeWidth={3} dot={{ fill: COLORS.blue, r: 4 }} />
                     </LineChart>
                   </ResponsiveContainer>
@@ -692,14 +643,7 @@ export default function ReportsPage() {
                       <CartesianGrid strokeDasharray="3 3" stroke="#e2e8f0" />
                       <XAxis dataKey="date" tick={{ fontSize: 10 }} />
                       <YAxis />
-                      <Tooltip
-                        contentStyle={{
-                          backgroundColor: "white",
-                          borderRadius: "8px",
-                          border: "none",
-                          boxShadow: "0 4px 12px rgba(0,0,0,0.1)",
-                        }}
-                      />
+                      <Tooltip contentStyle={{ backgroundColor: "white", borderRadius: "8px", border: "none", boxShadow: "0 4px 12px rgba(0,0,0,0.1)" }} />
                       <Area type="monotone" dataKey="amount" stroke={COLORS.gold} strokeWidth={3} fill="url(#revenueGrad)" />
                     </AreaChart>
                   </ResponsiveContainer>
@@ -716,27 +660,12 @@ export default function ReportsPage() {
                 <CardContent className="h-72">
                   <ResponsiveContainer width="100%" height="100%">
                     <PieChart>
-                      <Pie
-                        data={reportData.serviceDistribution}
-                        cx="50%"
-                        cy="50%"
-                        outerRadius={80}
-                        dataKey="value"
-                        label={({ name, percent }) => `${name} ${(percent * 100).toFixed(0)}%`}
-                        labelLine={false}
-                      >
+                      <Pie data={reportData.serviceDistribution} cx="50%" cy="50%" outerRadius={80} dataKey="value" label={({ name, percent }) => `${name} ${(percent * 100).toFixed(0)}%`} labelLine={false}>
                         {reportData.serviceDistribution.map((_, idx) => (
                           <Cell key={idx} fill={CHART_COLORS[idx % CHART_COLORS.length]} />
                         ))}
                       </Pie>
-                      <Tooltip
-                        contentStyle={{
-                          backgroundColor: "white",
-                          borderRadius: "8px",
-                          border: "none",
-                          boxShadow: "0 4px 12px rgba(0,0,0,0.1)",
-                        }}
-                      />
+                      <Tooltip contentStyle={{ backgroundColor: "white", borderRadius: "8px", border: "none", boxShadow: "0 4px 12px rgba(0,0,0,0.1)" }} />
                     </PieChart>
                   </ResponsiveContainer>
                 </CardContent>
@@ -774,14 +703,7 @@ export default function ReportsPage() {
                       <XAxis dataKey="month" tick={{ fontSize: 10 }} />
                       <YAxis yAxisId="left" />
                       <YAxis yAxisId="right" orientation="right" />
-                      <Tooltip
-                        contentStyle={{
-                          backgroundColor: "white",
-                          borderRadius: "8px",
-                          border: "none",
-                          boxShadow: "0 4px 12px rgba(0,0,0,0.1)",
-                        }}
-                      />
+                      <Tooltip contentStyle={{ backgroundColor: "white", borderRadius: "8px", border: "none", boxShadow: "0 4px 12px rgba(0,0,0,0.1)" }} />
                       <Legend />
                       <Bar yAxisId="left" dataKey="appointments" fill={COLORS.blue} name="المواعيد" radius={[4, 4, 0, 0]} />
                       <Bar yAxisId="right" dataKey="revenue" fill={COLORS.gold} name="الإيرادات" radius={[4, 4, 0, 0]} />
@@ -791,7 +713,6 @@ export default function ReportsPage() {
               </Card>
             </div>
 
-            {/* جدول تفصيلي */}
             <Card className="border-0 shadow-lg bg-white/90 backdrop-blur-sm mt-6">
               <CardHeader>
                 <CardTitle className="text-slate-800 flex items-center gap-2">
