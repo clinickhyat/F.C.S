@@ -10,14 +10,15 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, Di
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import {
   BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer,
-  PieChart, Pie, Cell, AreaChart, Area, Legend, RadialBarChart, RadialBar,
+  PieChart, Pie, Cell, AreaChart, Area, Legend,
 } from "recharts";
 import {
   Shield, LogOut, Loader2, Building2, Users, Calendar,
   Check, X, RefreshCw, Search, Crown, Activity,
   Globe, Save, Webhook, Bot, Link2, Settings,
   TrendingUp, Zap, BarChart3, PieChart as PieChartIcon,
-  Bell, Wifi, Database, Server, ArrowUpRight, CalendarDays, Download, Trash2
+  Bell, Wifi, Database, Server, ArrowUpRight, CalendarDays, Download, Trash2, Upload,
+  HardDrive, AlertTriangle
 } from "lucide-react";
 
 interface ClinicData {
@@ -41,6 +42,8 @@ const CHART_COLORS = [
   'hsl(220, 90%, 56%)', 'hsl(162, 72%, 45%)', 'hsl(250, 90%, 60%)',
   'hsl(38, 92%, 50%)', 'hsl(340, 82%, 52%)', 'hsl(180, 70%, 50%)',
 ];
+
+const MAX_DB_SIZE_BYTES = 500 * 1024 * 1024; // 500 MB
 
 export default function SuperAdminPortal() {
   const navigate = useNavigate();
@@ -71,6 +74,14 @@ export default function SuperAdminPortal() {
   const [showDeleteDialog, setShowDeleteDialog] = useState(false);
   const [deleting, setDeleting] = useState(false);
 
+  // Import states
+  const [importing, setImporting] = useState(false);
+  const [selectedClinicForImport, setSelectedClinicForImport] = useState<string>("");
+
+  // Database size
+  const [dbSizeBytes, setDbSizeBytes] = useState<number | null>(null);
+  const [dbUsagePercent, setDbUsagePercent] = useState<number>(0);
+
   useEffect(() => {
     if (!authLoading && !user) {
       navigate("/auth");
@@ -92,7 +103,7 @@ export default function SuperAdminPortal() {
       }
 
       setIsAdmin(true);
-      await Promise.all([fetchClinics(), fetchSettings(), fetchHeartbeat()]);
+      await Promise.all([fetchClinics(), fetchSettings(), fetchHeartbeat(), fetchDatabaseSize()]);
       setLoading(false);
     };
 
@@ -141,6 +152,22 @@ export default function SuperAdminPortal() {
     }
   };
 
+  // جلب حجم قاعدة البيانات
+  const fetchDatabaseSize = async () => {
+    try {
+      const { data, error } = await supabase.rpc('get_database_size');
+      if (error) throw error;
+      if (data) {
+        setDbSizeBytes(data);
+        const percent = Math.min((data / MAX_DB_SIZE_BYTES) * 100, 100);
+        setDbUsagePercent(percent);
+      }
+    } catch (e) {
+      console.error('Error fetching DB size:', e);
+      // fallback: لا نعرض الشريط
+    }
+  };
+
   const saveSettings = async () => {
     setSavingSettings(true);
     try {
@@ -162,12 +189,6 @@ export default function SuperAdminPortal() {
   const setupTelegramWebhook = async () => {
     setSettingWebhook(true);
     try {
-      const response = await supabase.functions.invoke('telegram-bot', {
-        body: {},
-        headers: {} as any,
-      });
-      
-      const projectId = import.meta.env.VITE_SUPABASE_PROJECT_ID;
       const supabaseUrl = import.meta.env.VITE_SUPABASE_URL;
       const res = await fetch(`${supabaseUrl}/functions/v1/telegram-bot?action=set-webhook`, {
         method: 'POST',
@@ -285,7 +306,6 @@ export default function SuperAdminPortal() {
   };
 
   // === دالة تصدير ZIP (مجلد لكل عيادة / ملف CSV لكل شهر) ===
-  // التعديل: استخدام POST بدلاً من GET مع إرسال التواريخ (اختياري)
   const handleExport = async () => {
     setExporting(true);
     try {
@@ -298,16 +318,12 @@ export default function SuperAdminPortal() {
       }
 
       const response = await fetch(`${supabaseUrl}/functions/v1/weekly-export`, {
-        method: 'POST',   // ✅ التغيير الجوهري: GET → POST
+        method: 'POST',
         headers: {
           'Authorization': `Bearer ${session.access_token}`,
           'Content-Type': 'application/json',
         },
-        body: JSON.stringify({
-          // يمكنك إرسال التواريخ حسب الحاجة، أو تركها فارغة لاستخدام القيم الافتراضية في الدالة
-          // startDate: '2026-04-01',
-          // endDate: '2026-06-21',
-        }),
+        body: JSON.stringify({}),
       });
 
       if (!response.ok) {
@@ -321,7 +337,6 @@ export default function SuperAdminPortal() {
         return;
       }
 
-      // تحميل ZIP
       const blob = await response.blob();
       const url = window.URL.createObjectURL(blob);
       const a = document.createElement('a');
@@ -363,6 +378,103 @@ export default function SuperAdminPortal() {
       setDeleting(false);
       setShowDeleteDialog(false);
     }
+  };
+
+  // === دالة استيراد CSV ===
+  const handleImportCSV = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    if (!selectedClinicForImport) {
+      toast({ title: "تنبيه", description: "يرجى اختيار العيادة المستهدفة أولاً", variant: "destructive" });
+      e.target.value = "";
+      return;
+    }
+
+    setImporting(true);
+    const reader = new FileReader();
+    reader.onload = async (event) => {
+      try {
+        const text = event.target?.result as string;
+        const lines = text.split('\n').filter(l => l.trim());
+        if (lines.length < 2) {
+          toast({ title: "خطأ", description: "الملف فارغ أو غير صحيح", variant: "destructive" });
+          setImporting(false);
+          e.target.value = "";
+          return;
+        }
+
+        const headers = lines[0].split(',').map(h => h.trim());
+        const rows = lines.slice(1);
+
+        let inserted = 0;
+        for (const row of rows) {
+          const cols = row.split(',').map(c => c.trim());
+          if (cols.length < 8) continue;
+          // تنسيق CSV: Clinic,Date,Time,Patient,Phone,Department,Payment,Arrived
+          const [clinicName, date, time, patientName, phone, department, paymentStatus, arrived] = cols;
+
+          // جلب أو إنشاء المريض
+          let patientId: string | null = null;
+          const { data: existingPatient } = await supabase
+            .from('patients')
+            .select('id')
+            .eq('name', patientName)
+            .eq('phone', phone)
+            .maybeSingle();
+
+          if (existingPatient) {
+            patientId = existingPatient.id;
+          } else {
+            const { data: newPatient, error: insertError } = await supabase
+              .from('patients')
+              .insert({
+                name: patientName,
+                phone: phone,
+                clinic_id: selectedClinicForImport,
+              })
+              .select('id')
+              .single();
+            if (insertError) {
+              console.error('Error inserting patient:', insertError);
+              continue;
+            }
+            patientId = newPatient?.id || null;
+          }
+
+          if (!patientId) continue;
+
+          // إنشاء الموعد
+          const { error: apptError } = await supabase
+            .from('appointments')
+            .insert({
+              clinic_id: selectedClinicForImport,
+              patient_id: patientId,
+              date: date,
+              time: time,
+              department: department || 'كشف عام',
+              payment_status: paymentStatus?.toLowerCase() === 'paid' ? 'paid' : 'unpaid',
+              status: 'completed',
+              is_walk_in: false,
+              reservation_code: 'IMP-' + Math.random().toString(36).substring(2, 7).toUpperCase(),
+              arrived_at: arrived?.toLowerCase() === 'yes' ? new Date().toISOString() : null,
+            });
+
+          if (!apptError) inserted++;
+        }
+
+        toast({
+          title: "تم الاستيراد ✓",
+          description: `تم استيراد ${inserted} موعد بنجاح للعيادة المختارة`,
+        });
+        fetchClinics(); // تحديث الإحصائيات
+      } catch (err) {
+        toast({ title: "خطأ", description: "فشل في معالجة الملف", variant: "destructive" });
+      } finally {
+        setImporting(false);
+        e.target.value = "";
+      }
+    };
+    reader.readAsText(file);
   };
 
   const filteredClinics = clinics.filter(clinic =>
@@ -407,15 +519,6 @@ export default function SuperAdminPortal() {
     }));
   }, [clinics, totalPatients]);
 
-  const performanceData = useMemo(() => 
-    clinics.slice(0, 5).map((c, i) => ({
-      name: c.name.slice(0, 12),
-      fill: CHART_COLORS[i % CHART_COLORS.length],
-      value: c.appointments_count + c.patients_count,
-    })),
-    [clinics]
-  );
-
   if (authLoading || loading) {
     return (
       <div className="min-h-screen flex items-center justify-center bg-mesh">
@@ -456,7 +559,7 @@ export default function SuperAdminPortal() {
                 <div className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse" />
                 <span className="text-xs text-white/70">Live</span>
               </div>
-              <Button variant="ghost" size="icon" className="text-white/70 hover:text-white" onClick={() => { fetchClinics(); fetchHeartbeat(); }}>
+              <Button variant="ghost" size="icon" className="text-white/70 hover:text-white" onClick={() => { fetchClinics(); fetchHeartbeat(); fetchDatabaseSize(); }}>
                 <RefreshCw className="w-5 h-5" />
               </Button>
               <Button variant="ghost" size="icon" className="text-white/70 hover:text-white" onClick={handleSignOut}>
@@ -515,37 +618,95 @@ export default function SuperAdminPortal() {
               ))}
             </div>
 
-            {/* System Health */}
-            <div className="card-modern p-5 animate-slide-up delay-100">
-              <div className="flex items-center gap-3 mb-4">
-                <div className="w-10 h-10 rounded-xl bg-emerald-500/10 flex items-center justify-center">
-                  <Server className="w-5 h-5 text-emerald-500" />
+            {/* System Health + Database Storage */}
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              {/* Health Card */}
+              <div className="card-modern p-5 animate-slide-up delay-100">
+                <div className="flex items-center gap-3 mb-4">
+                  <div className="w-10 h-10 rounded-xl bg-emerald-500/10 flex items-center justify-center">
+                    <Server className="w-5 h-5 text-emerald-500" />
+                  </div>
+                  <div className="flex-1">
+                    <h3 className="font-bold text-foreground">صحة النظام</h3>
+                    <p className="text-xs text-muted-foreground">Keep-Alive & Monitoring</p>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <div className="w-2.5 h-2.5 rounded-full bg-emerald-400 animate-pulse" />
+                    <span className="text-xs font-medium text-emerald-500">يعمل</span>
+                  </div>
                 </div>
-                <div className="flex-1">
-                  <h3 className="font-bold text-foreground">صحة النظام</h3>
-                  <p className="text-xs text-muted-foreground">Keep-Alive & Monitoring</p>
-                </div>
-                <div className="flex items-center gap-2">
-                  <div className="w-2.5 h-2.5 rounded-full bg-emerald-400 animate-pulse" />
-                  <span className="text-xs font-medium text-emerald-500">يعمل</span>
-                </div>
+                {heartbeat && (
+                  <div className="grid grid-cols-2 gap-3">
+                    <div className="bg-muted/30 rounded-xl p-3">
+                      <p className="text-xs text-muted-foreground">آخر نبضة</p>
+                      <p className="text-sm font-bold text-foreground mt-1">
+                        {new Date(heartbeat.last_ping).toLocaleString('ar-SA')}
+                      </p>
+                    </div>
+                    <div className="bg-muted/30 rounded-xl p-3">
+                      <p className="text-xs text-muted-foreground">عدد النبضات</p>
+                      <p className="text-sm font-bold text-foreground mt-1">
+                        {heartbeat.ping_count.toLocaleString()}
+                      </p>
+                    </div>
+                  </div>
+                )}
               </div>
-              {heartbeat && (
-                <div className="grid grid-cols-2 gap-3">
-                  <div className="bg-muted/30 rounded-xl p-3">
-                    <p className="text-xs text-muted-foreground">آخر نبضة</p>
-                    <p className="text-sm font-bold text-foreground mt-1">
-                      {new Date(heartbeat.last_ping).toLocaleString('ar-SA')}
-                    </p>
+
+              {/* Database Storage Card */}
+              <div className="card-modern p-5 animate-slide-up delay-100">
+                <div className="flex items-center gap-3 mb-3">
+                  <div className="w-10 h-10 rounded-xl bg-amber-500/10 flex items-center justify-center">
+                    <HardDrive className="w-5 h-5 text-amber-500" />
                   </div>
-                  <div className="bg-muted/30 rounded-xl p-3">
-                    <p className="text-xs text-muted-foreground">عدد النبضات</p>
-                    <p className="text-sm font-bold text-foreground mt-1">
-                      {heartbeat.ping_count.toLocaleString()}
-                    </p>
+                  <div>
+                    <h3 className="font-bold text-foreground">مساحة التخزين</h3>
+                    <p className="text-xs text-muted-foreground">مراقبة حجم قاعدة البيانات</p>
                   </div>
                 </div>
-              )}
+                {dbSizeBytes !== null ? (
+                  <div className="space-y-2">
+                    <div className="flex justify-between text-sm">
+                      <span className="text-muted-foreground">
+                        { (dbSizeBytes / 1024 / 1024).toFixed(2) } MB
+                      </span>
+                      <span className="text-muted-foreground">
+                        { (MAX_DB_SIZE_BYTES / 1024 / 1024).toFixed(0) } MB
+                      </span>
+                    </div>
+                    <div className="w-full h-3 bg-muted rounded-full overflow-hidden">
+                      <div
+                        className="h-full rounded-full transition-all duration-700"
+                        style={{
+                          width: `${Math.min(dbUsagePercent, 100)}%`,
+                          background: dbUsagePercent > 90
+                            ? 'hsl(0, 84%, 60%)'
+                            : dbUsagePercent > 70
+                            ? 'hsl(38, 92%, 50%)'
+                            : 'hsl(152, 69%, 40%)',
+                        }}
+                      />
+                    </div>
+                    <div className="flex items-center gap-2 text-xs">
+                      {dbUsagePercent > 85 ? (
+                        <>
+                          <AlertTriangle className="w-4 h-4 text-destructive" />
+                          <span className="text-destructive font-medium">تنبيه: المساحة تقترب من الامتلاء!</span>
+                        </>
+                      ) : dbUsagePercent > 70 ? (
+                        <>
+                          <AlertTriangle className="w-4 h-4 text-amber-500" />
+                          <span className="text-amber-500 font-medium">تبقى مساحة محدودة</span>
+                        </>
+                      ) : (
+                        <span className="text-muted-foreground">المساحة متوفرة بشكل جيد</span>
+                      )}
+                    </div>
+                  </div>
+                ) : (
+                  <p className="text-muted-foreground text-sm">جاري تحميل حجم القاعدة...</p>
+                )}
+              </div>
             </div>
 
             {/* Charts Grid */}
@@ -969,8 +1130,53 @@ export default function SuperAdminPortal() {
               </Button>
             </div>
 
-            {/* System Info */}
+            {/* === بطاقة الاستيراد === */}
             <div className="card-modern p-6 animate-slide-up delay-100">
+              <div className="flex items-center gap-3 mb-4">
+                <div className="w-10 h-10 rounded-xl bg-emerald-500/10 flex items-center justify-center">
+                  <Upload className="w-5 h-5 text-emerald-500" />
+                </div>
+                <div>
+                  <h3 className="font-bold text-foreground">استيراد بيانات (CSV)</h3>
+                  <p className="text-xs text-muted-foreground">استعادة المواعيد من ملف CSV تم تصديره مسبقاً</p>
+                </div>
+              </div>
+              <div className="space-y-3">
+                <Select
+                  value={selectedClinicForImport}
+                  onValueChange={(val) => setSelectedClinicForImport(val)}
+                >
+                  <SelectTrigger className="w-full">
+                    <SelectValue placeholder="اختر العيادة المستهدفة" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {clinics.map((c) => (
+                      <SelectItem key={c.id} value={c.id}>
+                        {c.name}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+                <label className="w-full">
+                  <Button variant="outline" className="w-full" asChild>
+                    <span>
+                      <Upload className="w-4 h-4 ml-1" />
+                      {importing ? <Loader2 className="w-4 h-4 animate-spin" /> : "اختر ملف CSV"}
+                    </span>
+                  </Button>
+                  <input
+                    type="file"
+                    accept=".csv"
+                    className="hidden"
+                    onChange={handleImportCSV}
+                    disabled={!selectedClinicForImport || importing}
+                  />
+                </label>
+              </div>
+            </div>
+
+            {/* System Info */}
+            <div className="card-modern p-6 animate-slide-up delay-200">
               <div className="flex items-center gap-3 mb-4">
                 <div className="w-10 h-10 rounded-xl bg-emerald-500/10 flex items-center justify-center">
                   <Activity className="w-5 h-5 text-emerald-500" />
