@@ -52,7 +52,7 @@ import {
 import jsPDF from "jspdf";
 import autoTable from "jspdf-autotable";
 import html2canvas from "html2canvas";
-import QRCode from "qrcode";
+import { QRCodeCanvas } from "qrcode.react";
 
 // ألوان هوية الشركة
 const COLORS = {
@@ -94,7 +94,7 @@ export default function ReportsPage() {
   const [activeClinicId, setActiveClinicId] = useState<string | null>(null);
   const [clinicName, setClinicName] = useState("");
   const [clinicLogo, setClinicLogo] = useState<string | null>(null);
-  const [clinicQR, setClinicQR] = useState<string | null>(null);
+  const [botUsername, setBotUsername] = useState<string | null>(null);
   const [filterType, setFilterType] = useState<"month" | "year" | "range">("month");
   const [selectedMonth, setSelectedMonth] = useState(new Date().toISOString().slice(0, 7));
   const [selectedYear, setSelectedYear] = useState(new Date().getFullYear().toString());
@@ -104,8 +104,9 @@ export default function ReportsPage() {
   const [endDate, setEndDate] = useState(new Date().toISOString().slice(0, 10));
 
   const chartRef = useRef<HTMLDivElement>(null);
+  const qrRef = useRef<HTMLDivElement>(null);
 
-  // 1. جلب بيانات العيادة (الاسم، الشعار، QR)
+  // 1. جلب بيانات العيادة (الاسم، الشعار، اسم البوت)
   useEffect(() => {
     if (!authLoading && !user) {
       navigate("/auth");
@@ -117,7 +118,7 @@ export default function ReportsPage() {
 
       const { data: clinic } = await supabase
         .from("clinics")
-        .select("id, name, logo_url, qr_code_url")
+        .select("id, name, logo_url, bot_username")
         .eq("owner_id", user.id)
         .maybeSingle();
 
@@ -129,20 +130,7 @@ export default function ReportsPage() {
       setActiveClinicId(clinic.id);
       setClinicName(clinic.name);
       setClinicLogo(clinic.logo_url || null);
-      
-      // QR موجود مسبقاً – نجلب الرابط
-      if (clinic.qr_code_url) {
-        setClinicQR(clinic.qr_code_url);
-      } else {
-        // لو لم يكن موجوداً، نولده من معرف العيادة (نفس طريقة البوت)
-        try {
-          const qrDataUrl = await QRCode.toDataURL(
-            `https://t.me/SmartClinicBot?start=${clinic.id.slice(0, 8)}`,
-            { width: 150, margin: 1, color: { dark: "#1a2a6c", light: "#ffffff" } }
-          );
-          setClinicQR(qrDataUrl);
-        } catch (_) {}
-      }
+      setBotUsername(clinic.bot_username || "SmartClinc_bot");
 
       await fetchReportData(clinic.id);
       setLoading(false);
@@ -300,6 +288,15 @@ export default function ReportsPage() {
     toast({ title: "⏳ جاري إنشاء التقرير..." });
 
     try {
+      // التقاط QR كصورة
+      let qrImageData: string | null = null;
+      if (qrRef.current) {
+        const qrCanvas = qrRef.current.querySelector("canvas");
+        if (qrCanvas) {
+          qrImageData = qrCanvas.toDataURL("image/png");
+        }
+      }
+
       const charts = chartRef.current.querySelectorAll(".chart-container");
       const chartImages: string[] = [];
 
@@ -330,23 +327,14 @@ export default function ReportsPage() {
           doc.addImage(logoData, "PNG", 15, 10, 35, 35);
         } catch (_) {}
       } else {
-        // شعار افتراضي
         doc.setFontSize(24);
         doc.setTextColor(COLORS.primary);
         doc.text("🏥", 15, 30);
       }
 
-      // QR (يسار)
-      if (clinicQR) {
-        try {
-          const qrData = await fetch(clinicQR).then((r) => r.blob());
-          const reader = new FileReader();
-          const qrBase64 = await new Promise<string>((resolve) => {
-            reader.onload = () => resolve(reader.result as string);
-            reader.readAsDataURL(qrData);
-          });
-          doc.addImage(qrBase64, "PNG", pageWidth - 45, 10, 30, 30);
-        } catch (_) {}
+      // QR (يسار) - باستخدام الصورة الملتقطة
+      if (qrImageData) {
+        doc.addImage(qrImageData, "PNG", pageWidth - 45, 10, 30, 30);
       }
 
       // اسم العيادة في المنتصف
@@ -437,7 +425,6 @@ export default function ReportsPage() {
         styles: { font: "helvetica", fontSize: 10, cellPadding: 4 },
         headStyles: { fillColor: [26, 42, 108], textColor: [255, 255, 255] },
         didDrawPage: (data) => {
-          // تذييل الصفحة
           doc.setFontSize(8);
           doc.setTextColor(COLORS.muted);
           doc.text(
@@ -496,6 +483,10 @@ export default function ReportsPage() {
       </div>
     );
   }
+
+  // رابط QR (نفس طريقة SettingsPage)
+  const effectiveBotUsername = botUsername || "SmartClinc_bot";
+  const qrLink = activeClinicId ? `https://t.me/${effectiveBotUsername}?start=clinic_${activeClinicId}` : "";
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-slate-50 to-blue-50/30 flex flex-col">
@@ -646,6 +637,11 @@ export default function ReportsPage() {
                   </CardContent>
                 </Card>
               ))}
+            </div>
+
+            {/* QR Code - مخفي في الواجهة ولكن يُلتقط للـ PDF */}
+            <div ref={qrRef} className="hidden">
+              <QRCodeCanvas value={qrLink} size={200} level="M" includeMargin={false} />
             </div>
 
             {/* الرسوم البيانية */}
