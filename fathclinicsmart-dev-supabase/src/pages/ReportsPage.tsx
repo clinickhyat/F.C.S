@@ -46,7 +46,6 @@ import {
   CalendarRange,
   Clock,
   Award,
-  QrCode,
   Printer,
   Building2,
 } from "lucide-react";
