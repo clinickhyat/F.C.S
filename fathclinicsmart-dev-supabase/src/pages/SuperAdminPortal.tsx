@@ -285,22 +285,10 @@ export default function SuperAdminPortal() {
   };
 
   // === دالة تصدير ZIP (مجلد لكل عيادة / ملف CSV لكل شهر) ===
+  // التعديل: استخدام POST بدلاً من GET مع إرسال التواريخ (اختياري)
   const handleExport = async () => {
     setExporting(true);
     try {
-      const { data, error } = await supabase.functions.invoke('weekly-export', {
-        method: 'GET',
-      });
-      
-      if (error) {
-        toast({ title: "خطأ", description: error.message || "فشل في الاتصال بخدمة التصدير", variant: "destructive" });
-        setExporting(false);
-        return;
-      }
-
-      // الدالة تعيد ZIP كـ Blob عبر response.data (في حالة invoke، قد يكون Base64 أو نص)
-      // لكن supabase.functions.invoke لا يدعم binary مباشرة. سنضطر لاستخدام fetch مع Authorization.
-      // لذا سنستخدم طريقة fetch مباشرة مع جلسة.
       const supabaseUrl = import.meta.env.VITE_SUPABASE_URL;
       const { data: { session } } = await supabase.auth.getSession();
       if (!session?.access_token) {
@@ -310,15 +298,25 @@ export default function SuperAdminPortal() {
       }
 
       const response = await fetch(`${supabaseUrl}/functions/v1/weekly-export`, {
-        method: 'GET',
+        method: 'POST',   // ✅ التغيير الجوهري: GET → POST
         headers: {
           'Authorization': `Bearer ${session.access_token}`,
+          'Content-Type': 'application/json',
         },
+        body: JSON.stringify({
+          // يمكنك إرسال التواريخ حسب الحاجة، أو تركها فارغة لاستخدام القيم الافتراضية في الدالة
+          // startDate: '2026-04-01',
+          // endDate: '2026-06-21',
+        }),
       });
 
       if (!response.ok) {
-        const err = await response.json();
-        toast({ title: "تنبيه", description: err.message || "لا توجد بيانات للتصدير" });
+        let errMsg = "لا توجد بيانات للتصدير";
+        try {
+          const err = await response.json();
+          errMsg = err.message || errMsg;
+        } catch (_) {}
+        toast({ title: "تنبيه", description: errMsg });
         setExporting(false);
         return;
       }
