@@ -16,6 +16,7 @@ import E2ETestPage from "./pages/E2ETestPage";
 import ConversationLogsPage from "./pages/ConversationLogsPage";
 import ReceptionPage from "./pages/ReceptionPage";
 import CashierPage from "./pages/CashierPage";
+import ReportsPage from "./pages/ReportsPage";
 import NotFound from "./pages/NotFound";
 
 const queryClient = new QueryClient();
@@ -41,6 +42,7 @@ const App = () => {
               <Route path="/super-admin-portal" element={<SuperAdminPortal />} />
               <Route path="/e2e-test" element={<E2ETestPage />} />
               <Route path="/conversation-logs" element={<ConversationLogsPage />} />
+              <Route path="/reports" element={<ReportsPage />} />
               <Route path="*" element={<NotFound />} />
             </Routes>
           </BrowserRouter>
