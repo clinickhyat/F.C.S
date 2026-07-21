@@ -284,7 +284,7 @@ export default function SuperAdminPortal() {
     navigate("/");
   };
 
-  // === دالة تصدير CSV (باستخدام supabase.functions.invoke) ===
+  // === دالة تصدير ZIP (مجلد لكل عيادة / ملف CSV لكل شهر) ===
   const handleExport = async () => {
     setExporting(true);
     try {
@@ -298,26 +298,44 @@ export default function SuperAdminPortal() {
         return;
       }
 
-      // التحقق مما إذا كانت الاستجابة CSV أم JSON
-      if (typeof data === 'string' && data.startsWith('Clinic,')) {
-        // إنشاء ملف CSV للتحميل
-        const blob = new Blob([data], { type: 'text/csv; charset=utf-8' });
-        const url = window.URL.createObjectURL(blob);
-        const a = document.createElement('a');
-        a.href = url;
-        a.download = 'smartclinic_export.csv';
-        document.body.appendChild(a);
-        a.click();
-        a.remove();
-        window.URL.revokeObjectURL(url);
-        
-        toast({ title: "تم التحميل ✓", description: "تم تحميل ملف CSV بنجاح" });
-        setShowDeleteDialog(true);
-      } else if (data && data.message) {
-        toast({ title: "تنبيه", description: data.message || "لا توجد بيانات للتصدير" });
-      } else {
-        toast({ title: "تنبيه", description: "لا توجد بيانات للتصدير" });
+      // الدالة تعيد ZIP كـ Blob عبر response.data (في حالة invoke، قد يكون Base64 أو نص)
+      // لكن supabase.functions.invoke لا يدعم binary مباشرة. سنضطر لاستخدام fetch مع Authorization.
+      // لذا سنستخدم طريقة fetch مباشرة مع جلسة.
+      const supabaseUrl = import.meta.env.VITE_SUPABASE_URL;
+      const { data: { session } } = await supabase.auth.getSession();
+      if (!session?.access_token) {
+        toast({ title: "خطأ", description: "يجب تسجيل الدخول أولاً", variant: "destructive" });
+        setExporting(false);
+        return;
       }
+
+      const response = await fetch(`${supabaseUrl}/functions/v1/weekly-export`, {
+        method: 'GET',
+        headers: {
+          'Authorization': `Bearer ${session.access_token}`,
+        },
+      });
+
+      if (!response.ok) {
+        const err = await response.json();
+        toast({ title: "تنبيه", description: err.message || "لا توجد بيانات للتصدير" });
+        setExporting(false);
+        return;
+      }
+
+      // تحميل ZIP
+      const blob = await response.blob();
+      const url = window.URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `smartclinic_export_${new Date().toISOString().slice(0, 7)}.zip`;
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+      window.URL.revokeObjectURL(url);
+
+      toast({ title: "تم التحميل ✓", description: "تم تحميل ملف ZIP بنجاح" });
+      setShowDeleteDialog(true);
     } catch (error: any) {
       toast({ title: "خطأ", description: error.message || "فشل في الاتصال بخدمة التصدير", variant: "destructive" });
     } finally {
@@ -944,12 +962,12 @@ export default function SuperAdminPortal() {
                 </div>
                 <div>
                   <h3 className="font-bold text-foreground">تصدير وأرشفة البيانات</h3>
-                  <p className="text-xs text-muted-foreground">تحميل المواعيد الأقدم من 30 يوم كملف CSV مع خيار حذفها من قاعدة البيانات</p>
+                  <p className="text-xs text-muted-foreground">تحميل ملف ZIP يحتوي على مجلد لكل عيادة وملفات CSV للشهور القديمة مع خيار حذف البيانات</p>
                 </div>
               </div>
               <Button onClick={handleExport} disabled={exporting} variant="default" className="w-full">
                 {exporting ? <Loader2 className="w-4 h-4 animate-spin" /> : <Download className="w-4 h-4" />}
-                تحميل ملف CSV
+                تحميل ملف ZIP
               </Button>
             </div>
 
@@ -1008,7 +1026,7 @@ export default function SuperAdminPortal() {
               حذف البيانات المصدرة
             </DialogTitle>
             <DialogDescription>
-              تم تحميل ملف CSV بنجاح. هل تريد حذف جميع المواعيد الأقدم من 30 يومًا من قاعدة البيانات؟
+              تم تحميل ملف ZIP بنجاح. هل تريد حذف جميع المواعيد الأقدم من 30 يومًا من قاعدة البيانات؟
               <br />
               <span className="text-destructive font-medium">هذا الإجراء لا يمكن التراجع عنه.</span>
             </DialogDescription>
