@@ -308,6 +308,9 @@ export default function Dashboard() {
               <Button variant="ghost" size="sm" onClick={() => navigate("/cashier")} title="بوابة الصندوق" className="gap-2">
                 <Wallet className="w-4 h-4" /><span className="hidden sm:inline">الصندوق</span>
               </Button>
+              <Button variant="ghost" size="sm" onClick={() => navigate("/reports")} className="gap-2">
+                <BarChart3 className="w-4 h-4" /><span className="hidden sm:inline">التقارير</span>
+              </Button>
               <Button variant="ghost" size="sm" onClick={() => navigate("/conversation-logs")} title="سجل المحادثات" className="gap-2">
                 <MessageSquare className="w-4 h-4" /><span className="hidden lg:inline">المحادثات</span>
               </Button>
