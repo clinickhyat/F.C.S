@@ -284,29 +284,24 @@ export default function SuperAdminPortal() {
     navigate("/");
   };
 
-  // === دالة تصدير CSV ===
+  // === دالة تصدير CSV (باستخدام supabase.functions.invoke) ===
   const handleExport = async () => {
     setExporting(true);
     try {
-      const supabaseUrl = import.meta.env.VITE_SUPABASE_URL;
-      const { data: { session } } = await supabase.auth.getSession();
+      const { data, error } = await supabase.functions.invoke('weekly-export', {
+        method: 'GET',
+      });
       
-      if (!session?.access_token) {
-        toast({ title: "خطأ", description: "يجب تسجيل الدخول أولاً", variant: "destructive" });
+      if (error) {
+        toast({ title: "خطأ", description: error.message || "فشل في الاتصال بخدمة التصدير", variant: "destructive" });
         setExporting(false);
         return;
       }
 
-      const response = await fetch(`${supabaseUrl}/functions/v1/weekly-export`, {
-        method: 'GET',
-        headers: {
-          'Authorization': `Bearer ${session.access_token}`,
-        },
-      });
-
-      if (response.headers.get('Content-Type')?.includes('text/csv')) {
-        // تنزيل الملف
-        const blob = await response.blob();
+      // التحقق مما إذا كانت الاستجابة CSV أم JSON
+      if (typeof data === 'string' && data.startsWith('Clinic,')) {
+        // إنشاء ملف CSV للتحميل
+        const blob = new Blob([data], { type: 'text/csv; charset=utf-8' });
         const url = window.URL.createObjectURL(blob);
         const a = document.createElement('a');
         a.href = url;
@@ -317,14 +312,14 @@ export default function SuperAdminPortal() {
         window.URL.revokeObjectURL(url);
         
         toast({ title: "تم التحميل ✓", description: "تم تحميل ملف CSV بنجاح" });
-        // إظهار نافذة تأكيد الحذف
         setShowDeleteDialog(true);
+      } else if (data && data.message) {
+        toast({ title: "تنبيه", description: data.message || "لا توجد بيانات للتصدير" });
       } else {
-        const result = await response.json();
-        toast({ title: "تنبيه", description: result.message || "لا توجد بيانات للتصدير" });
+        toast({ title: "تنبيه", description: "لا توجد بيانات للتصدير" });
       }
     } catch (error: any) {
-      toast({ title: "خطأ", description: "فشل في الاتصال بخدمة التصدير", variant: "destructive" });
+      toast({ title: "خطأ", description: error.message || "فشل في الاتصال بخدمة التصدير", variant: "destructive" });
     } finally {
       setExporting(false);
     }
@@ -334,31 +329,20 @@ export default function SuperAdminPortal() {
   const handleDeleteOld = async () => {
     setDeleting(true);
     try {
-      const supabaseUrl = import.meta.env.VITE_SUPABASE_URL;
-      const { data: { session } } = await supabase.auth.getSession();
-      
-      if (!session?.access_token) {
-        toast({ title: "خطأ", description: "يجب تسجيل الدخول أولاً", variant: "destructive" });
-        setDeleting(false);
-        return;
-      }
-
-      const response = await fetch(`${supabaseUrl}/functions/v1/weekly-export?action=delete`, {
+      const { data, error } = await supabase.functions.invoke('weekly-export', {
         method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${session.access_token}`,
-        },
+        body: { action: 'delete' },
       });
 
-      const result = await response.json();
-      if (result.ok) {
-        toast({ title: "تم الحذف ✓", description: `تم حذف ${result.deleted} موعد قديم بنجاح` });
+      if (error) {
+        toast({ title: "خطأ", description: error.message || "فشل في حذف البيانات", variant: "destructive" });
+      } else if (data && data.ok) {
+        toast({ title: "تم الحذف ✓", description: `تم حذف ${data.deleted} موعد قديم بنجاح` });
       } else {
-        toast({ title: "خطأ", description: result.message || "فشل في حذف البيانات", variant: "destructive" });
+        toast({ title: "خطأ", description: (data && data.message) || "فشل في حذف البيانات", variant: "destructive" });
       }
     } catch (error: any) {
-      toast({ title: "خطأ", description: "فشل في الاتصال بخدمة الحذف", variant: "destructive" });
+      toast({ title: "خطأ", description: error.message || "فشل في الاتصال بخدمة الحذف", variant: "destructive" });
     } finally {
       setDeleting(false);
       setShowDeleteDialog(false);
