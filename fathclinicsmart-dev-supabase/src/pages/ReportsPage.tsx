@@ -2,17 +2,7 @@ import { useEffect, useState, useRef } from "react";
 import { useNavigate } from "react-router-dom";
 import { useAuth } from "@/lib/auth";
 import { supabase } from "@/integrations/supabase/client";
-import { Button } from "@/components/ui/button";
-import { Footer } from "@/components/layout/Footer";
 import { useToast } from "@/hooks/use-toast";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
 import {
   BarChart,
   Bar,
@@ -24,8 +14,6 @@ import {
   PieChart,
   Pie,
   Cell,
-  LineChart,
-  Line,
   AreaChart,
   Area,
   Legend,
@@ -38,35 +26,52 @@ import {
   Loader2,
   Download,
   FileText,
-  ArrowLeft,
   Activity,
   Filter,
-  CalendarRange,
   Clock,
   Award,
   Printer,
   Building2,
+  RefreshCw,
+  ArrowLeft,
 } from "lucide-react";
 import jsPDF from "jspdf";
 import autoTable from "jspdf-autotable";
 import { QRCodeCanvas } from "qrcode.react";
 
-// ===== COLORS =====
-const C = {
+// ========== الألوان ==========
+const COLORS = {
   primary: "#1a2a6c",
+  primaryLight: "#2d4a9e",
   gold: "#c9a84c",
+  goldLight: "#e8c76e",
   blue: "#1a73e8",
   green: "#10b981",
   purple: "#7c3aed",
   rose: "#e11d48",
   cyan: "#0891b2",
+  orange: "#f59e0b",
   teal: "#0d9488",
-  muted: "#64748b",
+  slate: "#64748b",
+  bg: "#f0f4ff",
+  white: "#ffffff",
+  border: "#e2e8f0",
   text: "#1e293b",
+  muted: "#64748b",
 };
 
-const CHART_COLORS = [C.blue, C.green, C.gold, C.purple, C.rose, C.cyan, C.teal];
+const PIE_COLORS = [
+  COLORS.blue,
+  COLORS.green,
+  COLORS.gold,
+  COLORS.purple,
+  COLORS.rose,
+  COLORS.cyan,
+  COLORS.orange,
+  COLORS.teal,
+];
 
+// ========== الواجهات ==========
 interface ReportData {
   totalPatients: number;
   totalAppointments: number;
@@ -81,12 +86,37 @@ interface ReportData {
   topServices: { name: string; value: number }[];
 }
 
+// ========== المساعدات ==========
+const formatNumber = (n: number) => n.toLocaleString("ar-SA");
+const shortDate = (d: string) => d.slice(5);
+
+const getMonthLabel = (m: string) => {
+  const names = [
+    "يناير",
+    "فبراير",
+    "مارس",
+    "أبريل",
+    "مايو",
+    "يونيو",
+    "يوليو",
+    "أغسطس",
+    "سبتمبر",
+    "أكتوبر",
+    "نوفمبر",
+    "ديسمبر",
+  ];
+  const idx = parseInt(m.slice(5, 7)) - 1;
+  return names[idx] + " " + m.slice(0, 4);
+};
+
+// ========== المكون الرئيسي ==========
 export default function ReportsPage() {
   const navigate = useNavigate();
   const { user, loading: authLoading } = useAuth();
   const { toast } = useToast();
 
   const [loading, setLoading] = useState(true);
+  const [generating, setGenerating] = useState(false);
   const [reportData, setReportData] = useState<ReportData | null>(null);
   const [activeClinicId, setActiveClinicId] = useState<string | null>(null);
   const [clinicName, setClinicName] = useState("");
@@ -100,8 +130,7 @@ export default function ReportsPage() {
   );
   const [endDate, setEndDate] = useState(new Date().toISOString().slice(0, 10));
 
-  const chartRef = useRef<HTMLDivElement>(null);
-  const qrRef = useRef<HTMLDivElement>(null);
+  const printRef = useRef<HTMLDivElement>(null);
 
   // ===== جلب بيانات العيادة =====
   useEffect(() => {
@@ -267,7 +296,11 @@ export default function ReportsPage() {
       });
     } catch (error) {
       console.error(error);
-      toast({ title: "خطأ", description: "فشل في جلب بيانات التقارير", variant: "destructive" });
+      toast({ 
+        title: "خطأ", 
+        description: "فشل في جلب بيانات التقارير", 
+        variant: "destructive" 
+      });
     }
   };
 
@@ -277,280 +310,273 @@ export default function ReportsPage() {
     }
   }, [filterType, selectedMonth, selectedYear, startDate, endDate]);
 
-  // ===== PDF =====
+  // ===== تصدير PDF محسّن =====
   const handleDownloadPDF = async () => {
     if (!reportData) return;
-
-    toast({ title: "جاري إنشاء التقرير..." });
+    setGenerating(true);
 
     try {
-      const doc = new jsPDF({
-        orientation: "portrait",
-        unit: "mm",
-        format: "a4",
-        compress: true,
+      const doc = new jsPDF({ 
+        orientation: "portrait", 
+        unit: "mm", 
+        format: "a4", 
+        compress: true 
       });
+
+      // إضافة دعم للعربية
+      doc.setLanguage("ar");
+      doc.setFont("helvetica");
 
       const pw = doc.internal.pageSize.getWidth();
       const ph = doc.internal.pageSize.getHeight();
       const m = 12;
-      let y = m;
 
-      // ===== HEADER =====
-      doc.setFillColor(C.primary);
-      doc.rect(0, 0, pw, 28, "F");
+      // ===== صفحة الغلاف =====
+      doc.setFillColor(COLORS.primary);
+      doc.rect(0, 0, pw, ph, "F");
 
-      doc.setFontSize(18);
+      // الشعار والعنوان
+      doc.setFontSize(24);
       doc.setTextColor("#ffffff");
       doc.setFont("helvetica", "bold");
-      doc.text(clinicName || "تقرير العيادة", pw / 2, 12, { align: "center" });
+      doc.text(clinicName, pw / 2, 80, { align: "center" });
 
-      doc.setFontSize(9);
-      doc.setTextColor("#ffd700");
-      doc.setFont("helvetica", "normal");
-      const dateStr = new Date().toLocaleDateString("ar-SA", {
-        year: "numeric",
-        month: "long",
-        day: "numeric",
-      });
-      doc.text(dateStr, pw / 2, 20, { align: "center" });
+      doc.setFontSize(14);
+      doc.setTextColor(COLORS.gold);
+      doc.text("تقرير شامل - Smart Clinic", pw / 2, 95, { align: "center" });
 
-      doc.setFontSize(7);
-      doc.setTextColor("#ffffffaa");
+      doc.setFontSize(10);
+      doc.setTextColor("#ffffff99");
       const { start, end } = getDateRange();
-      doc.text(`الفترة: ${start} إلى ${end}`, pw / 2, 26, { align: "center" });
+      doc.text(`الفترة: ${start} إلى ${end}`, pw / 2, 110, { align: "center" });
+      doc.text(new Date().toLocaleDateString("ar-SA"), pw / 2, 120, { align: "center" });
 
-      y = 34;
+      // خط ذهبي
+      doc.setFillColor(COLORS.gold);
+      doc.rect(m, ph - 40, pw - 2 * m, 2, "F");
 
-      // ===== KPI =====
-      const kpis = [
-        { label: "المرضى", val: reportData.totalPatients.toLocaleString() },
-        { label: "المواعيد", val: reportData.totalAppointments.toLocaleString() },
-        { label: "الإيرادات", val: reportData.totalRevenue.toLocaleString() + " ر.ي" },
-        { label: "نسبة الحضور", val: reportData.attendanceRate + "%" },
-        { label: "مرضى جدد", val: reportData.newPatients.toLocaleString() },
-        { label: "متوسط يومي", val: reportData.averagePerDay.toLocaleString() },
-      ];
-
-      const kw = (pw - m * 2) / 3 - 2;
-      kpis.forEach((k, i) => {
-        const col = i % 3;
-        const row = Math.floor(i / 3);
-        const kx = m + col * (kw + 2);
-        const ky = y + row * 12;
-
-        doc.setFillColor("#f8faff");
-        doc.roundedRect(kx, ky, kw, 10, 2, 2, "F");
-        doc.setDrawColor("#e2e8f0");
-        doc.roundedRect(kx, ky, kw, 10, 2, 2, "S");
-
-        doc.setFontSize(5.5);
-        doc.setTextColor(C.muted);
-        doc.setFont("helvetica", "normal");
-        doc.text(k.label, kx + 2, ky + 3.5);
-
-        doc.setFontSize(9);
-        doc.setTextColor(C.text);
-        doc.setFont("helvetica", "bold");
-        doc.text(k.val, kx + 2, ky + 8.5);
-      });
-      y += 28;
-
-      // ===== Daily Appointments Chart (Text-based) =====
-      doc.setFontSize(10);
-      doc.setTextColor(C.primary);
-      doc.setFont("helvetica", "bold");
-      doc.text("المواعيد اليومية", m, y);
-      y += 5;
-
-      const apptData = reportData.dailyAppointments.slice(-20);
-      if (apptData.length > 0) {
-        const maxVal = Math.max(...apptData.map(d => d.count), 1);
-        const chartW = pw - m * 2;
-        const chartH = 35;
-        const plotX = m;
-        const plotY = y;
-        const plotW = chartW;
-        const plotH = chartH;
-
-        // Grid
-        doc.setDrawColor("#e2e8f0");
-        doc.setLineWidth(0.15);
-        for (let g = 0; g <= 3; g++) {
-          const gy = plotY + plotH - (g / 3) * plotH;
-          doc.line(plotX, gy, plotX + plotW, gy);
-          doc.setFontSize(4);
-          doc.setTextColor(C.muted);
-          doc.text(String(Math.round((g / 3) * maxVal)), plotX, gy + 1);
-        }
-
-        // Bars
-        const barW = Math.min((plotW - 4) / apptData.length - 0.8, 5);
-        apptData.forEach((d, i) => {
-          const bx = plotX + i * (barW + 0.8) + 2;
-          const bh = (d.count / maxVal) * plotH * 0.85;
-          const by = plotY + plotH - bh;
-          doc.setFillColor(C.blue);
-          doc.rect(bx, by, barW, bh, "F");
-          if (i % Math.ceil(apptData.length / 8) === 0) {
-            doc.setFontSize(3.5);
-            doc.setTextColor(C.muted);
-            doc.text(d.date.slice(8), bx + barW / 2, plotY + plotH + 3, { align: "center" });
-          }
-        });
-        y += plotH + 8;
-      }
-
-      // ===== Service Distribution =====
-      if (y + 40 > ph - 20) { doc.addPage(); y = m; }
-      doc.setFontSize(10);
-      doc.setTextColor(C.primary);
-      doc.setFont("helvetica", "bold");
-      doc.text("توزيع الخدمات", m, y);
-      y += 5;
-
-      const total = reportData.serviceDistribution.reduce((s, x) => s + x.value, 0);
-      const sorted = [...reportData.serviceDistribution].sort((a, b) => b.value - a.value);
-
-      sorted.forEach((s, i) => {
-        const pct = Math.round((s.value / total) * 100);
-        const barLen = Math.round((s.value / total) * 80);
-        const color = CHART_COLORS[i % CHART_COLORS.length];
-
-        doc.setFontSize(7);
-        doc.setTextColor(C.text);
-        doc.setFont("helvetica", "normal");
-        doc.text(s.name + " (" + pct + "%)", m, y + 3);
-
-        doc.setFillColor(color);
-        doc.rect(m + 40, y, barLen, 4, "F");
-
-        doc.setFontSize(6);
-        doc.setTextColor(C.muted);
-        doc.text(String(s.value), m + 40 + barLen + 2, y + 3.5);
-
-        y += 7;
-      });
-      y += 5;
-
-      // ===== Monthly Comparison =====
-      if (y + 40 > ph - 20) { doc.addPage(); y = m; }
-      doc.setFontSize(10);
-      doc.setTextColor(C.primary);
-      doc.setFont("helvetica", "bold");
-      doc.text("المقارنة الشهرية", m, y);
-      y += 5;
-
-      const mData = reportData.monthlyComparison;
-      if (mData.length > 0) {
-        const maxAppt = Math.max(...mData.map(d => d.appointments), 1);
-        const maxRev = Math.max(...mData.map(d => d.revenue), 1);
-        const groupW = (pw - m * 2 - 4) / mData.length;
-
-        mData.forEach((d, i) => {
-          const gx = m + i * groupW + 2;
-          const aH = (d.appointments / maxAppt) * 20;
-          const rH = (d.revenue / maxRev) * 20;
-
-          doc.setFillColor(C.blue);
-          doc.rect(gx, y + 20 - aH, groupW * 0.3, aH, "F");
-          doc.setFillColor(C.gold);
-          doc.rect(gx + groupW * 0.35, y + 20 - rH, groupW * 0.3, rH, "F");
-
-          const monthNames = ["يناير","فبراير","مارس","أبريل","مايو","يونيو","يوليو","أغسطس","سبتمبر","أكتوبر","نوفمبر","ديسمبر"];
-          const mIdx = parseInt(d.month.slice(5, 7)) - 1;
-          doc.setFontSize(5);
-          doc.setTextColor(C.muted);
-          doc.setFont("helvetica", "normal");
-          doc.text(monthNames[mIdx], gx + groupW / 2, y + 24, { align: "center" });
-        });
-
-        // Legend
-        doc.setFillColor(C.blue);
-        doc.rect(m, y + 28, 4, 3, "F");
-        doc.setFontSize(5);
-        doc.setTextColor(C.text);
-        doc.text("المواعيد", m + 6, y + 31);
-        doc.setFillColor(C.gold);
-        doc.rect(m + 30, y + 28, 4, 3, "F");
-        doc.text("الإيرادات", m + 36, y + 31);
-        y += 35;
-      }
-
-      // ===== Top Services Table =====
-      if (y + 30 > ph - 20) { doc.addPage(); y = m; }
-      autoTable(doc, {
-        head: [["#", "الخدمة", "عدد المرات", "النسبة"]],
-        body: reportData.topServices.map((s, i) => {
-          const pct = Math.round((s.value / total) * 100);
-          return [String(i + 1), s.name, String(s.value), pct + "%"];
-        }),
-        startY: y,
-        theme: "striped",
-        styles: { fontSize: 7, cellPadding: 2, halign: "center" },
-        headStyles: { fillColor: [26, 42, 108], textColor: [255, 255, 255], fontSize: 8 },
-      });
-
-      // ===== QR =====
-      let qrImageData: string | null = null;
-      if (qrRef.current) {
-        const qrCanvas = qrRef.current.querySelector("canvas");
-        if (qrCanvas) {
-          qrImageData = qrCanvas.toDataURL("image/png");
-        }
-      }
-
+      // ===== صفحة KPIs =====
       doc.addPage();
-      const qrY = ph / 2 - 30;
-      doc.setFillColor("#f0f4ff");
-      doc.rect(0, 0, pw, ph, "F");
-      doc.setFillColor(C.primary);
-      doc.rect(0, 0, pw, 20, "F");
+      let y = 20;
 
+      // عنوان القسم
+      doc.setFillColor(COLORS.primary);
+      doc.rect(m, y, pw - 2 * m, 10, "F");
       doc.setFontSize(12);
       doc.setTextColor("#ffffff");
       doc.setFont("helvetica", "bold");
-      doc.text("امسح رمز QR للحجز", pw / 2, 13, { align: "center" });
+      doc.text("المؤشرات الرئيسية", m + 5, y + 7);
+      y += 18;
 
-      if (qrImageData) {
-        doc.addImage(qrImageData, "PNG", pw / 2 - 30, qrY, 60, 60);
+      // جدول KPIs
+      const kpiData = [
+        ["إجمالي المرضى", formatNumber(reportData.totalPatients)],
+        ["إجمالي المواعيد", formatNumber(reportData.totalAppointments)],
+        ["إجمالي الإيرادات", formatNumber(reportData.totalRevenue) + " ر.ي"],
+        ["نسبة الحضور", reportData.attendanceRate + "%"],
+        ["مرضى جدد", formatNumber(reportData.newPatients)],
+        ["متوسط يومي", formatNumber(reportData.averagePerDay)],
+      ];
+
+      autoTable(doc, {
+        startY: y,
+        head: [["المؤشر", "القيمة"]],
+        body: kpiData,
+        styles: {
+          font: "helvetica",
+          fontSize: 10,
+          cellPadding: 4,
+          halign: "right",
+        },
+        headStyles: {
+          fillColor: [26, 42, 108],
+          textColor: [255, 255, 255],
+          fontStyle: "bold",
+        },
+        alternateRowStyles: {
+          fillColor: [248, 250, 255],
+        },
+        columnStyles: {
+          0: { cellWidth: 100 },
+          1: { cellWidth: 70, fontStyle: "bold", textColor: [201, 168, 76] },
+        },
+      });
+
+      // ===== جدول أفضل الخدمات =====
+      doc.addPage();
+      y = 20;
+
+      doc.setFillColor(COLORS.primary);
+      doc.rect(m, y, pw - 2 * m, 10, "F");
+      doc.setFontSize(12);
+      doc.setTextColor("#ffffff");
+      doc.text("أفضل الخدمات", m + 5, y + 7);
+      y += 18;
+
+      const total = reportData.serviceDistribution.reduce((s, x) => s + x.value, 0);
+      const servicesData = reportData.topServices.map((s, i) => {
+        const pct = Math.round((s.value / total) * 100);
+        return [String(i + 1), s.name, formatNumber(s.value), pct + "%"];
+      });
+
+      autoTable(doc, {
+        startY: y,
+        head: [["#", "اسم الخدمة", "المواعيد", "النسبة"]],
+        body: servicesData,
+        styles: {
+          font: "helvetica",
+          fontSize: 9,
+          cellPadding: 3,
+          halign: "center",
+        },
+        headStyles: {
+          fillColor: [26, 42, 108],
+          textColor: [255, 255, 255],
+          fontStyle: "bold",
+        },
+        alternateRowStyles: {
+          fillColor: [248, 250, 255],
+        },
+        columnStyles: {
+          0: { cellWidth: 15 },
+          1: { cellWidth: 90, halign: "right" },
+          2: { cellWidth: 40 },
+          3: { cellWidth: 30, textColor: [16, 185, 129], fontStyle: "bold" },
+        },
+      });
+
+      // ===== جدول التفاصيل اليومية =====
+      doc.addPage();
+      y = 20;
+
+      doc.setFillColor(COLORS.primary);
+      doc.rect(m, y, pw - 2 * m, 10, "F");
+      doc.setFontSize(12);
+      doc.setTextColor("#ffffff");
+      doc.text("التفاصيل اليومية", m + 5, y + 7);
+      y += 18;
+
+      const dailyData = reportData.dailyAppointments.slice(0, 20).map((d) => {
+        const rev = reportData.dailyRevenue.find((r) => r.date === d.date);
+        const avg = reportData.averagePerDay;
+        const status =
+          d.count > avg * 1.2
+            ? "ممتاز"
+            : d.count < avg * 0.8
+            ? "منخفض"
+            : "معتدل";
+        return [d.date, formatNumber(d.count), formatNumber(rev?.amount || 0), status];
+      });
+
+      autoTable(doc, {
+        startY: y,
+        head: [["التاريخ", "المواعيد", "الإيرادات (ر.ي)", "الحالة"]],
+        body: dailyData,
+        styles: {
+          font: "helvetica",
+          fontSize: 8,
+          cellPadding: 2.5,
+          halign: "center",
+        },
+        headStyles: {
+          fillColor: [13, 148, 136],
+          textColor: [255, 255, 255],
+          fontStyle: "bold",
+        },
+        alternateRowStyles: {
+          fillColor: [240, 253, 250],
+        },
+        columnStyles: {
+          0: { cellWidth: 45 },
+          1: { cellWidth: 40, fontStyle: "bold" },
+          2: { cellWidth: 45, textColor: [201, 168, 76] },
+          3: { cellWidth: 40 },
+        },
+      });
+
+      // ===== صفحة QR =====
+      doc.addPage();
+      const qrY = ph / 2 - 40;
+
+      doc.setFillColor(COLORS.bg);
+      doc.rect(0, 0, pw, ph, "F");
+
+      doc.setFillColor(COLORS.primary);
+      doc.rect(0, 0, pw, 35, "F");
+
+      doc.setFontSize(14);
+      doc.setTextColor("#ffffff");
+      doc.setFont("helvetica", "bold");
+      doc.text("احجز موعدك الآن", pw / 2, 18, { align: "center" });
+
+      doc.setFontSize(9);
+      doc.setTextColor(COLORS.gold);
+      doc.text(clinicName, pw / 2, 27, { align: "center" });
+
+      // QR
+      const qrCanvas = document.getElementById("hidden-qr-canvas") as HTMLCanvasElement;
+      if (qrCanvas) {
+        const qrSize = 60;
+        const qrX = pw / 2 - qrSize / 2;
+        doc.setFillColor("#ffffff");
+        doc.rect(qrX - 5, qrY - 5, qrSize + 10, qrSize + 10, "F");
+        doc.setDrawColor(COLORS.gold);
+        doc.setLineWidth(2);
+        doc.rect(qrX - 6, qrY - 6, qrSize + 12, qrSize + 12, "S");
+        const qrDataUrl = qrCanvas.toDataURL("image/png");
+        doc.addImage(qrDataUrl, "PNG", qrX, qrY, qrSize, qrSize);
       }
 
-      doc.setFontSize(8);
-      doc.setTextColor(C.primary);
-      doc.setFont("helvetica", "normal");
-      const qrLink = activeClinicId
-        ? "https://t.me/" + (botUsername || "SmartClinc_bot") + "?start=clinic_" + activeClinicId
-        : "";
-      doc.text(qrLink, pw / 2, qrY + 75, { align: "center" });
+      doc.setFontSize(10);
+      doc.setTextColor(COLORS.text);
+      doc.setFont("helvetica", "bold");
+      doc.text("امسح الكود بتطبيق تيليجرام", pw / 2, qrY + 75, { align: "center" });
 
-      // ===== Footer All Pages =====
+      const qrLink = `https://t.me/${botUsername || "SmartClinc_bot"}?start=clinic_${activeClinicId}`;
+      doc.setFontSize(7);
+      doc.setTextColor(COLORS.muted);
+      doc.setFont("helvetica", "normal");
+      doc.text(qrLink, pw / 2, qrY + 82, { align: "center" });
+
+      // ===== التذييل لجميع الصفحات =====
       const totalPages = doc.getNumberOfPages();
       for (let i = 1; i <= totalPages; i++) {
         doc.setPage(i);
-        doc.setFillColor(C.primary);
-        doc.rect(0, ph - 6, pw, 6, "F");
-        doc.setFontSize(5);
+        doc.setFillColor(COLORS.primary);
+        doc.rect(0, ph - 10, pw, 10, "F");
+        doc.setFillColor(COLORS.gold);
+        doc.rect(0, ph - 11, pw, 1, "F");
+        doc.setFontSize(7);
         doc.setTextColor("#ffffff");
-        doc.setFont("helvetica", "normal");
         doc.text(
-          clinicName + " | SmartClinic | © " + new Date().getFullYear(),
+          `${clinicName} | Smart Clinic | © ${new Date().getFullYear()}`,
           pw / 2,
-          ph - 2.5,
+          ph - 4,
           { align: "center" }
         );
-        doc.text("صفحة " + i + " من " + totalPages, pw - m, ph - 2.5, { align: "right" });
+        doc.text(`صفحة ${i} من ${totalPages}`, pw - m, ph - 4, { align: "right" });
       }
 
-      const fileName = "تقرير_" + clinicName.replace(/\s/g, "_") + "_" + new Date().toISOString().slice(0, 10) + ".pdf";
+      const fileName = `SmartClinic_Report_${new Date().toISOString().slice(0, 10)}.pdf`;
       doc.save(fileName);
-      toast({ title: "تم التحميل", description: "تم إنشاء التقرير بنجاح" });
-    } catch (error) {
-      console.error(error);
-      toast({ title: "خطأ", description: "فشل في إنشاء PDF", variant: "destructive" });
+
+      toast({
+        title: "نجاح",
+        description: "تم تحميل التقرير بنجاح",
+      });
+    } catch (err) {
+      console.error(err);
+      toast({
+        title: "خطأ",
+        description: "فشل في إنشاء التقرير",
+        variant: "destructive",
+      });
+    } finally {
+      setGenerating(false);
     }
   };
 
+  // ===== نطاق التاريخ =====
   const getDateRange = () => {
     let start = "",
       end = "";
@@ -572,403 +598,584 @@ export default function ReportsPage() {
     return { start, end };
   };
 
+  // ===== CSV =====
   const handleDownloadCSV = () => {
     if (!reportData) return;
-    let csv = "التاريخ,المواعيد,الإيرادات\n";
+    const rows = ["التاريخ,المواعيد,الإيرادات"];
     reportData.dailyAppointments.forEach((d) => {
       const rev = reportData.dailyRevenue.find((r) => r.date === d.date);
-      csv += d.date + "," + d.count + "," + (rev?.amount || 0) + "\n";
+      rows.push(`${d.date},${d.count},${rev?.amount || 0}`);
     });
-    const blob = new Blob([csv], { type: "text/csv;charset=utf-8;" });
+    const blob = new Blob(["\uFEFF" + rows.join("\n")], {
+      type: "text/csv;charset=utf-8;",
+    });
     const url = URL.createObjectURL(blob);
     const a = document.createElement("a");
     a.href = url;
-    a.download = "تقرير_" + clinicName.replace(/\s/g, "_") + "_" + new Date().toISOString().slice(0, 10) + ".csv";
+    a.download = `Report_${new Date().toISOString().slice(0, 10)}.csv`;
     a.click();
-    toast({ title: "تم التحميل", description: "تم تحميل ملف CSV" });
+    URL.revokeObjectURL(url);
+    toast({ title: "نجاح", description: "تم تحميل ملف CSV" });
   };
 
+  // ===== طباعة =====
   const handlePrint = () => window.print();
 
   if (authLoading || loading) {
     return (
-      <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-blue-50 to-indigo-100">
-        <Loader2 className="w-16 h-16 animate-spin text-primary mx-auto" />
-        <p className="mt-4 text-muted-foreground">جاري تحميل التقارير...</p>
+      <div className="min-h-screen flex items-center justify-center bg-slate-50">
+        <div className="flex flex-col items-center gap-4">
+          <Loader2 className="w-12 h-12 animate-spin text-primary" />
+          <p className="text-muted-foreground">جاري التحميل...</p>
+        </div>
       </div>
     );
   }
 
-  const effectiveBotUsername = botUsername || "SmartClinc_bot";
   const qrLink = activeClinicId
-    ? "https://t.me/" + effectiveBotUsername + "?start=clinic_" + activeClinicId
+    ? `https://t.me/${botUsername || "SmartClinc_bot"}?start=clinic_${activeClinicId}`
     : "";
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-slate-50 to-blue-50/30 flex flex-col print:bg-white">
-      {/* Header */}
-      <header className="bg-white/80 backdrop-blur-lg border-b border-slate-200/60 sticky top-0 z-50 shadow-sm print:hidden">
-        <div className="container mx-auto px-4 py-3 flex flex-wrap items-center justify-between gap-2">
-          <Button variant="ghost" onClick={() => navigate("/dashboard")} className="text-slate-600">
-            <ArrowLeft className="w-5 h-5 ml-2" />
-            العودة
-          </Button>
-          <div className="flex items-center gap-3">
-            {clinicLogo ? (
-              <img src={clinicLogo} alt="شعار" className="w-10 h-10 rounded-full object-cover" />
-            ) : (
-              <div className="w-10 h-10 rounded-full bg-gradient-to-br from-primary to-secondary flex items-center justify-center text-white font-bold">
-                <Building2 className="w-5 h-5" />
+    <div className="min-h-screen bg-slate-50" dir="rtl">
+      {/* QR مخفي */}
+      <div className="fixed -top-full -left-full opacity-0 pointer-events-none">
+        <QRCodeCanvas
+          id="hidden-qr-canvas"
+          value={qrLink}
+          size={240}
+          level="H"
+          includeMargin
+        />
+      </div>
+
+      {/* الهيدر */}
+      <header
+        className="sticky top-0 z-50 bg-white shadow-sm print:hidden"
+        style={{ borderBottom: `3px solid ${COLORS.gold}` }}
+      >
+        <div className="container mx-auto px-4">
+          <div className="flex items-center justify-between h-16">
+            <button
+              onClick={() => navigate("/dashboard")}
+              className="flex items-center gap-2 text-slate-600 hover:text-primary transition-colors"
+            >
+              <ArrowLeft className="w-5 h-5" />
+              <span className="text-sm font-medium">العودة</span>
+            </button>
+
+            <div className="flex items-center gap-3">
+              <div
+                className="w-10 h-10 rounded-xl flex items-center justify-center"
+                style={{ background: COLORS.primary }}
+              >
+                <Building2 className="w-5 h-5 text-white" />
               </div>
-            )}
-            <h1 className="text-xl font-bold text-slate-800 hidden sm:block">تقارير {clinicName}</h1>
-          </div>
-          <div className="flex gap-2">
-            <Button onClick={handleDownloadPDF} variant="default" size="sm" className="bg-primary hover:bg-primary/90">
-              <FileText className="w-4 h-4 ml-1" /> PDF
-            </Button>
-            <Button onClick={handleDownloadCSV} variant="outline" size="sm" className="border-green-200 text-green-700 hover:bg-green-50">
-              <Download className="w-4 h-4 ml-1" /> CSV
-            </Button>
-            <Button onClick={handlePrint} variant="outline" size="sm" className="border-purple-200 text-purple-700 hover:bg-purple-50">
-              <Printer className="w-4 h-4 ml-1" /> طباعة
-            </Button>
+              <div>
+                <h1 className="text-lg font-bold text-slate-800">تقارير {clinicName}</h1>
+                <p className="text-xs text-slate-500">لوحة التحليلات الشاملة</p>
+              </div>
+            </div>
+
+            <div className="flex items-center gap-2">
+              <button
+                onClick={handleDownloadPDF}
+                disabled={generating || loading}
+                className="flex items-center gap-2 px-4 py-2 rounded-lg font-medium text-white transition-all hover:opacity-90 disabled:opacity-50"
+                style={{ background: COLORS.gold }}
+              >
+                {generating ? (
+                  <Loader2 className="w-4 h-4 animate-spin" />
+                ) : (
+                  <FileText className="w-4 h-4" />
+                )}
+                PDF
+              </button>
+              <button
+                onClick={handleDownloadCSV}
+                className="flex items-center gap-2 px-3 py-2 rounded-lg border border-slate-300 text-slate-700 hover:bg-slate-100 transition-all"
+              >
+                <Download className="w-4 h-4" />
+                CSV
+              </button>
+              <button
+                onClick={handlePrint}
+                className="flex items-center gap-2 px-3 py-2 rounded-lg border border-slate-300 text-slate-700 hover:bg-slate-100 transition-all"
+              >
+                <Printer className="w-4 h-4" />
+                طباعة
+              </button>
+            </div>
           </div>
         </div>
       </header>
 
-      <main className="flex-1 container mx-auto px-4 py-6 space-y-6 print:px-2 print:py-2">
-        {/* Filter */}
-        <Card className="border-0 shadow-lg bg-white/80 backdrop-blur-sm print:hidden">
-          <CardContent className="p-4">
-            <div className="flex flex-wrap items-center gap-4">
-              <Filter className="w-5 h-5 text-primary" />
-              <Select
-                value={filterType}
-                onValueChange={(v: "month" | "year" | "range") => setFilterType(v)}
-              >
-                <SelectTrigger className="w-[140px]">
-                  <SelectValue placeholder="النطاق" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="month">شهر</SelectItem>
-                  <SelectItem value="year">سنة</SelectItem>
-                  <SelectItem value="range">نطاق مخصص</SelectItem>
-                </SelectContent>
-              </Select>
-
-              {filterType === "month" && (
-                <input
-                  type="month"
-                  value={selectedMonth}
-                  onChange={(e) => setSelectedMonth(e.target.value)}
-                  className="border rounded-md px-3 py-2 text-sm focus:ring-2 focus:ring-primary"
-                />
-              )}
-              {filterType === "year" && (
-                <select
-                  value={selectedYear}
-                  onChange={(e) => setSelectedYear(e.target.value)}
-                  className="border rounded-md px-3 py-2 text-sm focus:ring-2 focus:ring-primary"
-                >
-                  {Array.from({ length: 10 }, (_, i) => {
-                    const y = new Date().getFullYear() - i;
-                    return (
-                      <option key={y} value={y}>
-                        {y}
-                      </option>
-                    );
-                  })}
-                </select>
-              )}
-              {filterType === "range" && (
-                <>
-                  <input
-                    type="date"
-                    value={startDate}
-                    onChange={(e) => setStartDate(e.target.value)}
-                    className="border rounded-md px-3 py-2 text-sm focus:ring-2 focus:ring-primary"
-                  />
-                  <span className="text-slate-400">→</span>
-                  <input
-                    type="date"
-                    value={endDate}
-                    onChange={(e) => setEndDate(e.target.value)}
-                    className="border rounded-md px-3 py-2 text-sm focus:ring-2 focus:ring-primary"
-                  />
-                </>
-              )}
-              <Button
-                onClick={() => activeClinicId && fetchReportData(activeClinicId)}
-                className="bg-primary hover:bg-primary/90"
-                size="sm"
-              >
-                <CalendarRange className="w-4 h-4 ml-1" />
-                تحديث
-              </Button>
+      {/* المحتوى */}
+      <main className="container mx-auto px-4 py-6 space-y-6 max-w-7xl">
+        {/* الفلترة */}
+        <div className="bg-white rounded-xl shadow-sm border border-slate-200 p-4 print:hidden">
+          <div className="flex flex-wrap items-center gap-3">
+            <div className="flex items-center gap-2 text-slate-600">
+              <Filter className="w-4 h-4" />
+              <span className="text-sm font-medium">فلترة التقرير</span>
             </div>
-          </CardContent>
-        </Card>
 
-        {reportData ? (
-          <div ref={chartRef}>
-            {/* KPI Cards */}
-            <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-4 print:grid-cols-3 print:gap-2">
+            <select
+              value={filterType}
+              onChange={(e) => setFilterType(e.target.value as any)}
+              className="border border-slate-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+            >
+              <option value="month">شهر محدد</option>
+              <option value="year">سنة كاملة</option>
+              <option value="range">نطاق مخصص</option>
+            </select>
+
+            {filterType === "month" && (
+              <input
+                type="month"
+                value={selectedMonth}
+                onChange={(e) => setSelectedMonth(e.target.value)}
+                className="border border-slate-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+              />
+            )}
+
+            {filterType === "year" && (
+              <select
+                value={selectedYear}
+                onChange={(e) => setSelectedYear(e.target.value)}
+                className="border border-slate-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+              >
+                {Array.from({ length: 10 }, (_, i) => new Date().getFullYear() - i).map(
+                  (y) => (
+                    <option key={y} value={y}>
+                      {y}
+                    </option>
+                  )
+                )}
+              </select>
+            )}
+
+            {filterType === "range" && (
+              <div className="flex items-center gap-2">
+                <input
+                  type="date"
+                  value={startDate}
+                  onChange={(e) => setStartDate(e.target.value)}
+                  className="border border-slate-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                />
+                <span className="text-slate-400">إلى</span>
+                <input
+                  type="date"
+                  value={endDate}
+                  onChange={(e) => setEndDate(e.target.value)}
+                  className="border border-slate-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                />
+              </div>
+            )}
+
+            <button
+              onClick={() => activeClinicId && fetchReportData(activeClinicId)}
+              className="flex items-center gap-2 px-4 py-2 rounded-lg text-white font-medium"
+              style={{ background: COLORS.primary }}
+            >
+              <RefreshCw className="w-4 h-4" />
+              تحديث
+            </button>
+          </div>
+        </div>
+
+        {loading ? (
+          <div className="flex items-center justify-center py-20">
+            <Loader2 className="w-12 h-12 animate-spin text-primary" />
+          </div>
+        ) : reportData ? (
+          <div ref={printRef}>
+            {/* KPIs */}
+            <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-4">
               {[
-                { label: "المرضى", value: reportData.totalPatients, icon: Users, color: "from-blue-500 to-blue-700" },
-                { label: "المواعيد", value: reportData.totalAppointments, icon: Calendar, color: "from-emerald-500 to-emerald-700" },
-                { label: "الإيرادات", value: reportData.totalRevenue + " ر.ي", icon: DollarSign, color: "from-amber-500 to-amber-700" },
-                { label: "نسبة الحضور", value: reportData.attendanceRate + "%", icon: TrendingUp, color: "from-purple-500 to-purple-700" },
-                { label: "مرضى جدد", value: reportData.newPatients, icon: Award, color: "from-rose-500 to-rose-700" },
-                { label: "متوسط يومي", value: reportData.averagePerDay, icon: Clock, color: "from-cyan-500 to-cyan-700" },
-              ].map((kpi, i) => (
-                <Card key={i} className="border-0 shadow-md hover:shadow-xl transition-all hover:-translate-y-1 bg-white print:border print:shadow-none print:break-inside-avoid">
-                  <CardContent className="p-4 print:p-2">
-                    <div className="flex items-center justify-between">
-                      <div>
-                        <p className="text-xs text-muted-foreground print:text-[8px]">{kpi.label}</p>
-                        <p className="text-xl font-bold text-slate-800 print:text-sm">{kpi.value}</p>
-                      </div>
-                      <div className={`w-10 h-10 rounded-full bg-gradient-to-br ${kpi.color} flex items-center justify-center shadow-md print:hidden`}>
-                        <kpi.icon className="w-5 h-5 text-white" />
-                      </div>
+                {
+                  label: "إجمالي المرضى",
+                  value: formatNumber(reportData.totalPatients),
+                  icon: Users,
+                  color: COLORS.blue,
+                },
+                {
+                  label: "إجمالي المواعيد",
+                  value: formatNumber(reportData.totalAppointments),
+                  icon: Calendar,
+                  color: COLORS.green,
+                },
+                {
+                  label: "إجمالي الإيرادات",
+                  value: formatNumber(reportData.totalRevenue) + " ر.ي",
+                  icon: DollarSign,
+                  color: COLORS.gold,
+                },
+                {
+                  label: "نسبة الحضور",
+                  value: reportData.attendanceRate + "%",
+                  icon: TrendingUp,
+                  color: COLORS.purple,
+                },
+                {
+                  label: "مرضى جدد",
+                  value: formatNumber(reportData.newPatients),
+                  icon: Award,
+                  color: COLORS.rose,
+                },
+                {
+                  label: "متوسط يومي",
+                  value: formatNumber(reportData.averagePerDay),
+                  icon: Clock,
+                  color: COLORS.cyan,
+                },
+              ].map((stat, i) => (
+                <div
+                  key={i}
+                  className="bg-white rounded-xl shadow-sm border border-slate-200 p-4"
+                >
+                  <div className="flex items-center justify-between mb-2">
+                    <div
+                      className="w-10 h-10 rounded-lg flex items-center justify-center"
+                      style={{ background: stat.color + "15" }}
+                    >
+                      <stat.icon className="w-5 h-5" style={{ color: stat.color }} />
                     </div>
-                  </CardContent>
-                </Card>
+                  </div>
+                  <p className="text-xs text-slate-600 mb-1">{stat.label}</p>
+                  <p className="text-xl font-bold text-slate-800">{stat.value}</p>
+                </div>
               ))}
             </div>
 
-            {/* QR hidden */}
-            <div ref={qrRef} className="hidden">
-              <QRCodeCanvas value={qrLink} size={120} level="M" includeMargin={false} />
-            </div>
-
-            {/* Charts */}
-            <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 mt-6 print:grid-cols-2 print:gap-2 print:mt-2">
-              <Card className="border-0 shadow-lg bg-white/90 backdrop-blur-sm chart-container print:border print:shadow-none print:break-inside-avoid">
-                <CardHeader className="print:py-1">
-                  <CardTitle className="text-slate-800 flex items-center gap-2 text-base print:text-xs print:justify-center">
-                    <Calendar className="w-5 h-5 text-primary print:hidden" />
-                    المواعيد اليومية
-                  </CardTitle>
-                </CardHeader>
-                <CardContent className="h-72 print:h-44">
+            {/* الرسوم البيانية */}
+            <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+              {/* المواعيد اليومية */}
+              <div className="bg-white rounded-xl shadow-sm border border-slate-200 p-5">
+                <h3 className="text-sm font-bold text-slate-800 mb-4 flex items-center gap-2">
+                  <Calendar className="w-4 h-4 text-blue-600" />
+                  المواعيد اليومية
+                </h3>
+                <div className="h-64">
                   <ResponsiveContainer width="100%" height="100%">
                     <AreaChart data={reportData.dailyAppointments.slice(-30)}>
                       <defs>
-                        <linearGradient id="gBlue" x1="0" y1="0" x2="0" y2="1">
-                          <stop offset="5%" stopColor={C.blue} stopOpacity={0.25} />
-                          <stop offset="95%" stopColor={C.blue} stopOpacity={0.02} />
+                        <linearGradient id="colorCount" x1="0" y1="0" x2="0" y2="1">
+                          <stop offset="5%" stopColor={COLORS.blue} stopOpacity={0.3} />
+                          <stop offset="95%" stopColor={COLORS.blue} stopOpacity={0} />
                         </linearGradient>
                       </defs>
                       <CartesianGrid strokeDasharray="3 3" stroke="#f0f0f0" />
-                      <XAxis dataKey="date" tick={{ fontSize: 8 }} />
-                      <YAxis />
+                      <XAxis
+                        dataKey="date"
+                        tickFormatter={shortDate}
+                        tick={{ fontSize: 10, fill: COLORS.muted }}
+                      />
+                      <YAxis tick={{ fontSize: 10, fill: COLORS.muted }} />
                       <Tooltip />
-                      <Area type="monotone" dataKey="count" stroke={C.blue} strokeWidth={2} fill="url(#gBlue)" />
+                      <Area
+                        type="monotone"
+                        dataKey="count"
+                        stroke={COLORS.blue}
+                        strokeWidth={2}
+                        fill="url(#colorCount)"
+                      />
                     </AreaChart>
                   </ResponsiveContainer>
-                </CardContent>
-              </Card>
+                </div>
+              </div>
 
-              <Card className="border-0 shadow-lg bg-white/90 backdrop-blur-sm chart-container print:border print:shadow-none print:break-inside-avoid">
-                <CardHeader className="print:py-1">
-                  <CardTitle className="text-slate-800 flex items-center gap-2 text-base print:text-xs print:justify-center">
-                    <DollarSign className="w-5 h-5 text-amber-600 print:hidden" />
-                    الإيرادات اليومية
-                  </CardTitle>
-                </CardHeader>
-                <CardContent className="h-72 print:h-44">
+              {/* الإيرادات اليومية */}
+              <div className="bg-white rounded-xl shadow-sm border border-slate-200 p-5">
+                <h3 className="text-sm font-bold text-slate-800 mb-4 flex items-center gap-2">
+                  <DollarSign className="w-4 h-4 text-amber-600" />
+                  الإيرادات اليومية
+                </h3>
+                <div className="h-64">
                   <ResponsiveContainer width="100%" height="100%">
                     <AreaChart data={reportData.dailyRevenue.slice(-30)}>
                       <defs>
-                        <linearGradient id="gGold" x1="0" y1="0" x2="0" y2="1">
-                          <stop offset="5%" stopColor={C.gold} stopOpacity={0.3} />
-                          <stop offset="95%" stopColor={C.gold} stopOpacity={0.02} />
+                        <linearGradient id="colorRevenue" x1="0" y1="0" x2="0" y2="1">
+                          <stop offset="5%" stopColor={COLORS.gold} stopOpacity={0.3} />
+                          <stop offset="95%" stopColor={COLORS.gold} stopOpacity={0} />
                         </linearGradient>
                       </defs>
                       <CartesianGrid strokeDasharray="3 3" stroke="#f0f0f0" />
-                      <XAxis dataKey="date" tick={{ fontSize: 8 }} />
-                      <YAxis />
+                      <XAxis
+                        dataKey="date"
+                        tickFormatter={shortDate}
+                        tick={{ fontSize: 10, fill: COLORS.muted }}
+                      />
+                      <YAxis
+                        tick={{ fontSize: 10, fill: COLORS.muted }}
+                        tickFormatter={formatNumber}
+                      />
                       <Tooltip />
-                      <Area type="monotone" dataKey="amount" stroke={C.gold} strokeWidth={2} fill="url(#gGold)" />
+                      <Area
+                        type="monotone"
+                        dataKey="amount"
+                        stroke={COLORS.gold}
+                        strokeWidth={2}
+                        fill="url(#colorRevenue)"
+                      />
                     </AreaChart>
                   </ResponsiveContainer>
-                </CardContent>
-              </Card>
+                </div>
+              </div>
+            </div>
 
-              <Card className="border-0 shadow-lg bg-white/90 backdrop-blur-sm chart-container print:border print:shadow-none print:break-inside-avoid">
-                <CardHeader className="print:py-1">
-                  <CardTitle className="text-slate-800 flex items-center gap-2 text-base print:text-xs print:justify-center">
-                    <Activity className="w-5 h-5 text-purple-600 print:hidden" />
-                    توزيع الخدمات
-                  </CardTitle>
-                </CardHeader>
-                <CardContent className="h-72 print:h-44">
+            {/* توزيع الخدمات */}
+            <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+              <div className="bg-white rounded-xl shadow-sm border border-slate-200 p-5 lg:col-span-2">
+                <h3 className="text-sm font-bold text-slate-800 mb-4 flex items-center gap-2">
+                  <Activity className="w-4 h-4 text-purple-600" />
+                  توزيع الخدمات
+                </h3>
+                <div className="h-72">
                   <ResponsiveContainer width="100%" height="100%">
                     <PieChart>
                       <Pie
                         data={reportData.serviceDistribution}
                         cx="50%"
                         cy="50%"
-                        outerRadius={60}
+                        innerRadius="50%"
+                        outerRadius="80%"
+                        paddingAngle={2}
                         dataKey="value"
-                        label={({ name, percent }) => name + " " + (percent * 100).toFixed(0) + "%"}
-                        labelLine={false}
-                        fontSize={8}
                       >
                         {reportData.serviceDistribution.map((_, idx) => (
-                          <Cell key={idx} fill={CHART_COLORS[idx % CHART_COLORS.length]} />
+                          <Cell
+                            key={idx}
+                            fill={PIE_COLORS[idx % PIE_COLORS.length]}
+                          />
                         ))}
                       </Pie>
-                      <Tooltip />
+                      <Tooltip
+                        formatter={(val) => [formatNumber(Number(val)) + " موعد", ""]}
+                      />
+                      <Legend
+                        layout="vertical"
+                        align="right"
+                        verticalAlign="middle"
+                        iconType="circle"
+                        iconSize={8}
+                      />
                     </PieChart>
                   </ResponsiveContainer>
-                </CardContent>
-              </Card>
+                </div>
+              </div>
 
-              <Card className="border-0 shadow-lg bg-white/90 backdrop-blur-sm chart-container print:border print:shadow-none print:break-inside-avoid">
-                <CardHeader className="print:py-1">
-                  <CardTitle className="text-slate-800 flex items-center gap-2 text-base print:text-xs print:justify-center">
-                    <Award className="w-5 h-5 text-amber-600 print:hidden" />
-                    أفضل الخدمات
-                  </CardTitle>
-                </CardHeader>
-                <CardContent className="h-72 print:h-44">
-                  <div className="space-y-3">
-                    {reportData.topServices.map((s, i) => {
-                      const max = reportData.topServices[0]?.value || 1;
-                      const pct = (s.value / max) * 100;
-                      return (
-                        <div key={i} className="flex flex-col gap-1">
-                          <div className="flex items-center justify-between text-xs">
-                            <span className="text-slate-700 font-medium truncate max-w-[120px]">{s.name}</span>
-                            <span className="font-bold" style={{ color: CHART_COLORS[i] }}>{s.value}</span>
-                          </div>
-                          <div className="h-2 bg-slate-100 rounded-full overflow-hidden">
-                            <div className="h-full rounded-full transition-all duration-700"
-                              style={{ width: pct + "%", background: CHART_COLORS[i] }} />
-                          </div>
+              {/* أفضل الخدمات */}
+              <div className="bg-white rounded-xl shadow-sm border border-slate-200 p-5">
+                <h3 className="text-sm font-bold text-slate-800 mb-4 flex items-center gap-2">
+                  <Award className="w-4 h-4 text-orange-600" />
+                  أفضل الخدمات
+                </h3>
+                <div className="space-y-3">
+                  {reportData.topServices.map((s, i) => {
+                    const max = reportData.topServices[0]?.value || 1;
+                    const pct = (s.value / max) * 100;
+                    return (
+                      <div key={i}>
+                        <div className="flex items-center justify-between text-xs mb-1">
+                          <span className="text-slate-700 font-medium">{s.name}</span>
+                          <span className="font-bold text-slate-800">
+                            {formatNumber(s.value)}
+                          </span>
                         </div>
-                      );
-                    })}
-                  </div>
-                </CardContent>
-              </Card>
-
-              <Card className="border-0 shadow-lg bg-white/90 backdrop-blur-sm chart-container lg:col-span-2 print:border print:shadow-none print:break-inside-avoid">
-                <CardHeader className="print:py-1">
-                  <CardTitle className="text-slate-800 flex items-center gap-2 text-base print:text-xs print:justify-center">
-                    <TrendingUp className="w-5 h-5 text-indigo-600 print:hidden" />
-                    المقارنة الشهرية
-                  </CardTitle>
-                </CardHeader>
-                <CardContent className="h-72 print:h-44">
-                  <ResponsiveContainer width="100%" height="100%">
-                    <BarChart data={reportData.monthlyComparison}>
-                      <CartesianGrid strokeDasharray="3 3" stroke="#f0f0f0" />
-                      <XAxis dataKey="month" tick={{ fontSize: 8 }} />
-                      <YAxis yAxisId="left" />
-                      <YAxis yAxisId="right" orientation="right" />
-                      <Tooltip />
-                      <Legend />
-                      <Bar yAxisId="left" dataKey="appointments" fill={C.blue} name="المواعيد" radius={[4, 4, 0, 0]} />
-                      <Bar yAxisId="right" dataKey="revenue" fill={C.gold} name="الإيرادات" radius={[4, 4, 0, 0]} />
-                    </BarChart>
-                  </ResponsiveContainer>
-                </CardContent>
-              </Card>
+                        <div className="h-2 bg-slate-100 rounded-full overflow-hidden">
+                          <div
+                            className="h-full rounded-full transition-all duration-500"
+                            style={{
+                              width: pct + "%",
+                              background: PIE_COLORS[i % PIE_COLORS.length],
+                            }}
+                          />
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
             </div>
 
-            {/* Table */}
-            <Card className="border-0 shadow-lg bg-white/90 backdrop-blur-sm mt-6 print:border print:shadow-none print:break-inside-avoid">
-              <CardHeader className="print:py-1">
-                <CardTitle className="text-slate-800 flex items-center gap-2 text-base print:text-xs print:justify-center">
-                  <Activity className="w-5 h-5 text-primary print:hidden" />
+            {/* المقارنة الشهرية */}
+            <div className="bg-white rounded-xl shadow-sm border border-slate-200 p-5">
+              <h3 className="text-sm font-bold text-slate-800 mb-4 flex items-center gap-2">
+                <TrendingUp className="w-4 h-4 text-teal-600" />
+                المقارنة الشهرية (آخر 6 أشهر)
+              </h3>
+              <div className="h-72">
+                <ResponsiveContainer width="100%" height="100%">
+                  <BarChart data={reportData.monthlyComparison}>
+                    <CartesianGrid strokeDasharray="3 3" stroke="#f0f0f0" />
+                    <XAxis
+                      dataKey="month"
+                      tickFormatter={getMonthLabel}
+                      tick={{ fontSize: 10, fill: COLORS.muted }}
+                    />
+                    <YAxis
+                      yAxisId="left"
+                      tick={{ fontSize: 10, fill: COLORS.muted }}
+                    />
+                    <YAxis
+                      yAxisId="right"
+                      orientation="right"
+                      tick={{ fontSize: 10, fill: COLORS.muted }}
+                    />
+                    <Tooltip />
+                    <Legend />
+                    <Bar
+                      yAxisId="left"
+                      dataKey="appointments"
+                      name="المواعيد"
+                      fill={COLORS.blue}
+                      radius={[4, 4, 0, 0]}
+                    />
+                    <Bar
+                      yAxisId="right"
+                      dataKey="revenue"
+                      name="الإيرادات"
+                      fill={COLORS.gold}
+                      radius={[4, 4, 0, 0]}
+                    />
+                  </BarChart>
+                </ResponsiveContainer>
+              </div>
+            </div>
+
+            {/* جدول التفاصيل */}
+            <div className="bg-white rounded-xl shadow-sm border border-slate-200 overflow-hidden">
+              <div className="px-5 py-4 border-b border-slate-200">
+                <h3 className="text-sm font-bold text-slate-800 flex items-center gap-2">
+                  <FileText className="w-4 h-4 text-teal-600" />
                   تفاصيل يومية
-                </CardTitle>
-              </CardHeader>
-              <CardContent className="overflow-x-auto">
-                <table className="w-full text-sm print:text-[8px]">
-                  <thead className="bg-slate-50 print:bg-slate-100">
+                </h3>
+              </div>
+              <div className="overflow-x-auto">
+                <table className="w-full">
+                  <thead className="bg-slate-50">
                     <tr>
-                      <th className="px-4 py-3 text-right text-xs font-medium text-slate-500 uppercase print:text-[8px] print:py-1 print:px-2">التاريخ</th>
-                      <th className="px-4 py-3 text-right text-xs font-medium text-slate-500 uppercase print:text-[8px] print:py-1 print:px-2">المواعيد</th>
-                      <th className="px-4 py-3 text-right text-xs font-medium text-slate-500 uppercase print:text-[8px] print:py-1 print:px-2">الإيرادات</th>
-                      <th className="px-4 py-3 text-right text-xs font-medium text-slate-500 uppercase print:text-[8px] print:py-1 print:px-2">الأداء</th>
+                      <th className="px-4 py-3 text-right text-xs font-bold text-slate-600">
+                        التاريخ
+                      </th>
+                      <th className="px-4 py-3 text-center text-xs font-bold text-slate-600">
+                        المواعيد
+                      </th>
+                      <th className="px-4 py-3 text-center text-xs font-bold text-slate-600">
+                        الإيرادات
+                      </th>
+                      <th className="px-4 py-3 text-center text-xs font-bold text-slate-600">
+                        الحالة
+                      </th>
                     </tr>
                   </thead>
-                  <tbody className="divide-y divide-slate-100">
+                  <tbody>
                     {reportData.dailyAppointments.slice(0, 15).map((day, idx) => {
-                      const rev = reportData.dailyRevenue.find((r) => r.date === day.date);
+                      const rev = reportData.dailyRevenue.find(
+                        (r) => r.date === day.date
+                      );
                       const avg = reportData.averagePerDay;
-                      const status = day.count > avg * 1.2
-                        ? { label: "ممتاز ↑", color: C.green }
-                        : day.count < avg * 0.8
-                        ? { label: "منخفض ↓", color: C.rose }
-                        : { label: "معتدل →", color: C.gold };
+                      const status =
+                        day.count > avg * 1.2
+                          ? { label: "ممتاز", color: "text-green-600", bg: "bg-green-50" }
+                          : day.count < avg * 0.8
+                          ? { label: "منخفض", color: "text-red-600", bg: "bg-red-50" }
+                          : {
+                              label: "معتدل",
+                              color: "text-amber-600",
+                              bg: "bg-amber-50",
+                            };
                       return (
-                        <tr key={idx} className="hover:bg-slate-50 print:hover:bg-transparent">
-                          <td className="px-4 py-3 print:py-1 print:px-2">{day.date}</td>
-                          <td className="px-4 py-3 font-medium print:py-1 print:px-2">{day.count}</td>
-                          <td className="px-4 py-3 text-amber-600 font-medium print:py-1 print:px-2">{rev?.amount || 0} ر.ي</td>
-                          <td className="px-4 py-3 print:py-1 print:px-2">
-                            <span className="text-xs font-bold" style={{ color: status.color }}>{status.label}</span>
+                        <tr
+                          key={idx}
+                          className={idx % 2 === 0 ? "bg-white" : "bg-slate-50"}
+                        >
+                          <td className="px-4 py-3 text-sm text-slate-700">
+                            {day.date}
+                          </td>
+                          <td className="px-4 py-3 text-center text-sm font-bold text-slate-800">
+                            {formatNumber(day.count)}
+                          </td>
+                          <td className="px-4 py-3 text-center text-sm font-bold text-amber-600">
+                            {formatNumber(rev?.amount || 0)} ر.ي
+                          </td>
+                          <td className="px-4 py-3 text-center">
+                            <span
+                              className={`text-xs font-bold px-2 py-1 rounded-lg ${status.bg} ${status.color}`}
+                            >
+                              {status.label}
+                            </span>
                           </td>
                         </tr>
                       );
                     })}
                   </tbody>
                 </table>
-                {reportData.dailyAppointments.length > 15 && (
-                  <p className="text-xs text-muted-foreground mt-2 text-center print:hidden">
-                    + {reportData.dailyAppointments.length - 15} يوم إضافي
+              </div>
+            </div>
+
+            {/* QR */}
+            <div className="bg-white rounded-xl shadow-sm border border-slate-200 p-6">
+              <div className="flex flex-col md:flex-row items-center gap-6">
+                <div className="flex-shrink-0 p-4 rounded-xl border-2 border-amber-400">
+                  <QRCodeCanvas value={qrLink} size={120} level="H" includeMargin />
+                </div>
+                <div className="flex-1 text-center md:text-right">
+                  <h3 className="text-lg font-bold text-slate-800 mb-2">
+                    احجز موعدك عبر تيليجرام
+                  </h3>
+                  <p className="text-sm text-slate-600 mb-3">
+                    امسح رمز QR بتطبيق تيليجرام للحجز الفوري
                   </p>
-                )}
-              </CardContent>
-            </Card>
+                  <p className="text-xs text-slate-400 font-mono break-all">{qrLink}</p>
+                </div>
+              </div>
+            </div>
           </div>
         ) : (
           <div className="text-center py-20">
-            <Activity className="w-16 h-16 text-muted-foreground mx-auto mb-4" />
-            <p className="text-lg text-muted-foreground">لا توجد بيانات كافية</p>
+            <Activity className="w-16 h-16 mx-auto mb-4 text-slate-300" />
+            <p className="text-slate-500">لا توجد بيانات كافية لعرض التقرير</p>
           </div>
         )}
       </main>
 
-      <Footer />
+      {/* التذييل */}
+      <footer
+        className="mt-8 py-4 text-center print:hidden"
+        style={{ background: COLORS.primary }}
+      >
+        <p className="text-white/60 text-xs">
+          © {new Date().getFullYear()} {clinicName} | Smart Clinic
+        </p>
+      </footer>
 
+      {/* أنماط الطباعة */}
       <style>{`
         @media print {
-          body { background: white !important; }
-          .print\\:hidden { display: none !important; }
-          .print\\:border { border: 1px solid #e2e8f0 !important; }
-          .print\\:shadow-none { box-shadow: none !important; }
-          .print\\:text-xs { font-size: 0.75rem !important; }
-          .print\\:text-sm { font-size: 0.875rem !important; }
-          .print\\:text-\\[8px\\] { font-size: 8px !important; }
-          .print\\:py-1 { padding-top: 0.25rem !important; padding-bottom: 0.25rem !important; }
-          .print\\:px-2 { padding-left: 0.5rem !important; padding-right: 0.5rem !important; }
-          .print\\:p-2 { padding: 0.5rem !important; }
-          .print\\:grid-cols-3 { grid-template-columns: repeat(3, 1fr) !important; }
-          .print\\:grid-cols-2 { grid-template-columns: repeat(2, 1fr) !important; }
-          .print\\:h-44 { height: 11rem !important; }
-          .print\\:gap-2 { gap: 0.5rem !important; }
-          .print\\:mt-2 { margin-top: 0.5rem !important; }
-          .print\\:text-center { text-align: center !important; }
-          .print\\:justify-center { justify-content: center !important; }
-          .print\\:bg-slate-100 { background-color: #f1f5f9 !important; }
-          .print\\:hover\\:bg-transparent:hover { background-color: transparent !important; }
-          .chart-container { page-break-inside: avoid !important; break-inside: avoid !important; }
-          .card { page-break-inside: avoid !important; break-inside: avoid !important; }
-          .print\\:break-inside-avoid { break-inside: avoid !important; }
-          .print\\:bg-white { background: white !important; }
-          .print\\:px-2 { padding-left: 0.5rem !important; padding-right: 0.5rem !important; }
-          .print\\:py-2 { padding-top: 0.5rem !important; padding-bottom: 0.5rem !important; }
-          @page { size: A4; margin: 6mm; }
-        }
-        @media print and (max-width: 600px) {
-          .print\\:grid-cols-3 { grid-template-columns: repeat(2, 1fr) !important; }
+          @page {
+            size: A4;
+            margin: 8mm;
+          }
+          body {
+            background: white !important;
+            -webkit-print-color-adjust: exact !important;
+            print-color-adjust: exact !important;
+          }
+          .print\\:hidden {
+            display: none !important;
+          }
+          * {
+            box-shadow: none !important;
+          }
+          .bg-white {
+            break-inside: avoid;
+          }
+          .h-64,
+          .h-72 {
+            height: 200px !important;
+          }
         }
       `}</style>
     </div>
