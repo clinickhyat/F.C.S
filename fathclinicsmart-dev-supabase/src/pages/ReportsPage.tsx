@@ -29,8 +29,6 @@ import {
   AreaChart,
   Area,
   Legend,
-  RadialBarChart,
-  RadialBar,
 } from "recharts";
 import {
   Users,
@@ -51,22 +49,23 @@ import {
 } from "lucide-react";
 import jsPDF from "jspdf";
 import autoTable from "jspdf-autotable";
-import html2canvas from "html2canvas";
 import { QRCodeCanvas } from "qrcode.react";
 
-const COLORS = {
+// ===== COLORS =====
+const C = {
   primary: "#1a2a6c",
   gold: "#c9a84c",
   blue: "#1a73e8",
-  green: "#34a853",
+  green: "#10b981",
   purple: "#7c3aed",
   rose: "#e11d48",
   cyan: "#0891b2",
-  dark: "#0b1e33",
-  muted: "#6b7a8f",
+  teal: "#0d9488",
+  muted: "#64748b",
+  text: "#1e293b",
 };
 
-const CHART_COLORS = [COLORS.blue, COLORS.green, COLORS.gold, COLORS.purple, COLORS.rose];
+const CHART_COLORS = [C.blue, C.green, C.gold, C.purple, C.rose, C.cyan, C.teal];
 
 interface ReportData {
   totalPatients: number;
@@ -103,9 +102,8 @@ export default function ReportsPage() {
 
   const chartRef = useRef<HTMLDivElement>(null);
   const qrRef = useRef<HTMLDivElement>(null);
-  const headerRef = useRef<HTMLDivElement>(null);
 
-  // جلب بيانات العيادة
+  // ===== جلب بيانات العيادة =====
   useEffect(() => {
     if (!authLoading && !user) {
       navigate("/auth");
@@ -138,6 +136,7 @@ export default function ReportsPage() {
     fetchClinicAndData();
   }, [user, authLoading, navigate]);
 
+  // ===== جلب بيانات التقارير =====
   const fetchReportData = async (clinicId: string) => {
     try {
       let start = "";
@@ -268,7 +267,7 @@ export default function ReportsPage() {
       });
     } catch (error) {
       console.error(error);
-      toast({ title: "خطأ", description: "فشل في جلب البيانات", variant: "destructive" });
+      toast({ title: "خطأ", description: "فشل في جلب بيانات التقارير", variant: "destructive" });
     }
   };
 
@@ -278,50 +277,13 @@ export default function ReportsPage() {
     }
   }, [filterType, selectedMonth, selectedYear, startDate, endDate]);
 
-  // ===== PDF محسّن بالكامل =====
+  // ===== PDF =====
   const handleDownloadPDF = async () => {
     if (!reportData) return;
 
     toast({ title: "جاري إنشاء التقرير..." });
 
     try {
-      // 1. التقاط الهيدر كصورة (لتجنب مشاكل العربية)
-      let headerImage: string | null = null;
-      if (headerRef.current) {
-        const canvas = await html2canvas(headerRef.current, {
-          scale: 1,
-          backgroundColor: "#ffffff",
-          useCORS: true,
-          logging: false,
-        });
-        headerImage = canvas.toDataURL("image/jpeg", 0.6);
-      }
-
-      // 2. التقاط QR
-      let qrImageData: string | null = null;
-      if (qrRef.current) {
-        const qrCanvas = qrRef.current.querySelector("canvas");
-        if (qrCanvas) {
-          qrImageData = qrCanvas.toDataURL("image/png", 0.3);
-        }
-      }
-
-      // 3. التقاط الرسوم البيانية (جودة منخفضة جداً)
-      const chartContainers = document.querySelectorAll(".chart-container");
-      const chartImages: string[] = [];
-
-      for (const container of chartContainers) {
-        try {
-          const canvas = await html2canvas(container as HTMLElement, {
-            scale: 0.25,
-            backgroundColor: "#ffffff",
-            useCORS: true,
-            logging: false,
-          });
-          chartImages.push(canvas.toDataURL("image/jpeg", 0.4));
-        } catch (_) {}
-      }
-
       const doc = new jsPDF({
         orientation: "portrait",
         unit: "mm",
@@ -329,179 +291,310 @@ export default function ReportsPage() {
         compress: true,
       });
 
-      const pageWidth = doc.internal.pageSize.getWidth();
-      const pageHeight = doc.internal.pageSize.getHeight();
-      const margin = 8;
-      let y = margin;
+      const pw = doc.internal.pageSize.getWidth();
+      const ph = doc.internal.pageSize.getHeight();
+      const m = 12;
+      let y = m;
 
-      // ===== الصفحة الأولى: الهيدر (صورة) =====
-      if (headerImage) {
-        const imgWidth = pageWidth - margin * 2;
-        const imgHeight = Math.min(imgWidth * 0.25, 30);
-        doc.addImage(headerImage, "JPEG", margin, y, imgWidth, imgHeight);
-        y += imgHeight + 4;
-      }
+      // ===== HEADER =====
+      doc.setFillColor(C.primary);
+      doc.rect(0, 0, pw, 28, "F");
 
-      // بطاقات KPI (باستخدام autoTable)
-      const kpiData = [
-        ["المرضى", String(reportData.totalPatients)],
-        ["المواعيد", String(reportData.totalAppointments)],
-        ["الإيرادات", String(reportData.totalRevenue) + " ر.ي"],
-        ["نسبة الحضور", String(reportData.attendanceRate) + "%"],
-        ["مرضى جدد", String(reportData.newPatients)],
-        ["متوسط يومي", String(reportData.averagePerDay)],
-      ];
+      doc.setFontSize(18);
+      doc.setTextColor("#ffffff");
+      doc.setFont("helvetica", "bold");
+      doc.text(clinicName || "تقرير العيادة", pw / 2, 12, { align: "center" });
 
-      // عرض KPI كجدول بسيط
-      autoTable(doc, {
-        body: kpiData.map(row => [row[0], row[1]]),
-        startY: y,
-        theme: "plain",
-        styles: {
-          fontSize: 7,
-          cellPadding: 2,
-          halign: "center",
-          valign: "middle",
-          lineColor: [200, 200, 200],
-          lineWidth: 0.1,
-        },
-        columnStyles: {
-          0: { cellWidth: 40, fontStyle: "bold" },
-          1: { cellWidth: 30 },
-        },
-        didDrawPage: () => {
-          // لا شيء
-        },
+      doc.setFontSize(9);
+      doc.setTextColor("#ffd700");
+      doc.setFont("helvetica", "normal");
+      const dateStr = new Date().toLocaleDateString("ar-SA", {
+        year: "numeric",
+        month: "long",
+        day: "numeric",
       });
+      doc.text(dateStr, pw / 2, 20, { align: "center" });
 
-      // تحديث Y بعد الجدول
-      y = (doc as any).lastAutoTable?.finalY || y + 20;
-      y += 4;
+      doc.setFontSize(7);
+      doc.setTextColor("#ffffffaa");
+      const { start, end } = getDateRange();
+      doc.text(`الفترة: ${start} إلى ${end}`, pw / 2, 26, { align: "center" });
 
-      // ===== الرسوم البيانية =====
-      const chartTitles = [
-        "المواعيد اليومية",
-        "الإيرادات اليومية",
-        "توزيع الخدمات",
-        "أفضل الخدمات",
-        "المقارنة الشهرية",
+      y = 34;
+
+      // ===== KPI =====
+      const kpis = [
+        { label: "المرضى", val: reportData.totalPatients.toLocaleString() },
+        { label: "المواعيد", val: reportData.totalAppointments.toLocaleString() },
+        { label: "الإيرادات", val: reportData.totalRevenue.toLocaleString() + " ر.ي" },
+        { label: "نسبة الحضور", val: reportData.attendanceRate + "%" },
+        { label: "مرضى جدد", val: reportData.newPatients.toLocaleString() },
+        { label: "متوسط يومي", val: reportData.averagePerDay.toLocaleString() },
       ];
 
-      for (let i = 0; i < chartImages.length; i++) {
-        if (y > pageHeight - 25) {
-          doc.addPage();
-          y = margin;
+      const kw = (pw - m * 2) / 3 - 2;
+      kpis.forEach((k, i) => {
+        const col = i % 3;
+        const row = Math.floor(i / 3);
+        const kx = m + col * (kw + 2);
+        const ky = y + row * 12;
+
+        doc.setFillColor("#f8faff");
+        doc.roundedRect(kx, ky, kw, 10, 2, 2, "F");
+        doc.setDrawColor("#e2e8f0");
+        doc.roundedRect(kx, ky, kw, 10, 2, 2, "S");
+
+        doc.setFontSize(5.5);
+        doc.setTextColor(C.muted);
+        doc.setFont("helvetica", "normal");
+        doc.text(k.label, kx + 2, ky + 3.5);
+
+        doc.setFontSize(9);
+        doc.setTextColor(C.text);
+        doc.setFont("helvetica", "bold");
+        doc.text(k.val, kx + 2, ky + 8.5);
+      });
+      y += 28;
+
+      // ===== Daily Appointments Chart (Text-based) =====
+      doc.setFontSize(10);
+      doc.setTextColor(C.primary);
+      doc.setFont("helvetica", "bold");
+      doc.text("المواعيد اليومية", m, y);
+      y += 5;
+
+      const apptData = reportData.dailyAppointments.slice(-20);
+      if (apptData.length > 0) {
+        const maxVal = Math.max(...apptData.map(d => d.count), 1);
+        const chartW = pw - m * 2;
+        const chartH = 35;
+        const plotX = m;
+        const plotY = y;
+        const plotW = chartW;
+        const plotH = chartH;
+
+        // Grid
+        doc.setDrawColor("#e2e8f0");
+        doc.setLineWidth(0.15);
+        for (let g = 0; g <= 3; g++) {
+          const gy = plotY + plotH - (g / 3) * plotH;
+          doc.line(plotX, gy, plotX + plotW, gy);
+          doc.setFontSize(4);
+          doc.setTextColor(C.muted);
+          doc.text(String(Math.round((g / 3) * maxVal)), plotX, gy + 1);
         }
 
-        // عنوان الرسم البياني (باستخدام autoTable)
-        autoTable(doc, {
-          body: [[chartTitles[i] || "رسم بياني"]],
-          startY: y,
-          theme: "plain",
-          styles: {
-            fontSize: 9,
-            fontStyle: "bold",
-            halign: "center",
-            valign: "middle",
-            cellPadding: 1,
-            textColor: [26, 42, 108],
-          },
-          didDrawPage: () => {},
+        // Bars
+        const barW = Math.min((plotW - 4) / apptData.length - 0.8, 5);
+        apptData.forEach((d, i) => {
+          const bx = plotX + i * (barW + 0.8) + 2;
+          const bh = (d.count / maxVal) * plotH * 0.85;
+          const by = plotY + plotH - bh;
+          doc.setFillColor(C.blue);
+          doc.rect(bx, by, barW, bh, "F");
+          if (i % Math.ceil(apptData.length / 8) === 0) {
+            doc.setFontSize(3.5);
+            doc.setTextColor(C.muted);
+            doc.text(d.date.slice(8), bx + barW / 2, plotY + plotH + 3, { align: "center" });
+          }
         });
-        y = (doc as any).lastAutoTable?.finalY || y + 6;
-        y += 2;
-
-        const imgWidth = pageWidth - margin * 2;
-        const imgHeight = Math.min(imgWidth * 0.42, 55);
-        doc.addImage(chartImages[i], "JPEG", margin, y, imgWidth, imgHeight, undefined, "FAST");
-        y += imgHeight + 4;
+        y += plotH + 8;
       }
 
-      // ===== جدول الخدمات =====
-      doc.addPage();
-      y = margin;
+      // ===== Service Distribution =====
+      if (y + 40 > ph - 20) { doc.addPage(); y = m; }
+      doc.setFontSize(10);
+      doc.setTextColor(C.primary);
+      doc.setFont("helvetica", "bold");
+      doc.text("توزيع الخدمات", m, y);
+      y += 5;
 
+      const total = reportData.serviceDistribution.reduce((s, x) => s + x.value, 0);
+      const sorted = [...reportData.serviceDistribution].sort((a, b) => b.value - a.value);
+
+      sorted.forEach((s, i) => {
+        const pct = Math.round((s.value / total) * 100);
+        const barLen = Math.round((s.value / total) * 80);
+        const color = CHART_COLORS[i % CHART_COLORS.length];
+
+        doc.setFontSize(7);
+        doc.setTextColor(C.text);
+        doc.setFont("helvetica", "normal");
+        doc.text(s.name + " (" + pct + "%)", m, y + 3);
+
+        doc.setFillColor(color);
+        doc.rect(m + 40, y, barLen, 4, "F");
+
+        doc.setFontSize(6);
+        doc.setTextColor(C.muted);
+        doc.text(String(s.value), m + 40 + barLen + 2, y + 3.5);
+
+        y += 7;
+      });
+      y += 5;
+
+      // ===== Monthly Comparison =====
+      if (y + 40 > ph - 20) { doc.addPage(); y = m; }
+      doc.setFontSize(10);
+      doc.setTextColor(C.primary);
+      doc.setFont("helvetica", "bold");
+      doc.text("المقارنة الشهرية", m, y);
+      y += 5;
+
+      const mData = reportData.monthlyComparison;
+      if (mData.length > 0) {
+        const maxAppt = Math.max(...mData.map(d => d.appointments), 1);
+        const maxRev = Math.max(...mData.map(d => d.revenue), 1);
+        const groupW = (pw - m * 2 - 4) / mData.length;
+
+        mData.forEach((d, i) => {
+          const gx = m + i * groupW + 2;
+          const aH = (d.appointments / maxAppt) * 20;
+          const rH = (d.revenue / maxRev) * 20;
+
+          doc.setFillColor(C.blue);
+          doc.rect(gx, y + 20 - aH, groupW * 0.3, aH, "F");
+          doc.setFillColor(C.gold);
+          doc.rect(gx + groupW * 0.35, y + 20 - rH, groupW * 0.3, rH, "F");
+
+          const monthNames = ["يناير","فبراير","مارس","أبريل","مايو","يونيو","يوليو","أغسطس","سبتمبر","أكتوبر","نوفمبر","ديسمبر"];
+          const mIdx = parseInt(d.month.slice(5, 7)) - 1;
+          doc.setFontSize(5);
+          doc.setTextColor(C.muted);
+          doc.setFont("helvetica", "normal");
+          doc.text(monthNames[mIdx], gx + groupW / 2, y + 24, { align: "center" });
+        });
+
+        // Legend
+        doc.setFillColor(C.blue);
+        doc.rect(m, y + 28, 4, 3, "F");
+        doc.setFontSize(5);
+        doc.setTextColor(C.text);
+        doc.text("المواعيد", m + 6, y + 31);
+        doc.setFillColor(C.gold);
+        doc.rect(m + 30, y + 28, 4, 3, "F");
+        doc.text("الإيرادات", m + 36, y + 31);
+        y += 35;
+      }
+
+      // ===== Top Services Table =====
+      if (y + 30 > ph - 20) { doc.addPage(); y = m; }
       autoTable(doc, {
-        head: [["الخدمة", "عدد المرات"]],
-        body: reportData.topServices.map((s) => [s.name, String(s.value)]),
+        head: [["#", "الخدمة", "عدد المرات", "النسبة"]],
+        body: reportData.topServices.map((s, i) => {
+          const pct = Math.round((s.value / total) * 100);
+          return [String(i + 1), s.name, String(s.value), pct + "%"];
+        }),
         startY: y,
         theme: "striped",
-        styles: {
-          fontSize: 8,
-          cellPadding: 3,
-          halign: "center",
-          valign: "middle",
-        },
-        headStyles: {
-          fillColor: [26, 42, 108],
-          textColor: [255, 255, 255],
-          fontSize: 9,
-          fontStyle: "bold",
-        },
-        didDrawPage: (data) => {
-          doc.setFontSize(6);
-          doc.setTextColor(COLORS.muted);
-          doc.text(
-            "تقرير " + clinicName + " - صفحة " + data.pageNumber,
-            pageWidth / 2,
-            pageHeight - 4,
-            { align: "center" }
-          );
-        },
+        styles: { fontSize: 7, cellPadding: 2, halign: "center" },
+        headStyles: { fillColor: [26, 42, 108], textColor: [255, 255, 255], fontSize: 8 },
       });
 
-      // ===== تذييل =====
+      // ===== QR =====
+      let qrImageData: string | null = null;
+      if (qrRef.current) {
+        const qrCanvas = qrRef.current.querySelector("canvas");
+        if (qrCanvas) {
+          qrImageData = qrCanvas.toDataURL("image/png");
+        }
+      }
+
+      doc.addPage();
+      const qrY = ph / 2 - 30;
+      doc.setFillColor("#f0f4ff");
+      doc.rect(0, 0, pw, ph, "F");
+      doc.setFillColor(C.primary);
+      doc.rect(0, 0, pw, 20, "F");
+
+      doc.setFontSize(12);
+      doc.setTextColor("#ffffff");
+      doc.setFont("helvetica", "bold");
+      doc.text("امسح رمز QR للحجز", pw / 2, 13, { align: "center" });
+
+      if (qrImageData) {
+        doc.addImage(qrImageData, "PNG", pw / 2 - 30, qrY, 60, 60);
+      }
+
+      doc.setFontSize(8);
+      doc.setTextColor(C.primary);
+      doc.setFont("helvetica", "normal");
+      const qrLink = activeClinicId
+        ? "https://t.me/" + (botUsername || "SmartClinc_bot") + "?start=clinic_" + activeClinicId
+        : "";
+      doc.text(qrLink, pw / 2, qrY + 75, { align: "center" });
+
+      // ===== Footer All Pages =====
       const totalPages = doc.getNumberOfPages();
       for (let i = 1; i <= totalPages; i++) {
         doc.setPage(i);
+        doc.setFillColor(C.primary);
+        doc.rect(0, ph - 6, pw, 6, "F");
         doc.setFontSize(5);
-        doc.setTextColor(COLORS.muted);
+        doc.setTextColor("#ffffff");
+        doc.setFont("helvetica", "normal");
         doc.text(
-          "© " + new Date().getFullYear() + " " + clinicName + " | SmartClinic",
-          pageWidth / 2,
-          pageHeight - 1,
+          clinicName + " | SmartClinic | © " + new Date().getFullYear(),
+          pw / 2,
+          ph - 2.5,
           { align: "center" }
         );
+        doc.text("صفحة " + i + " من " + totalPages, pw - m, ph - 2.5, { align: "right" });
       }
 
-      const fileName = "Report_" + clinicName.replace(/\s/g, "_") + "_" + new Date().toISOString().slice(0, 10) + ".pdf";
+      const fileName = "تقرير_" + clinicName.replace(/\s/g, "_") + "_" + new Date().toISOString().slice(0, 10) + ".pdf";
       doc.save(fileName);
-
-      toast({ title: "تم التحميل", description: "تم إنشاء التقرير (حجم صغير جداً)" });
+      toast({ title: "تم التحميل", description: "تم إنشاء التقرير بنجاح" });
     } catch (error) {
       console.error(error);
       toast({ title: "خطأ", description: "فشل في إنشاء PDF", variant: "destructive" });
     }
   };
 
+  const getDateRange = () => {
+    let start = "",
+      end = "";
+    if (filterType === "month") {
+      start = selectedMonth + "-01";
+      const lastDay = new Date(
+        new Date(selectedMonth + "-01").getFullYear(),
+        new Date(selectedMonth + "-01").getMonth() + 1,
+        0
+      ).getDate();
+      end = selectedMonth + "-" + String(lastDay).padStart(2, "0");
+    } else if (filterType === "year") {
+      start = selectedYear + "-01-01";
+      end = selectedYear + "-12-31";
+    } else {
+      start = startDate;
+      end = endDate;
+    }
+    return { start, end };
+  };
+
   const handleDownloadCSV = () => {
     if (!reportData) return;
-
     let csv = "التاريخ,المواعيد,الإيرادات\n";
     reportData.dailyAppointments.forEach((d) => {
-      const revenue = reportData.dailyRevenue.find((r) => r.date === d.date);
-      csv += d.date + "," + d.count + "," + (revenue?.amount || 0) + "\n";
+      const rev = reportData.dailyRevenue.find((r) => r.date === d.date);
+      csv += d.date + "," + d.count + "," + (rev?.amount || 0) + "\n";
     });
-
     const blob = new Blob([csv], { type: "text/csv;charset=utf-8;" });
     const url = URL.createObjectURL(blob);
     const a = document.createElement("a");
     a.href = url;
-    a.download = "Report_" + clinicName.replace(/\s/g, "_") + "_" + new Date().toISOString().slice(0, 10) + ".csv";
+    a.download = "تقرير_" + clinicName.replace(/\s/g, "_") + "_" + new Date().toISOString().slice(0, 10) + ".csv";
     a.click();
-
     toast({ title: "تم التحميل", description: "تم تحميل ملف CSV" });
   };
 
-  const handlePrint = () => {
-    window.print();
-  };
+  const handlePrint = () => window.print();
 
   if (authLoading || loading) {
     return (
-      <div className="min-h-screen flex items-center justify-center">
-        <Loader2 className="w-16 h-16 animate-spin text-primary" />
-        <p className="mt-4 text-muted-foreground">جاري التحميل...</p>
+      <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-blue-50 to-indigo-100">
+        <Loader2 className="w-16 h-16 animate-spin text-primary mx-auto" />
+        <p className="mt-4 text-muted-foreground">جاري تحميل التقارير...</p>
       </div>
     );
   }
@@ -512,11 +605,11 @@ export default function ReportsPage() {
     : "";
 
   return (
-    <div className="min-h-screen bg-slate-50 flex flex-col">
+    <div className="min-h-screen bg-gradient-to-br from-slate-50 to-blue-50/30 flex flex-col print:bg-white">
       {/* Header */}
-      <header className="bg-white border-b sticky top-0 z-50 print:hidden">
+      <header className="bg-white/80 backdrop-blur-lg border-b border-slate-200/60 sticky top-0 z-50 shadow-sm print:hidden">
         <div className="container mx-auto px-4 py-3 flex flex-wrap items-center justify-between gap-2">
-          <Button variant="ghost" onClick={() => navigate("/dashboard")}>
+          <Button variant="ghost" onClick={() => navigate("/dashboard")} className="text-slate-600">
             <ArrowLeft className="w-5 h-5 ml-2" />
             العودة
           </Button>
@@ -524,27 +617,29 @@ export default function ReportsPage() {
             {clinicLogo ? (
               <img src={clinicLogo} alt="شعار" className="w-10 h-10 rounded-full object-cover" />
             ) : (
-              <Building2 className="w-6 h-6 text-primary" />
+              <div className="w-10 h-10 rounded-full bg-gradient-to-br from-primary to-secondary flex items-center justify-center text-white font-bold">
+                <Building2 className="w-5 h-5" />
+              </div>
             )}
-            <h1 className="text-xl font-bold">تقارير {clinicName}</h1>
+            <h1 className="text-xl font-bold text-slate-800 hidden sm:block">تقارير {clinicName}</h1>
           </div>
           <div className="flex gap-2">
-            <Button onClick={handleDownloadPDF} size="sm" className="bg-primary">
+            <Button onClick={handleDownloadPDF} variant="default" size="sm" className="bg-primary hover:bg-primary/90">
               <FileText className="w-4 h-4 ml-1" /> PDF
             </Button>
-            <Button onClick={handleDownloadCSV} variant="outline" size="sm">
+            <Button onClick={handleDownloadCSV} variant="outline" size="sm" className="border-green-200 text-green-700 hover:bg-green-50">
               <Download className="w-4 h-4 ml-1" /> CSV
             </Button>
-            <Button onClick={handlePrint} variant="outline" size="sm">
+            <Button onClick={handlePrint} variant="outline" size="sm" className="border-purple-200 text-purple-700 hover:bg-purple-50">
               <Printer className="w-4 h-4 ml-1" /> طباعة
             </Button>
           </div>
         </div>
       </header>
 
-      <main className="flex-1 container mx-auto px-4 py-6 space-y-6">
+      <main className="flex-1 container mx-auto px-4 py-6 space-y-6 print:px-2 print:py-2">
         {/* Filter */}
-        <Card className="print:hidden">
+        <Card className="border-0 shadow-lg bg-white/80 backdrop-blur-sm print:hidden">
           <CardContent className="p-4">
             <div className="flex flex-wrap items-center gap-4">
               <Filter className="w-5 h-5 text-primary" />
@@ -567,14 +662,14 @@ export default function ReportsPage() {
                   type="month"
                   value={selectedMonth}
                   onChange={(e) => setSelectedMonth(e.target.value)}
-                  className="border rounded-md px-3 py-2 text-sm"
+                  className="border rounded-md px-3 py-2 text-sm focus:ring-2 focus:ring-primary"
                 />
               )}
               {filterType === "year" && (
                 <select
                   value={selectedYear}
                   onChange={(e) => setSelectedYear(e.target.value)}
-                  className="border rounded-md px-3 py-2 text-sm"
+                  className="border rounded-md px-3 py-2 text-sm focus:ring-2 focus:ring-primary"
                 >
                   {Array.from({ length: 10 }, (_, i) => {
                     const y = new Date().getFullYear() - i;
@@ -592,21 +687,21 @@ export default function ReportsPage() {
                     type="date"
                     value={startDate}
                     onChange={(e) => setStartDate(e.target.value)}
-                    className="border rounded-md px-3 py-2 text-sm"
+                    className="border rounded-md px-3 py-2 text-sm focus:ring-2 focus:ring-primary"
                   />
-                  <span>→</span>
+                  <span className="text-slate-400">→</span>
                   <input
                     type="date"
                     value={endDate}
                     onChange={(e) => setEndDate(e.target.value)}
-                    className="border rounded-md px-3 py-2 text-sm"
+                    className="border rounded-md px-3 py-2 text-sm focus:ring-2 focus:ring-primary"
                   />
                 </>
               )}
               <Button
                 onClick={() => activeClinicId && fetchReportData(activeClinicId)}
+                className="bg-primary hover:bg-primary/90"
                 size="sm"
-                className="bg-primary"
               >
                 <CalendarRange className="w-4 h-4 ml-1" />
                 تحديث
@@ -617,26 +712,6 @@ export default function ReportsPage() {
 
         {reportData ? (
           <div ref={chartRef}>
-            {/* Header for PDF capture */}
-            <div ref={headerRef} className="bg-white p-4 rounded-lg shadow-sm mb-4 print:shadow-none print:border">
-              <div className="flex items-center justify-between">
-                <div className="flex items-center gap-3">
-                  {clinicLogo ? (
-                    <img src={clinicLogo} alt="شعار" className="w-12 h-12 rounded-full object-cover" />
-                  ) : (
-                    <Building2 className="w-8 h-8 text-primary" />
-                  )}
-                  <div>
-                    <h2 className="text-xl font-bold">{clinicName}</h2>
-                    <p className="text-sm text-muted-foreground">التقرير الشامل</p>
-                  </div>
-                </div>
-                <div className="text-left">
-                  <p className="text-sm font-medium">{new Date().toLocaleDateString("ar-SA")}</p>
-                </div>
-              </div>
-            </div>
-
             {/* KPI Cards */}
             <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-4 print:grid-cols-3 print:gap-2">
               {[
@@ -647,15 +722,15 @@ export default function ReportsPage() {
                 { label: "مرضى جدد", value: reportData.newPatients, icon: Award, color: "from-rose-500 to-rose-700" },
                 { label: "متوسط يومي", value: reportData.averagePerDay, icon: Clock, color: "from-cyan-500 to-cyan-700" },
               ].map((kpi, i) => (
-                <Card key={i} className="border shadow-sm print:border print:shadow-none">
-                  <CardContent className="p-3 print:p-1">
+                <Card key={i} className="border-0 shadow-md hover:shadow-xl transition-all hover:-translate-y-1 bg-white print:border print:shadow-none print:break-inside-avoid">
+                  <CardContent className="p-4 print:p-2">
                     <div className="flex items-center justify-between">
                       <div>
                         <p className="text-xs text-muted-foreground print:text-[8px]">{kpi.label}</p>
-                        <p className="text-lg font-bold print:text-sm">{kpi.value}</p>
+                        <p className="text-xl font-bold text-slate-800 print:text-sm">{kpi.value}</p>
                       </div>
-                      <div className={`w-8 h-8 rounded-full bg-gradient-to-br ${kpi.color} flex items-center justify-center print:hidden`}>
-                        <kpi.icon className="w-4 h-4 text-white" />
+                      <div className={`w-10 h-10 rounded-full bg-gradient-to-br ${kpi.color} flex items-center justify-center shadow-md print:hidden`}>
+                        <kpi.icon className="w-5 h-5 text-white" />
                       </div>
                     </div>
                   </CardContent>
@@ -663,58 +738,73 @@ export default function ReportsPage() {
               ))}
             </div>
 
-            {/* QR (hidden) */}
+            {/* QR hidden */}
             <div ref={qrRef} className="hidden">
               <QRCodeCanvas value={qrLink} size={120} level="M" includeMargin={false} />
             </div>
 
             {/* Charts */}
             <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 mt-6 print:grid-cols-2 print:gap-2 print:mt-2">
-              <Card className="chart-container print:border print:shadow-none">
+              <Card className="border-0 shadow-lg bg-white/90 backdrop-blur-sm chart-container print:border print:shadow-none print:break-inside-avoid">
                 <CardHeader className="print:py-1">
-                  <CardTitle className="text-base print:text-xs print:text-center">المواعيد اليومية</CardTitle>
+                  <CardTitle className="text-slate-800 flex items-center gap-2 text-base print:text-xs print:justify-center">
+                    <Calendar className="w-5 h-5 text-primary print:hidden" />
+                    المواعيد اليومية
+                  </CardTitle>
                 </CardHeader>
-                <CardContent className="h-64 print:h-36">
+                <CardContent className="h-72 print:h-44">
                   <ResponsiveContainer width="100%" height="100%">
-                    <LineChart data={reportData.dailyAppointments}>
-                      <CartesianGrid strokeDasharray="3 3" />
-                      <XAxis dataKey="date" tick={{ fontSize: 8 }} />
-                      <YAxis />
-                      <Tooltip />
-                      <Line type="monotone" dataKey="count" stroke={COLORS.blue} strokeWidth={2} />
-                    </LineChart>
-                  </ResponsiveContainer>
-                </CardContent>
-              </Card>
-
-              <Card className="chart-container print:border print:shadow-none">
-                <CardHeader className="print:py-1">
-                  <CardTitle className="text-base print:text-xs print:text-center">الإيرادات اليومية</CardTitle>
-                </CardHeader>
-                <CardContent className="h-64 print:h-36">
-                  <ResponsiveContainer width="100%" height="100%">
-                    <AreaChart data={reportData.dailyRevenue}>
+                    <AreaChart data={reportData.dailyAppointments.slice(-30)}>
                       <defs>
-                        <linearGradient id="rg2" x1="0" y1="0" x2="0" y2="1">
-                          <stop offset="5%" stopColor={COLORS.gold} stopOpacity={0.3} />
-                          <stop offset="95%" stopColor={COLORS.gold} stopOpacity={0} />
+                        <linearGradient id="gBlue" x1="0" y1="0" x2="0" y2="1">
+                          <stop offset="5%" stopColor={C.blue} stopOpacity={0.25} />
+                          <stop offset="95%" stopColor={C.blue} stopOpacity={0.02} />
                         </linearGradient>
                       </defs>
-                      <CartesianGrid strokeDasharray="3 3" />
+                      <CartesianGrid strokeDasharray="3 3" stroke="#f0f0f0" />
                       <XAxis dataKey="date" tick={{ fontSize: 8 }} />
                       <YAxis />
                       <Tooltip />
-                      <Area type="monotone" dataKey="amount" stroke={COLORS.gold} fill="url(#rg2)" />
+                      <Area type="monotone" dataKey="count" stroke={C.blue} strokeWidth={2} fill="url(#gBlue)" />
                     </AreaChart>
                   </ResponsiveContainer>
                 </CardContent>
               </Card>
 
-              <Card className="chart-container print:border print:shadow-none">
+              <Card className="border-0 shadow-lg bg-white/90 backdrop-blur-sm chart-container print:border print:shadow-none print:break-inside-avoid">
                 <CardHeader className="print:py-1">
-                  <CardTitle className="text-base print:text-xs print:text-center">توزيع الخدمات</CardTitle>
+                  <CardTitle className="text-slate-800 flex items-center gap-2 text-base print:text-xs print:justify-center">
+                    <DollarSign className="w-5 h-5 text-amber-600 print:hidden" />
+                    الإيرادات اليومية
+                  </CardTitle>
                 </CardHeader>
-                <CardContent className="h-64 print:h-36">
+                <CardContent className="h-72 print:h-44">
+                  <ResponsiveContainer width="100%" height="100%">
+                    <AreaChart data={reportData.dailyRevenue.slice(-30)}>
+                      <defs>
+                        <linearGradient id="gGold" x1="0" y1="0" x2="0" y2="1">
+                          <stop offset="5%" stopColor={C.gold} stopOpacity={0.3} />
+                          <stop offset="95%" stopColor={C.gold} stopOpacity={0.02} />
+                        </linearGradient>
+                      </defs>
+                      <CartesianGrid strokeDasharray="3 3" stroke="#f0f0f0" />
+                      <XAxis dataKey="date" tick={{ fontSize: 8 }} />
+                      <YAxis />
+                      <Tooltip />
+                      <Area type="monotone" dataKey="amount" stroke={C.gold} strokeWidth={2} fill="url(#gGold)" />
+                    </AreaChart>
+                  </ResponsiveContainer>
+                </CardContent>
+              </Card>
+
+              <Card className="border-0 shadow-lg bg-white/90 backdrop-blur-sm chart-container print:border print:shadow-none print:break-inside-avoid">
+                <CardHeader className="print:py-1">
+                  <CardTitle className="text-slate-800 flex items-center gap-2 text-base print:text-xs print:justify-center">
+                    <Activity className="w-5 h-5 text-purple-600 print:hidden" />
+                    توزيع الخدمات
+                  </CardTitle>
+                </CardHeader>
+                <CardContent className="h-72 print:h-44">
                   <ResponsiveContainer width="100%" height="100%">
                     <PieChart>
                       <Pie
@@ -737,36 +827,53 @@ export default function ReportsPage() {
                 </CardContent>
               </Card>
 
-              <Card className="chart-container print:border print:shadow-none">
+              <Card className="border-0 shadow-lg bg-white/90 backdrop-blur-sm chart-container print:border print:shadow-none print:break-inside-avoid">
                 <CardHeader className="print:py-1">
-                  <CardTitle className="text-base print:text-xs print:text-center">أفضل الخدمات</CardTitle>
+                  <CardTitle className="text-slate-800 flex items-center gap-2 text-base print:text-xs print:justify-center">
+                    <Award className="w-5 h-5 text-amber-600 print:hidden" />
+                    أفضل الخدمات
+                  </CardTitle>
                 </CardHeader>
-                <CardContent className="h-64 print:h-36">
-                  <ResponsiveContainer width="100%" height="100%">
-                    <RadialBarChart data={reportData.topServices} innerRadius="20%" outerRadius="70%">
-                      <RadialBar dataKey="value" label={{ position: "insideStart", fill: "#fff", fontSize: 7 }} background />
-                      <Legend iconSize={6} wrapperStyle={{ fontSize: 8 }} />
-                      <Tooltip />
-                    </RadialBarChart>
-                  </ResponsiveContainer>
+                <CardContent className="h-72 print:h-44">
+                  <div className="space-y-3">
+                    {reportData.topServices.map((s, i) => {
+                      const max = reportData.topServices[0]?.value || 1;
+                      const pct = (s.value / max) * 100;
+                      return (
+                        <div key={i} className="flex flex-col gap-1">
+                          <div className="flex items-center justify-between text-xs">
+                            <span className="text-slate-700 font-medium truncate max-w-[120px]">{s.name}</span>
+                            <span className="font-bold" style={{ color: CHART_COLORS[i] }}>{s.value}</span>
+                          </div>
+                          <div className="h-2 bg-slate-100 rounded-full overflow-hidden">
+                            <div className="h-full rounded-full transition-all duration-700"
+                              style={{ width: pct + "%", background: CHART_COLORS[i] }} />
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
                 </CardContent>
               </Card>
 
-              <Card className="chart-container lg:col-span-2 print:border print:shadow-none">
+              <Card className="border-0 shadow-lg bg-white/90 backdrop-blur-sm chart-container lg:col-span-2 print:border print:shadow-none print:break-inside-avoid">
                 <CardHeader className="print:py-1">
-                  <CardTitle className="text-base print:text-xs print:text-center">المقارنة الشهرية</CardTitle>
+                  <CardTitle className="text-slate-800 flex items-center gap-2 text-base print:text-xs print:justify-center">
+                    <TrendingUp className="w-5 h-5 text-indigo-600 print:hidden" />
+                    المقارنة الشهرية
+                  </CardTitle>
                 </CardHeader>
-                <CardContent className="h-64 print:h-36">
+                <CardContent className="h-72 print:h-44">
                   <ResponsiveContainer width="100%" height="100%">
                     <BarChart data={reportData.monthlyComparison}>
-                      <CartesianGrid strokeDasharray="3 3" />
+                      <CartesianGrid strokeDasharray="3 3" stroke="#f0f0f0" />
                       <XAxis dataKey="month" tick={{ fontSize: 8 }} />
                       <YAxis yAxisId="left" />
                       <YAxis yAxisId="right" orientation="right" />
                       <Tooltip />
                       <Legend />
-                      <Bar yAxisId="left" dataKey="appointments" fill={COLORS.blue} name="المواعيد" />
-                      <Bar yAxisId="right" dataKey="revenue" fill={COLORS.gold} name="الإيرادات" />
+                      <Bar yAxisId="left" dataKey="appointments" fill={C.blue} name="المواعيد" radius={[4, 4, 0, 0]} />
+                      <Bar yAxisId="right" dataKey="revenue" fill={C.gold} name="الإيرادات" radius={[4, 4, 0, 0]} />
                     </BarChart>
                   </ResponsiveContainer>
                 </CardContent>
@@ -774,38 +881,48 @@ export default function ReportsPage() {
             </div>
 
             {/* Table */}
-            <Card className="mt-6 print:border print:shadow-none">
+            <Card className="border-0 shadow-lg bg-white/90 backdrop-blur-sm mt-6 print:border print:shadow-none print:break-inside-avoid">
               <CardHeader className="print:py-1">
-                <CardTitle className="text-base print:text-xs print:text-center">تفاصيل يومية</CardTitle>
+                <CardTitle className="text-slate-800 flex items-center gap-2 text-base print:text-xs print:justify-center">
+                  <Activity className="w-5 h-5 text-primary print:hidden" />
+                  تفاصيل يومية
+                </CardTitle>
               </CardHeader>
               <CardContent className="overflow-x-auto">
                 <table className="w-full text-sm print:text-[8px]">
                   <thead className="bg-slate-50 print:bg-slate-100">
                     <tr>
-                      <th className="px-4 py-3 text-right text-xs font-medium print:text-[8px] print:py-1 print:px-2">التاريخ</th>
-                      <th className="px-4 py-3 text-right text-xs font-medium print:text-[8px] print:py-1 print:px-2">المواعيد</th>
-                      <th className="px-4 py-3 text-right text-xs font-medium print:text-[8px] print:py-1 print:px-2">الإيرادات</th>
-                      <th className="px-4 py-3 text-right text-xs font-medium print:text-[8px] print:py-1 print:px-2">الخدمة الأكثر طلباً</th>
+                      <th className="px-4 py-3 text-right text-xs font-medium text-slate-500 uppercase print:text-[8px] print:py-1 print:px-2">التاريخ</th>
+                      <th className="px-4 py-3 text-right text-xs font-medium text-slate-500 uppercase print:text-[8px] print:py-1 print:px-2">المواعيد</th>
+                      <th className="px-4 py-3 text-right text-xs font-medium text-slate-500 uppercase print:text-[8px] print:py-1 print:px-2">الإيرادات</th>
+                      <th className="px-4 py-3 text-right text-xs font-medium text-slate-500 uppercase print:text-[8px] print:py-1 print:px-2">الأداء</th>
                     </tr>
                   </thead>
-                  <tbody className="divide-y">
-                    {reportData.dailyAppointments.slice(0, 10).map((day, idx) => {
-                      const revenue = reportData.dailyRevenue.find((r) => r.date === day.date);
-                      const topService = reportData.topServices[0]?.name || "-";
+                  <tbody className="divide-y divide-slate-100">
+                    {reportData.dailyAppointments.slice(0, 15).map((day, idx) => {
+                      const rev = reportData.dailyRevenue.find((r) => r.date === day.date);
+                      const avg = reportData.averagePerDay;
+                      const status = day.count > avg * 1.2
+                        ? { label: "ممتاز ↑", color: C.green }
+                        : day.count < avg * 0.8
+                        ? { label: "منخفض ↓", color: C.rose }
+                        : { label: "معتدل →", color: C.gold };
                       return (
                         <tr key={idx} className="hover:bg-slate-50 print:hover:bg-transparent">
                           <td className="px-4 py-3 print:py-1 print:px-2">{day.date}</td>
                           <td className="px-4 py-3 font-medium print:py-1 print:px-2">{day.count}</td>
-                          <td className="px-4 py-3 text-amber-600 font-medium print:py-1 print:px-2">{revenue?.amount || 0} ر.ي</td>
-                          <td className="px-4 py-3 print:py-1 print:px-2">{topService}</td>
+                          <td className="px-4 py-3 text-amber-600 font-medium print:py-1 print:px-2">{rev?.amount || 0} ر.ي</td>
+                          <td className="px-4 py-3 print:py-1 print:px-2">
+                            <span className="text-xs font-bold" style={{ color: status.color }}>{status.label}</span>
+                          </td>
                         </tr>
                       );
                     })}
                   </tbody>
                 </table>
-                {reportData.dailyAppointments.length > 10 && (
+                {reportData.dailyAppointments.length > 15 && (
                   <p className="text-xs text-muted-foreground mt-2 text-center print:hidden">
-                    + عرض {reportData.dailyAppointments.length - 10} يوم إضافي
+                    + {reportData.dailyAppointments.length - 15} يوم إضافي
                   </p>
                 )}
               </CardContent>
@@ -832,10 +949,10 @@ export default function ReportsPage() {
           .print\\:text-\\[8px\\] { font-size: 8px !important; }
           .print\\:py-1 { padding-top: 0.25rem !important; padding-bottom: 0.25rem !important; }
           .print\\:px-2 { padding-left: 0.5rem !important; padding-right: 0.5rem !important; }
-          .print\\:p-1 { padding: 0.25rem !important; }
+          .print\\:p-2 { padding: 0.5rem !important; }
           .print\\:grid-cols-3 { grid-template-columns: repeat(3, 1fr) !important; }
           .print\\:grid-cols-2 { grid-template-columns: repeat(2, 1fr) !important; }
-          .print\\:h-36 { height: 9rem !important; }
+          .print\\:h-44 { height: 11rem !important; }
           .print\\:gap-2 { gap: 0.5rem !important; }
           .print\\:mt-2 { margin-top: 0.5rem !important; }
           .print\\:text-center { text-align: center !important; }
@@ -844,7 +961,14 @@ export default function ReportsPage() {
           .print\\:hover\\:bg-transparent:hover { background-color: transparent !important; }
           .chart-container { page-break-inside: avoid !important; break-inside: avoid !important; }
           .card { page-break-inside: avoid !important; break-inside: avoid !important; }
+          .print\\:break-inside-avoid { break-inside: avoid !important; }
+          .print\\:bg-white { background: white !important; }
+          .print\\:px-2 { padding-left: 0.5rem !important; padding-right: 0.5rem !important; }
+          .print\\:py-2 { padding-top: 0.5rem !important; padding-bottom: 0.5rem !important; }
           @page { size: A4; margin: 6mm; }
+        }
+        @media print and (max-width: 600px) {
+          .print\\:grid-cols-3 { grid-template-columns: repeat(2, 1fr) !important; }
         }
       `}</style>
     </div>
