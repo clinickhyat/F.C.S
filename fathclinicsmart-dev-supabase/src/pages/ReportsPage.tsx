@@ -142,24 +142,40 @@ export default function ReportsPage() {
     const fetchClinicAndData = async () => {
       if (!user) return;
 
-      const { data: clinic } = await supabase
-        .from("clinics")
-        .select("id, name, logo_url, bot_username")
-        .eq("owner_id", user.id)
-        .maybeSingle();
+      try {
+        const { data: clinic, error: clinicError } = await supabase
+          .from("clinics")
+          .select("id, name, logo_url, bot_username")
+          .eq("owner_id", user.id)
+          .maybeSingle();
 
-      if (!clinic) {
-        navigate("/dashboard");
-        return;
+        if (clinicError || !clinic) {
+          console.error("Clinic fetch error:", clinicError);
+          toast({
+            title: "خطأ",
+            description: "لم يتم العثور على عيادة لهذا الحساب",
+            variant: "destructive",
+          });
+          navigate("/dashboard");
+          return;
+        }
+
+        setActiveClinicId(clinic.id);
+        setClinicName(clinic.name);
+        setClinicLogo(clinic.logo_url || null);
+        setBotUsername(clinic.bot_username || "SmartClinc_bot");
+
+        await fetchReportData(clinic.id);
+      } catch (err) {
+        console.error("Fetch error:", err);
+        toast({
+          title: "خطأ",
+          description: "فشل في تحميل البيانات",
+          variant: "destructive",
+        });
+      } finally {
+        setLoading(false);
       }
-
-      setActiveClinicId(clinic.id);
-      setClinicName(clinic.name);
-      setClinicLogo(clinic.logo_url || null);
-      setBotUsername(clinic.bot_username || "SmartClinc_bot");
-
-      await fetchReportData(clinic.id);
-      setLoading(false);
     };
 
     fetchClinicAndData();
@@ -296,10 +312,10 @@ export default function ReportsPage() {
       });
     } catch (error) {
       console.error(error);
-      toast({ 
-        title: "خطأ", 
-        description: "فشل في جلب بيانات التقارير", 
-        variant: "destructive" 
+      toast({
+        title: "خطأ",
+        description: "فشل في جلب بيانات التقارير",
+        variant: "destructive",
       });
     }
   };
@@ -310,56 +326,49 @@ export default function ReportsPage() {
     }
   }, [filterType, selectedMonth, selectedYear, startDate, endDate]);
 
-  // ===== تصدير PDF محسّن =====
+  // ===== تصدير PDF محسّن (بدون html2canvas) =====
   const handleDownloadPDF = async () => {
     if (!reportData) return;
     setGenerating(true);
 
     try {
-      const doc = new jsPDF({ 
-        orientation: "portrait", 
-        unit: "mm", 
-        format: "a4", 
-        compress: true 
+      const doc = new jsPDF({
+        orientation: "portrait",
+        unit: "mm",
+        format: "a4",
+        compress: true,
       });
-
-      // إضافة دعم للعربية
-      doc.setLanguage("ar");
-      doc.setFont("helvetica");
 
       const pw = doc.internal.pageSize.getWidth();
       const ph = doc.internal.pageSize.getHeight();
-      const m = 12;
+      const m = 14;
 
       // ===== صفحة الغلاف =====
       doc.setFillColor(COLORS.primary);
       doc.rect(0, 0, pw, ph, "F");
 
-      // الشعار والعنوان
-      doc.setFontSize(24);
+      doc.setFontSize(22);
       doc.setTextColor("#ffffff");
       doc.setFont("helvetica", "bold");
-      doc.text(clinicName, pw / 2, 80, { align: "center" });
+      doc.text(clinicName, pw / 2, 75, { align: "center" });
 
       doc.setFontSize(14);
       doc.setTextColor(COLORS.gold);
-      doc.text("تقرير شامل - Smart Clinic", pw / 2, 95, { align: "center" });
+      doc.text("تقرير شامل - Smart Clinic", pw / 2, 90, { align: "center" });
 
       doc.setFontSize(10);
       doc.setTextColor("#ffffff99");
       const { start, end } = getDateRange();
-      doc.text(`الفترة: ${start} إلى ${end}`, pw / 2, 110, { align: "center" });
-      doc.text(new Date().toLocaleDateString("ar-SA"), pw / 2, 120, { align: "center" });
+      doc.text(`الفترة: ${start} إلى ${end}`, pw / 2, 105, { align: "center" });
+      doc.text(new Date().toLocaleDateString("ar-SA"), pw / 2, 115, { align: "center" });
 
-      // خط ذهبي
       doc.setFillColor(COLORS.gold);
-      doc.rect(m, ph - 40, pw - 2 * m, 2, "F");
+      doc.rect(m, ph - 35, pw - 2 * m, 2, "F");
 
-      // ===== صفحة KPIs =====
+      // ===== صفحة المؤشرات =====
       doc.addPage();
       let y = 20;
 
-      // عنوان القسم
       doc.setFillColor(COLORS.primary);
       doc.rect(m, y, pw - 2 * m, 10, "F");
       doc.setFontSize(12);
@@ -368,7 +377,6 @@ export default function ReportsPage() {
       doc.text("المؤشرات الرئيسية", m + 5, y + 7);
       y += 18;
 
-      // جدول KPIs
       const kpiData = [
         ["إجمالي المرضى", formatNumber(reportData.totalPatients)],
         ["إجمالي المواعيد", formatNumber(reportData.totalAppointments)],
@@ -385,8 +393,8 @@ export default function ReportsPage() {
         styles: {
           font: "helvetica",
           fontSize: 10,
-          cellPadding: 4,
-          halign: "right",
+          cellPadding: 5,
+          halign: "center",
         },
         headStyles: {
           fillColor: [26, 42, 108],
@@ -397,12 +405,12 @@ export default function ReportsPage() {
           fillColor: [248, 250, 255],
         },
         columnStyles: {
-          0: { cellWidth: 100 },
+          0: { cellWidth: 90 },
           1: { cellWidth: 70, fontStyle: "bold", textColor: [201, 168, 76] },
         },
       });
 
-      // ===== جدول أفضل الخدمات =====
+      // ===== صفحة الخدمات =====
       doc.addPage();
       y = 20;
 
@@ -426,7 +434,7 @@ export default function ReportsPage() {
         styles: {
           font: "helvetica",
           fontSize: 9,
-          cellPadding: 3,
+          cellPadding: 4,
           halign: "center",
         },
         headStyles: {
@@ -439,13 +447,13 @@ export default function ReportsPage() {
         },
         columnStyles: {
           0: { cellWidth: 15 },
-          1: { cellWidth: 90, halign: "right" },
+          1: { cellWidth: 85, halign: "right" },
           2: { cellWidth: 40 },
           3: { cellWidth: 30, textColor: [16, 185, 129], fontStyle: "bold" },
         },
       });
 
-      // ===== جدول التفاصيل اليومية =====
+      // ===== صفحة التفاصيل اليومية =====
       doc.addPage();
       y = 20;
 
@@ -460,22 +468,18 @@ export default function ReportsPage() {
         const rev = reportData.dailyRevenue.find((r) => r.date === d.date);
         const avg = reportData.averagePerDay;
         const status =
-          d.count > avg * 1.2
-            ? "ممتاز"
-            : d.count < avg * 0.8
-            ? "منخفض"
-            : "معتدل";
+          d.count > avg * 1.2 ? "ممتاز" : d.count < avg * 0.8 ? "منخفض" : "معتدل";
         return [d.date, formatNumber(d.count), formatNumber(rev?.amount || 0), status];
       });
 
       autoTable(doc, {
         startY: y,
-        head: [["التاريخ", "المواعيد", "الإيرادات (ر.ي)", "الحالة"]],
+        head: [["التاريخ", "المواعيد", "الإيرادات", "الحالة"]],
         body: dailyData,
         styles: {
           font: "helvetica",
           fontSize: 8,
-          cellPadding: 2.5,
+          cellPadding: 3,
           halign: "center",
         },
         headStyles: {
@@ -488,15 +492,15 @@ export default function ReportsPage() {
         },
         columnStyles: {
           0: { cellWidth: 45 },
-          1: { cellWidth: 40, fontStyle: "bold" },
+          1: { cellWidth: 35, fontStyle: "bold" },
           2: { cellWidth: 45, textColor: [201, 168, 76] },
-          3: { cellWidth: 40 },
+          3: { cellWidth: 35 },
         },
       });
 
       // ===== صفحة QR =====
       doc.addPage();
-      const qrY = ph / 2 - 40;
+      const qrY = ph / 2 - 45;
 
       doc.setFillColor(COLORS.bg);
       doc.rect(0, 0, pw, ph, "F");
@@ -513,7 +517,6 @@ export default function ReportsPage() {
       doc.setTextColor(COLORS.gold);
       doc.text(clinicName, pw / 2, 27, { align: "center" });
 
-      // QR
       const qrCanvas = document.getElementById("hidden-qr-canvas") as HTMLCanvasElement;
       if (qrCanvas) {
         const qrSize = 60;
@@ -530,15 +533,15 @@ export default function ReportsPage() {
       doc.setFontSize(10);
       doc.setTextColor(COLORS.text);
       doc.setFont("helvetica", "bold");
-      doc.text("امسح الكود بتطبيق تيليجرام", pw / 2, qrY + 75, { align: "center" });
+      doc.text("امسح الكود بتطبيق تيليجرام", pw / 2, qrY + 80, { align: "center" });
 
       const qrLink = `https://t.me/${botUsername || "SmartClinc_bot"}?start=clinic_${activeClinicId}`;
       doc.setFontSize(7);
       doc.setTextColor(COLORS.muted);
       doc.setFont("helvetica", "normal");
-      doc.text(qrLink, pw / 2, qrY + 82, { align: "center" });
+      doc.text(qrLink, pw / 2, qrY + 87, { align: "center" });
 
-      // ===== التذييل لجميع الصفحات =====
+      // ===== التذييل =====
       const totalPages = doc.getNumberOfPages();
       for (let i = 1; i <= totalPages; i++) {
         doc.setPage(i);
@@ -619,7 +622,9 @@ export default function ReportsPage() {
   };
 
   // ===== طباعة =====
-  const handlePrint = () => window.print();
+  const handlePrint = () => {
+    window.print();
+  };
 
   if (authLoading || loading) {
     return (
@@ -789,7 +794,7 @@ export default function ReportsPage() {
             <Loader2 className="w-12 h-12 animate-spin text-primary" />
           </div>
         ) : reportData ? (
-          <div ref={printRef}>
+          <div ref={printRef} id="report-content">
             {/* KPIs */}
             <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-4">
               {[
@@ -850,7 +855,6 @@ export default function ReportsPage() {
 
             {/* الرسوم البيانية */}
             <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-              {/* المواعيد اليومية */}
               <div className="bg-white rounded-xl shadow-sm border border-slate-200 p-5">
                 <h3 className="text-sm font-bold text-slate-800 mb-4 flex items-center gap-2">
                   <Calendar className="w-4 h-4 text-blue-600" />
@@ -885,7 +889,6 @@ export default function ReportsPage() {
                 </div>
               </div>
 
-              {/* الإيرادات اليومية */}
               <div className="bg-white rounded-xl shadow-sm border border-slate-200 p-5">
                 <h3 className="text-sm font-bold text-slate-800 mb-4 flex items-center gap-2">
                   <DollarSign className="w-4 h-4 text-amber-600" />
@@ -965,7 +968,6 @@ export default function ReportsPage() {
                 </div>
               </div>
 
-              {/* أفضل الخدمات */}
               <div className="bg-white rounded-xl shadow-sm border border-slate-200 p-5">
                 <h3 className="text-sm font-bold text-slate-800 mb-4 flex items-center gap-2">
                   <Award className="w-4 h-4 text-orange-600" />
@@ -1151,12 +1153,12 @@ export default function ReportsPage() {
         </p>
       </footer>
 
-      {/* أنماط الطباعة */}
+      {/* أنماط الطباعة المحسّنة */}
       <style>{`
         @media print {
           @page {
             size: A4;
-            margin: 8mm;
+            margin: 6mm;
           }
           body {
             background: white !important;
@@ -1171,10 +1173,37 @@ export default function ReportsPage() {
           }
           .bg-white {
             break-inside: avoid;
+            page-break-inside: avoid;
           }
           .h-64,
           .h-72 {
-            height: 200px !important;
+            height: 180px !important;
+          }
+          #report-content {
+            display: block !important;
+            width: 100% !important;
+          }
+          header, footer {
+            display: none !important;
+          }
+          .grid {
+            display: grid !important;
+          }
+          .lg\\:grid-cols-6 {
+            grid-template-columns: repeat(3, 1fr) !important;
+          }
+          .lg\\:grid-cols-2 {
+            grid-template-columns: repeat(2, 1fr) !important;
+          }
+          .lg\\:grid-cols-3 {
+            grid-template-columns: repeat(2, 1fr) !important;
+          }
+          .lg\\:col-span-2 {
+            grid-column: span 2 / span 2 !important;
+          }
+          [style*="background"] {
+            -webkit-print-color-adjust: exact;
+            print-color-adjust: exact;
           }
         }
       `}</style>
