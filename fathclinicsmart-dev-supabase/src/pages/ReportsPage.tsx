@@ -1,4 +1,4 @@
-import { useEffect, useState, useRef } from "react";
+import { useEffect, useState, useRef, useCallback } from "react";
 import { useNavigate } from "react-router-dom";
 import { useAuth } from "@/lib/auth";
 import { supabase } from "@/integrations/supabase/client";
@@ -71,7 +71,6 @@ const PIE_COLORS = [
   COLORS.teal,
 ];
 
-// ========== الواجهات ==========
 interface ReportData {
   totalPatients: number;
   totalAppointments: number;
@@ -86,7 +85,6 @@ interface ReportData {
   topServices: { name: string; value: number }[];
 }
 
-// ========== المساعدات ==========
 const formatNumber = (n: number) => n.toLocaleString("ar-SA");
 const shortDate = (d: string) => d.slice(5);
 
@@ -109,7 +107,6 @@ const getMonthLabel = (m: string) => {
   return names[idx] + " " + m.slice(0, 4);
 };
 
-// ========== المكون الرئيسي ==========
 export default function ReportsPage() {
   const navigate = useNavigate();
   const { user, loading: authLoading } = useAuth();
@@ -131,6 +128,8 @@ export default function ReportsPage() {
   const [endDate, setEndDate] = useState(new Date().toISOString().slice(0, 10));
 
   const printRef = useRef<HTMLDivElement>(null);
+  const qrRef = useRef<HTMLDivElement>(null);
+  const [qrReady, setQrReady] = useState(false);
 
   // ===== جلب بيانات العيادة =====
   useEffect(() => {
@@ -142,40 +141,26 @@ export default function ReportsPage() {
     const fetchClinicAndData = async () => {
       if (!user) return;
 
-      try {
-        const { data: clinic, error: clinicError } = await supabase
-          .from("clinics")
-          .select("id, name, logo_url, bot_username")
-          .eq("owner_id", user.id)
-          .maybeSingle();
+      const { data: clinic } = await supabase
+        .from("clinics")
+        .select("id, name, logo_url, bot_username")
+        .eq("owner_id", user.id)
+        .maybeSingle();
 
-        if (clinicError || !clinic) {
-          console.error("Clinic fetch error:", clinicError);
-          toast({
-            title: "خطأ",
-            description: "لم يتم العثور على عيادة لهذا الحساب",
-            variant: "destructive",
-          });
-          navigate("/dashboard");
-          return;
-        }
-
-        setActiveClinicId(clinic.id);
-        setClinicName(clinic.name);
-        setClinicLogo(clinic.logo_url || null);
-        setBotUsername(clinic.bot_username || "SmartClinc_bot");
-
-        await fetchReportData(clinic.id);
-      } catch (err) {
-        console.error("Fetch error:", err);
-        toast({
-          title: "خطأ",
-          description: "فشل في تحميل البيانات",
-          variant: "destructive",
-        });
-      } finally {
-        setLoading(false);
+      if (!clinic) {
+        navigate("/dashboard");
+        return;
       }
+
+      setActiveClinicId(clinic.id);
+      setClinicName(clinic.name);
+      setClinicLogo(clinic.logo_url || null);
+      setBotUsername(clinic.bot_username || "SmartClinc_bot");
+
+      await fetchReportData(clinic.id);
+      setLoading(false);
+      // تأخير تصيير الـ QR حتى تظهر الصفحة
+      setTimeout(() => setQrReady(true), 500);
     };
 
     fetchClinicAndData();
@@ -341,31 +326,31 @@ export default function ReportsPage() {
 
       const pw = doc.internal.pageSize.getWidth();
       const ph = doc.internal.pageSize.getHeight();
-      const m = 14;
+      const m = 12;
 
       // ===== صفحة الغلاف =====
       doc.setFillColor(COLORS.primary);
       doc.rect(0, 0, pw, ph, "F");
 
-      doc.setFontSize(22);
+      doc.setFontSize(24);
       doc.setTextColor("#ffffff");
       doc.setFont("helvetica", "bold");
-      doc.text(clinicName, pw / 2, 75, { align: "center" });
+      doc.text(clinicName, pw / 2, 80, { align: "center" });
 
       doc.setFontSize(14);
       doc.setTextColor(COLORS.gold);
-      doc.text("تقرير شامل - Smart Clinic", pw / 2, 90, { align: "center" });
+      doc.text("تقرير شامل - Smart Clinic", pw / 2, 95, { align: "center" });
 
       doc.setFontSize(10);
       doc.setTextColor("#ffffff99");
       const { start, end } = getDateRange();
-      doc.text(`الفترة: ${start} إلى ${end}`, pw / 2, 105, { align: "center" });
-      doc.text(new Date().toLocaleDateString("ar-SA"), pw / 2, 115, { align: "center" });
+      doc.text(`الفترة: ${start} إلى ${end}`, pw / 2, 110, { align: "center" });
+      doc.text(new Date().toLocaleDateString("ar-SA"), pw / 2, 120, { align: "center" });
 
       doc.setFillColor(COLORS.gold);
-      doc.rect(m, ph - 35, pw - 2 * m, 2, "F");
+      doc.rect(m, ph - 40, pw - 2 * m, 2, "F");
 
-      // ===== صفحة المؤشرات =====
+      // ===== صفحة KPIs =====
       doc.addPage();
       let y = 20;
 
@@ -393,8 +378,8 @@ export default function ReportsPage() {
         styles: {
           font: "helvetica",
           fontSize: 10,
-          cellPadding: 5,
-          halign: "center",
+          cellPadding: 4,
+          halign: "right",
         },
         headStyles: {
           fillColor: [26, 42, 108],
@@ -405,12 +390,12 @@ export default function ReportsPage() {
           fillColor: [248, 250, 255],
         },
         columnStyles: {
-          0: { cellWidth: 90 },
+          0: { cellWidth: 100 },
           1: { cellWidth: 70, fontStyle: "bold", textColor: [201, 168, 76] },
         },
       });
 
-      // ===== صفحة الخدمات =====
+      // ===== جدول أفضل الخدمات =====
       doc.addPage();
       y = 20;
 
@@ -434,7 +419,7 @@ export default function ReportsPage() {
         styles: {
           font: "helvetica",
           fontSize: 9,
-          cellPadding: 4,
+          cellPadding: 3,
           halign: "center",
         },
         headStyles: {
@@ -447,13 +432,13 @@ export default function ReportsPage() {
         },
         columnStyles: {
           0: { cellWidth: 15 },
-          1: { cellWidth: 85, halign: "right" },
+          1: { cellWidth: 90, halign: "right" },
           2: { cellWidth: 40 },
           3: { cellWidth: 30, textColor: [16, 185, 129], fontStyle: "bold" },
         },
       });
 
-      // ===== صفحة التفاصيل اليومية =====
+      // ===== جدول التفاصيل اليومية =====
       doc.addPage();
       y = 20;
 
@@ -468,18 +453,22 @@ export default function ReportsPage() {
         const rev = reportData.dailyRevenue.find((r) => r.date === d.date);
         const avg = reportData.averagePerDay;
         const status =
-          d.count > avg * 1.2 ? "ممتاز" : d.count < avg * 0.8 ? "منخفض" : "معتدل";
+          d.count > avg * 1.2
+            ? "ممتاز"
+            : d.count < avg * 0.8
+            ? "منخفض"
+            : "معتدل";
         return [d.date, formatNumber(d.count), formatNumber(rev?.amount || 0), status];
       });
 
       autoTable(doc, {
         startY: y,
-        head: [["التاريخ", "المواعيد", "الإيرادات", "الحالة"]],
+        head: [["التاريخ", "المواعيد", "الإيرادات (ر.ي)", "الحالة"]],
         body: dailyData,
         styles: {
           font: "helvetica",
           fontSize: 8,
-          cellPadding: 3,
+          cellPadding: 2.5,
           halign: "center",
         },
         headStyles: {
@@ -492,15 +481,15 @@ export default function ReportsPage() {
         },
         columnStyles: {
           0: { cellWidth: 45 },
-          1: { cellWidth: 35, fontStyle: "bold" },
+          1: { cellWidth: 40, fontStyle: "bold" },
           2: { cellWidth: 45, textColor: [201, 168, 76] },
-          3: { cellWidth: 35 },
+          3: { cellWidth: 40 },
         },
       });
 
-      // ===== صفحة QR =====
+      // ===== صفحة QR (باستخدام ref) =====
       doc.addPage();
-      const qrY = ph / 2 - 45;
+      const qrY = ph / 2 - 40;
 
       doc.setFillColor(COLORS.bg);
       doc.rect(0, 0, pw, ph, "F");
@@ -517,7 +506,8 @@ export default function ReportsPage() {
       doc.setTextColor(COLORS.gold);
       doc.text(clinicName, pw / 2, 27, { align: "center" });
 
-      const qrCanvas = document.getElementById("hidden-qr-canvas") as HTMLCanvasElement;
+      // QR من الـ ref
+      const qrCanvas = document.querySelector("#hidden-qr-canvas") as HTMLCanvasElement;
       if (qrCanvas) {
         const qrSize = 60;
         const qrX = pw / 2 - qrSize / 2;
@@ -533,15 +523,15 @@ export default function ReportsPage() {
       doc.setFontSize(10);
       doc.setTextColor(COLORS.text);
       doc.setFont("helvetica", "bold");
-      doc.text("امسح الكود بتطبيق تيليجرام", pw / 2, qrY + 80, { align: "center" });
+      doc.text("امسح الكود بتطبيق تيليجرام", pw / 2, qrY + 75, { align: "center" });
 
       const qrLink = `https://t.me/${botUsername || "SmartClinc_bot"}?start=clinic_${activeClinicId}`;
       doc.setFontSize(7);
       doc.setTextColor(COLORS.muted);
       doc.setFont("helvetica", "normal");
-      doc.text(qrLink, pw / 2, qrY + 87, { align: "center" });
+      doc.text(qrLink, pw / 2, qrY + 82, { align: "center" });
 
-      // ===== التذييل =====
+      // ===== التذييل لجميع الصفحات =====
       const totalPages = doc.getNumberOfPages();
       for (let i = 1; i <= totalPages; i++) {
         doc.setPage(i);
@@ -622,9 +612,7 @@ export default function ReportsPage() {
   };
 
   // ===== طباعة =====
-  const handlePrint = () => {
-    window.print();
-  };
+  const handlePrint = () => window.print();
 
   if (authLoading || loading) {
     return (
@@ -643,18 +631,24 @@ export default function ReportsPage() {
 
   return (
     <div className="min-h-screen bg-slate-50" dir="rtl">
-      {/* QR مخفي */}
-      <div className="fixed -top-full -left-full opacity-0 pointer-events-none">
-        <QRCodeCanvas
-          id="hidden-qr-canvas"
-          value={qrLink}
-          size={240}
-          level="H"
-          includeMargin
-        />
+      {/* ===== QR مخفي ===== */}
+      <div
+        ref={qrRef}
+        id="qr-container"
+        className="fixed -top-full -left-full opacity-0 pointer-events-none"
+      >
+        {qrReady && (
+          <QRCodeCanvas
+            id="hidden-qr-canvas"
+            value={qrLink}
+            size={240}
+            level="H"
+            includeMargin
+          />
+        )}
       </div>
 
-      {/* الهيدر */}
+      {/* ===== الهيدر ===== */}
       <header
         className="sticky top-0 z-50 bg-white shadow-sm print:hidden"
         style={{ borderBottom: `3px solid ${COLORS.gold}` }}
@@ -715,7 +709,7 @@ export default function ReportsPage() {
         </div>
       </header>
 
-      {/* المحتوى */}
+      {/* ===== المحتوى ===== */}
       <main className="container mx-auto px-4 py-6 space-y-6 max-w-7xl">
         {/* الفلترة */}
         <div className="bg-white rounded-xl shadow-sm border border-slate-200 p-4 print:hidden">
@@ -794,8 +788,8 @@ export default function ReportsPage() {
             <Loader2 className="w-12 h-12 animate-spin text-primary" />
           </div>
         ) : reportData ? (
-          <div ref={printRef} id="report-content">
-            {/* KPIs */}
+          <div ref={printRef}>
+            {/* ===== بطاقات KPI ===== */}
             <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-4">
               {[
                 {
@@ -853,7 +847,7 @@ export default function ReportsPage() {
               ))}
             </div>
 
-            {/* الرسوم البيانية */}
+            {/* ===== الرسوم البيانية ===== */}
             <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
               <div className="bg-white rounded-xl shadow-sm border border-slate-200 p-5">
                 <h3 className="text-sm font-bold text-slate-800 mb-4 flex items-center gap-2">
@@ -927,7 +921,7 @@ export default function ReportsPage() {
               </div>
             </div>
 
-            {/* توزيع الخدمات */}
+            {/* ===== توزيع الخدمات ===== */}
             <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
               <div className="bg-white rounded-xl shadow-sm border border-slate-200 p-5 lg:col-span-2">
                 <h3 className="text-sm font-bold text-slate-800 mb-4 flex items-center gap-2">
@@ -1001,7 +995,7 @@ export default function ReportsPage() {
               </div>
             </div>
 
-            {/* المقارنة الشهرية */}
+            {/* ===== المقارنة الشهرية ===== */}
             <div className="bg-white rounded-xl shadow-sm border border-slate-200 p-5">
               <h3 className="text-sm font-bold text-slate-800 mb-4 flex items-center gap-2">
                 <TrendingUp className="w-4 h-4 text-teal-600" />
@@ -1046,7 +1040,7 @@ export default function ReportsPage() {
               </div>
             </div>
 
-            {/* جدول التفاصيل */}
+            {/* ===== جدول التفاصيل ===== */}
             <div className="bg-white rounded-xl shadow-sm border border-slate-200 overflow-hidden">
               <div className="px-5 py-4 border-b border-slate-200">
                 <h3 className="text-sm font-bold text-slate-800 flex items-center gap-2">
@@ -1117,7 +1111,7 @@ export default function ReportsPage() {
               </div>
             </div>
 
-            {/* QR */}
+            {/* ===== QR ===== */}
             <div className="bg-white rounded-xl shadow-sm border border-slate-200 p-6">
               <div className="flex flex-col md:flex-row items-center gap-6">
                 <div className="flex-shrink-0 p-4 rounded-xl border-2 border-amber-400">
@@ -1143,7 +1137,7 @@ export default function ReportsPage() {
         )}
       </main>
 
-      {/* التذييل */}
+      {/* ===== التذييل ===== */}
       <footer
         className="mt-8 py-4 text-center print:hidden"
         style={{ background: COLORS.primary }}
@@ -1153,12 +1147,12 @@ export default function ReportsPage() {
         </p>
       </footer>
 
-      {/* أنماط الطباعة المحسّنة */}
+      {/* ===== أنماط الطباعة ===== */}
       <style>{`
         @media print {
           @page {
             size: A4;
-            margin: 6mm;
+            margin: 8mm;
           }
           body {
             background: white !important;
@@ -1173,37 +1167,10 @@ export default function ReportsPage() {
           }
           .bg-white {
             break-inside: avoid;
-            page-break-inside: avoid;
           }
           .h-64,
           .h-72 {
-            height: 180px !important;
-          }
-          #report-content {
-            display: block !important;
-            width: 100% !important;
-          }
-          header, footer {
-            display: none !important;
-          }
-          .grid {
-            display: grid !important;
-          }
-          .lg\\:grid-cols-6 {
-            grid-template-columns: repeat(3, 1fr) !important;
-          }
-          .lg\\:grid-cols-2 {
-            grid-template-columns: repeat(2, 1fr) !important;
-          }
-          .lg\\:grid-cols-3 {
-            grid-template-columns: repeat(2, 1fr) !important;
-          }
-          .lg\\:col-span-2 {
-            grid-column: span 2 / span 2 !important;
-          }
-          [style*="background"] {
-            -webkit-print-color-adjust: exact;
-            print-color-adjust: exact;
+            height: 200px !important;
           }
         }
       `}</style>
