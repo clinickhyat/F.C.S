@@ -1,7 +1,8 @@
-import { useEffect, useState, useRef } from "react";
+import { useEffect, useState, useRef, useCallback } from "react";
 import { useNavigate } from "react-router-dom";
 import { useAuth } from "@/lib/auth";
 import { supabase } from "@/integrations/supabase/client";
+import { Button } from "@/components/ui/button";
 import { useToast } from "@/hooks/use-toast";
 import {
   BarChart,
@@ -17,8 +18,6 @@ import {
   AreaChart,
   Area,
   Legend,
-  LineChart,
-  Line,
 } from "recharts";
 import {
   Users,
@@ -30,43 +29,39 @@ import {
   FileText,
   Activity,
   Filter,
-  Clock,
   Award,
   Printer,
   Building2,
   RefreshCw,
-  ArrowLeft,
-  BarChart3,
+  Clock,
+  ChevronLeft,
+  CheckCircle2,
 } from "lucide-react";
 import { QRCodeCanvas } from "qrcode.react";
 
-// ========== الألوان الاحترافية ==========
-const COLORS = {
-  primary: "#1a2a6c",
-  primaryLight: "#2d4a9e",
-  gold: "#c9a84c",
-  goldLight: "#e8c76e",
-  blue: "#1a73e8",
+// ========== الهوية البصرية الفاخرة (أسلوب أرينا الفخم) ==========
+const C = {
+  primary: "#0f172a",       // الكحلي الداكن الفاخر
+  primaryLight: "#1e293b",  // الكحلي المتوسط
+  gold: "#b45309",          // الذهبي الدافئ
+  goldLight: "#f59e0b",     // الذهبي الساطع
+  goldGradient: "linear-gradient(135deg, #d97706 0%, #b45309 100%)",
+  blue: "#3b82f6",
   green: "#10b981",
-  purple: "#7c3aed",
-  rose: "#e11d48",
-  cyan: "#0891b2",
-  orange: "#f59e0b",
-  teal: "#0d9488",
+  purple: "#8b5cf6",
+  rose: "#f43f5e",
+  cyan: "#06b6d4",
+  orange: "#f97316",
+  teal: "#14b8a6",
   slate: "#64748b",
-  bg: "#f0f4ff",
+  bg: "#f8fafc",            // خلفية مريحة للعين
+  white: "#ffffff",
+  border: "#f1f5f9",
+  text: "#0f172a",
+  muted: "#64748b",
 };
 
-const PIE_COLORS = [
-  COLORS.blue,
-  COLORS.green,
-  COLORS.gold,
-  COLORS.purple,
-  COLORS.rose,
-  COLORS.cyan,
-  COLORS.orange,
-  COLORS.teal,
-];
+const PIE_COLORS = [C.blue, C.green, C.goldLight, C.purple, C.rose, C.cyan, C.orange, C.teal];
 
 // ========== الواجهات ==========
 interface ReportData {
@@ -83,20 +78,19 @@ interface ReportData {
   topServices: { name: string; value: number }[];
 }
 
-// ========== المساعدات ==========
-const formatNumber = (n: number) => n.toLocaleString("ar-SA");
-const shortDate = (d: string) => d.slice(5);
-
-const getMonthLabel = (m: string) => {
-  const names = [
-    "يناير", "فبراير", "مارس", "أبريل", "مايو", "يونيو",
-    "يوليو", "أغسطس", "سبتمبر", "أكتوبر", "نوفمبر", "ديسمبر",
-  ];
+// ========== دوال التنسيق المساعد المباشر ==========
+function fmt(n: number) {
+  return n.toLocaleString("ar-SA");
+}
+function shortDate(d: string) {
+  return d.slice(5);
+}
+function monthLabel(m: string) {
+  const names = ["يناير", "فبراير", "مارس", "أبريل", "مايو", "يونيو", "يوليو", "أغسطس", "سبتمبر", "أكتوبر", "نوفمبر", "ديسمبر"];
   const idx = parseInt(m.slice(5, 7)) - 1;
-  return names[idx];
-};
+  return names[idx] + " " + m.slice(0, 4);
+}
 
-// ========== المكون الرئيسي ==========
 export default function ReportsPage() {
   const navigate = useNavigate();
   const { user, loading: authLoading } = useAuth();
@@ -106,6 +100,7 @@ export default function ReportsPage() {
   const [reportData, setReportData] = useState<ReportData | null>(null);
   const [activeClinicId, setActiveClinicId] = useState<string | null>(null);
   const [clinicName, setClinicName] = useState("");
+  const [clinicLogo, setClinicLogo] = useState<string | null>(null);
   const [botUsername, setBotUsername] = useState<string | null>(null);
   const [filterType, setFilterType] = useState<"month" | "year" | "range">("month");
   const [selectedMonth, setSelectedMonth] = useState(new Date().toISOString().slice(0, 7));
@@ -115,9 +110,14 @@ export default function ReportsPage() {
   );
   const [endDate, setEndDate] = useState(new Date().toISOString().slice(0, 10));
 
-  const printRef = useRef<HTMLDivElement>(null);
+  const [toastMsg, setToastMsg] = useState<{ msg: string; type?: "ok" | "err" } | null>(null);
 
-  // ===== جلب بيانات العيادة =====
+  const showToast = (msg: string, type: "ok" | "err" = "ok") => {
+    setToastMsg({ msg, type });
+    setTimeout(() => setToastMsg(null), 3500);
+  };
+
+  // ===== جلب بيانات العيادة وصلاحيات المستخدم =====
   useEffect(() => {
     if (!authLoading && !user) {
       navigate("/auth");
@@ -140,6 +140,7 @@ export default function ReportsPage() {
 
       setActiveClinicId(clinic.id);
       setClinicName(clinic.name);
+      setClinicLogo(clinic.logo_url || null);
       setBotUsername(clinic.bot_username || "SmartClinc_bot");
 
       await fetchReportData(clinic.id);
@@ -149,7 +150,7 @@ export default function ReportsPage() {
     fetchClinicAndData();
   }, [user, authLoading, navigate]);
 
-  // ===== جلب بيانات التقارير =====
+  // ===== جلب البيانات الإحصائية والمالية الفورية من قاعدة البيانات =====
   const fetchReportData = async (clinicId: string) => {
     try {
       let start = "";
@@ -280,11 +281,7 @@ export default function ReportsPage() {
       });
     } catch (error) {
       console.error(error);
-      toast({
-        title: "خطأ",
-        description: "فشل في جلب بيانات التقارير",
-        variant: "destructive",
-      });
+      toast({ title: "خطأ", description: "فشل في جلب بيانات التقارير", variant: "destructive" });
     }
   };
 
@@ -294,589 +291,419 @@ export default function ReportsPage() {
     }
   }, [filterType, selectedMonth, selectedYear, startDate, endDate]);
 
-  // ===== تصدير CSV =====
+  // ===== تفعيل الطباعة المباشرة والذكية للمتصفح =====
+  const handlePrint = () => {
+    showToast("جاري إعداد صفحة الطباعة وحفظ الـ PDF السليم...");
+    setTimeout(() => {
+      window.print();
+    }, 500);
+  };
+
+  // ===== تصدير البيانات إلى ملف مبيعات سريع Excel/CSV =====
   const handleDownloadCSV = () => {
     if (!reportData) return;
-    const rows = ["التاريخ,المواعيد,الإيرادات"];
+    const rows = ["التاريخ,المواعيد,الإيرادات (ر.ي)"];
     reportData.dailyAppointments.forEach((d) => {
-      const rev = reportData.dailyRevenue.find((r) => r.date === d.date);
+      const rev = reportData.dailyRevenue.find(r => r.date === d.date);
       rows.push(`${d.date},${d.count},${rev?.amount || 0}`);
     });
-    const blob = new Blob(["\uFEFF" + rows.join("\n")], {
-      type: "text/csv;charset=utf-8;",
-    });
+    const blob = new Blob(["\uFEFF" + rows.join("\n")], { type: "text/csv;charset=utf-8;" });
     const url = URL.createObjectURL(blob);
     const a = document.createElement("a");
     a.href = url;
     a.download = `Report_${new Date().toISOString().slice(0, 10)}.csv`;
     a.click();
     URL.revokeObjectURL(url);
-    toast({ title: "نجاح", description: "تم تحميل ملف CSV" });
+    showToast("تم تحميل تقرير CSV بنجاح المباشر");
   };
-
-  // ===== طباعة =====
-  const handlePrint = () => window.print();
 
   if (authLoading || loading) {
     return (
-      <div className="min-h-screen flex items-center justify-center bg-slate-50">
-        <div className="flex flex-col items-center gap-4">
-          <div className="relative">
-            <div className="w-16 h-16 rounded-full border-4 border-blue-100 animate-spin border-t-blue-600" />
-            <Activity className="w-6 h-6 text-blue-600 absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2" />
-          </div>
-          <p className="text-slate-600 font-medium">جاري التحميل...</p>
-        </div>
+      <div className="min-h-screen flex flex-col items-center justify-center bg-slate-50">
+        <Loader2 className="w-12 h-12 animate-spin text-[#b45309]" />
+        <p className="mt-4 text-slate-600 font-bold animate-pulse text-sm">جاري جلب وتحليل مؤشرات الأداء الحالية...</p>
       </div>
     );
   }
 
+  const effectiveBotUsername = botUsername || "SmartClinc_bot";
   const qrLink = activeClinicId
-    ? `https://t.me/${botUsername || "SmartClinc_bot"}?start=clinic_${activeClinicId}`
+    ? `https://t.me/${effectiveBotUsername}?start=clinic_${activeClinicId}`
     : "";
 
   return (
-    <div className="min-h-screen bg-slate-50" dir="rtl">
-      {/* QR مخفي */}
-      <div className="fixed -top-full -left-full opacity-0 pointer-events-none">
-        <QRCodeCanvas
-          id="hidden-qr-canvas"
-          value={qrLink}
-          size={240}
-          level="H"
-          includeMargin
-        />
-      </div>
+    <div className="min-h-screen flex flex-col transition-all duration-300" style={{ background: C.bg, direction: "rtl" }}>
+      
+      {/* التنبيهات المخصصة الأنيقة */}
+      {toastMsg && (
+        <div className="fixed bottom-6 left-6 z-[9999] px-5 py-3.5 rounded-2xl shadow-2xl text-white text-xs font-black flex items-center gap-2.5 bg-slate-900 border border-slate-800 animate-slide-in">
+          <CheckCircle2 className="w-4 h-4 text-emerald-400" />
+          <span>{toastMsg.msg}</span>
+        </div>
+      )}
 
-      {/* الهيدر */}
-      <header
-        className="sticky top-0 z-50 bg-white shadow-sm print:hidden border-b-4"
-        style={{ borderBottomColor: COLORS.gold }}
-      >
-        <div className="container mx-auto px-4">
-          <div className="flex items-center justify-between h-16">
+      {/* ===== هيدر التحكم العلوي (يختفي تلقائياً عند الطباعة) ===== */}
+      <header className="sticky top-0 z-50 print:hidden shadow-lg backdrop-blur-md bg-opacity-95" style={{ background: C.primary }}>
+        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+          <div className="flex items-center justify-between h-20 gap-4">
+            
             <button
               onClick={() => navigate("/dashboard")}
-              className="flex items-center gap-2 text-slate-600 hover:text-blue-600 transition-colors"
+              className="flex items-center gap-1.5 text-slate-300 hover:text-white transition-all text-xs font-bold px-3 py-2 rounded-xl border border-slate-700 hover:bg-slate-800"
             >
-              <ArrowLeft className="w-5 h-5" />
-              <span className="text-sm font-medium">العودة</span>
+              <ChevronLeft className="w-4 h-4 rotate-180" />
+              العودة للرئيسية
             </button>
 
             <div className="flex items-center gap-3">
-              <div
-                className="w-10 h-10 rounded-xl flex items-center justify-center"
-                style={{
-                  background: `linear-gradient(135deg, ${COLORS.primary} 0%, ${COLORS.primaryLight} 100%)`,
-                }}
-              >
+              <div className="w-10 h-10 rounded-xl flex items-center justify-center shadow-lg" style={{ background: C.goldGradient }}>
                 <Building2 className="w-5 h-5 text-white" />
               </div>
               <div>
-                <h1 className="text-lg font-bold text-slate-800">تقارير {clinicName}</h1>
-                <p className="text-xs text-slate-500">لوحة التحليلات الشاملة</p>
+                <h1 className="text-white font-black text-sm sm:text-base leading-tight">تقارير {clinicName}</h1>
+                <p className="text-slate-400 text-[10px] sm:text-xs">المؤشرات الإحصائية والمالية الشاملة</p>
               </div>
             </div>
 
             <div className="flex items-center gap-2">
               <button
-                onClick={handleDownloadCSV}
-                className="flex items-center gap-2 px-4 py-2 rounded-lg border border-slate-300 text-slate-700 hover:bg-slate-100 transition-all"
-              >
-                <Download className="w-4 h-4" />
-                <span className="hidden sm:inline">CSV</span>
-              </button>
-              <button
                 onClick={handlePrint}
-                className="flex items-center gap-2 px-4 py-2 rounded-lg text-white transition-all hover:opacity-90"
-                style={{
-                  background: `linear-gradient(135deg, ${COLORS.gold} 0%, ${COLORS.goldLight} 100%)`,
-                }}
+                className="flex items-center gap-1.5 px-4 py-2.5 rounded-xl text-xs font-extrabold text-white transition-all transform active:scale-95 hover:brightness-110 shadow-md"
+                style={{ background: C.goldGradient }}
               >
                 <Printer className="w-4 h-4" />
-                <span className="hidden sm:inline">طباعة</span>
+                طباعة وحفظ كـ PDF
+              </button>
+              
+              <button
+                onClick={handleDownloadCSV}
+                className="hidden sm:flex items-center gap-1.5 px-3 py-2.5 rounded-xl text-xs font-bold text-slate-300 border border-slate-700 hover:bg-slate-800 transition-all"
+              >
+                <Download className="w-4 h-4" />
+                تنزيل CSV
               </button>
             </div>
+
           </div>
         </div>
+        <div className="h-[2px]" style={{ background: `linear-gradient(90deg, ${C.gold}, ${C.goldLight}, ${C.gold})` }} />
       </header>
 
-      {/* المحتوى الرئيسي */}
-      <main className="container mx-auto px-4 py-6 space-y-6 max-w-7xl">
-        {/* شريط الفلترة */}
-        <div className="bg-white rounded-xl shadow-sm border border-slate-200 p-4 print:hidden">
-          <div className="flex flex-wrap items-center gap-3">
-            <div className="flex items-center gap-2 text-slate-600">
-              <Filter className="w-4 h-4" />
-              <span className="text-sm font-medium">فلترة التقرير</span>
+      {/* ===== المحتوى الرئيسي للتقارير ===== */}
+      <main className="flex-1 max-w-7xl w-full mx-auto px-4 sm:px-6 lg:px-8 py-8 space-y-6">
+
+        {/* شريط الفلترة المتقدم (يختفي عند الطباعة) */}
+        <div className="bg-white rounded-2xl shadow-sm border border-slate-100 p-5 print:hidden">
+          <div className="flex flex-wrap items-center justify-between gap-4">
+            
+            <div className="flex items-center gap-3">
+              <div className="p-2.5 bg-slate-50 rounded-xl">
+                <Filter className="w-4 h-4 text-slate-500" />
+              </div>
+              <div>
+                <span className="block text-xs font-bold text-slate-800">تخصيص النطاق الزمني</span>
+                <span className="block text-[10px] text-slate-400">حدد طريقة عرض الأداء الإحصائي للتقرير</span>
+              </div>
             </div>
 
-            <select
-              value={filterType}
-              onChange={(e) => setFilterType(e.target.value as any)}
-              className="border border-slate-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
-            >
-              <option value="month">شهر محدد</option>
-              <option value="year">سنة كاملة</option>
-              <option value="range">نطاق مخصص</option>
-            </select>
-
-            {filterType === "month" && (
-              <input
-                type="month"
-                value={selectedMonth}
-                onChange={(e) => setSelectedMonth(e.target.value)}
-                className="border border-slate-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
-              />
-            )}
-
-            {filterType === "year" && (
+            <div className="flex flex-wrap items-center gap-3">
               <select
-                value={selectedYear}
-                onChange={(e) => setSelectedYear(e.target.value)}
-                className="border border-slate-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                value={filterType}
+                onChange={(e) => setFilterType(e.target.value as any)}
+                className="border border-slate-200 rounded-xl px-3 py-2.5 text-xs bg-slate-50 font-bold focus:outline-none focus:ring-2 focus:ring-[#b45309]"
               >
-                {Array.from({ length: 10 }, (_, i) => new Date().getFullYear() - i).map(
-                  (y) => (
-                    <option key={y} value={y}>
-                      {y}
-                    </option>
-                  )
-                )}
+                <option value="month">شهر محدد</option>
+                <option value="year">عام كامل</option>
+                <option value="range">تاريخ مخصص</option>
               </select>
-            )}
 
-            {filterType === "range" && (
-              <div className="flex items-center gap-2">
+              {filterType === "month" && (
                 <input
-                  type="date"
-                  value={startDate}
-                  onChange={(e) => setStartDate(e.target.value)}
-                  className="border border-slate-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  type="month"
+                  value={selectedMonth}
+                  onChange={(e) => setSelectedMonth(e.target.value)}
+                  className="border border-slate-200 rounded-xl px-3 py-2 text-xs bg-slate-50 font-bold focus:outline-none focus:ring-2 focus:ring-[#b45309]"
                 />
-                <span className="text-slate-400">إلى</span>
-                <input
-                  type="date"
-                  value={endDate}
-                  onChange={(e) => setEndDate(e.target.value)}
-                  className="border border-slate-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
-                />
-              </div>
-            )}
+              )}
 
-            <button
-              onClick={() => activeClinicId && fetchReportData(activeClinicId)}
-              className="flex items-center gap-2 px-4 py-2 rounded-lg text-white font-medium"
-              style={{ background: COLORS.primary }}
-            >
-              <RefreshCw className="w-4 h-4" />
-              تحديث
-            </button>
+              {filterType === "year" && (
+                <select
+                  value={selectedYear}
+                  onChange={(e) => setSelectedYear(e.target.value)}
+                  className="border border-slate-200 rounded-xl px-3 py-2.5 text-xs bg-slate-50 font-bold focus:outline-none focus:ring-2 focus:ring-[#b45309]"
+                >
+                  {Array.from({ length: 5 }, (_, i) => new Date().getFullYear() - i).map((y) => (
+                    <option key={y} value={y}>{y}</option>
+                  ))}
+                </select>
+              )}
+
+              {filterType === "range" && (
+                <div className="flex items-center gap-2 bg-slate-50 px-3 py-1.5 rounded-xl border border-slate-200">
+                  <input
+                    type="date"
+                    value={startDate}
+                    onChange={(e) => setStartDate(e.target.value)}
+                    className="border-none bg-transparent text-xs font-bold focus:outline-none"
+                  />
+                  <span className="text-slate-300 font-bold">←</span>
+                  <input
+                    type="date"
+                    value={endDate}
+                    onChange={(e) => setEndDate(e.target.value)}
+                    className="border-none bg-transparent text-xs font-bold focus:outline-none"
+                  />
+                </div>
+              )}
+
+              <button
+                onClick={() => activeClinicId && fetchReportData(activeClinicId)}
+                className="flex items-center gap-1.5 px-4 py-2.5 rounded-xl text-xs font-bold text-white hover:brightness-110 active:scale-95 transition-all shadow-sm"
+                style={{ background: C.primary }}
+              >
+                <RefreshCw className="w-3.5 h-3.5" />
+                تحديث البيانات
+              </button>
+            </div>
+
           </div>
         </div>
 
-        {loading ? (
-          <div className="flex items-center justify-center py-20">
-            <Loader2 className="w-12 h-12 animate-spin text-primary" />
+        {/* تنبيه ذكي لتوضيح كيفية حفظ الـ PDF بدون أخطاء خط عربي */}
+        <div className="bg-amber-50 border border-amber-200 rounded-2xl p-4 flex items-start gap-3 print:hidden">
+          <div className="text-amber-700 mt-0.5">ℹ️</div>
+          <div className="space-y-0.5">
+            <h4 className="text-xs font-extrabold text-amber-900">للحصول على نسخة PDF مطبوعة ومثالية وخالية من عيوب اللغة العربية:</h4>
+            <p className="text-[11px] text-amber-800 leading-relaxed">
+              انقر فوق زر <b>"طباعة وحفظ كـ PDF"</b> بالأعلى، ثم من خيارات الطابعة التي تظهر أمامك بالمتصفح؛ قم بتغيير الوجهة (Destination) إلى <b>"حفظ بتنسيق PDF" (Save as PDF)</b> للحصول على أفضل جودة ملف وتصميم.
+            </p>
           </div>
-        ) : reportData ? (
-          <div ref={printRef} className="space-y-6">
-            {/* عنوان للطباعة */}
-            <div className="hidden print:flex items-center justify-between mb-6 pb-4 border-b-2 border-slate-200">
+        </div>
+
+        {/* لوحة التقارير المعروضة بالكامل للطباعة والتصميم المباشر */}
+        {reportData ? (
+          <div id="report-content" className="space-y-6">
+
+            {/* الهيدر المخصص للورقة والطباعة المباشرة (يظهر في الطباعة فقط) */}
+            <div className="hidden print:flex items-center justify-between pb-6 border-b-2 border-slate-200 mb-4">
               <div className="flex items-center gap-3">
-                <Building2 className="w-10 h-10" style={{ color: COLORS.primary }} />
+                <Building2 className="w-8 h-8 text-[#b45309]" />
                 <div>
-                  <h2 className="text-2xl font-bold" style={{ color: COLORS.primary }}>
-                    {clinicName}
-                  </h2>
-                  <p className="text-sm text-slate-600">
-                    التقرير الشامل - {new Date().toLocaleDateString("ar-SA")}
-                  </p>
+                  <h2 className="text-xl font-black text-slate-900">{clinicName}</h2>
+                  <p className="text-xs text-slate-500">تقرير الأداء الطبي والمالي العام للفترة الحالية</p>
                 </div>
               </div>
-              <QRCodeCanvas value={qrLink} size={80} level="M" />
+              <QRCodeCanvas value={qrLink} size={60} level="M" />
             </div>
 
-            {/* بطاقات KPI */}
-            <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-4">
+            {/* شبكة بطاقات الأرقام والمؤشرات الحيوية (KPIs) */}
+            <div className="grid grid-cols-2 lg:grid-cols-6 gap-4">
               {[
-                {
-                  label: "إجمالي المرضى",
-                  value: formatNumber(reportData.totalPatients),
-                  icon: Users,
-                  gradient: `linear-gradient(135deg, ${COLORS.blue} 0%, #1557b0 100%)`,
-                },
-                {
-                  label: "إجمالي المواعيد",
-                  value: formatNumber(reportData.totalAppointments),
-                  icon: Calendar,
-                  gradient: `linear-gradient(135deg, ${COLORS.green} 0%, #059669 100%)`,
-                },
-                {
-                  label: "إجمالي الإيرادات",
-                  value: formatNumber(reportData.totalRevenue) + " ر.ي",
-                  icon: DollarSign,
-                  gradient: `linear-gradient(135deg, ${COLORS.gold} 0%, #b8962d 100%)`,
-                },
-                {
-                  label: "نسبة الحضور",
-                  value: reportData.attendanceRate + "%",
-                  icon: TrendingUp,
-                  gradient: `linear-gradient(135deg, ${COLORS.purple} 0%, #6d28d9 100%)`,
-                },
-                {
-                  label: "مرضى جدد",
-                  value: formatNumber(reportData.newPatients),
-                  icon: Award,
-                  gradient: `linear-gradient(135deg, ${COLORS.rose} 0%, #be123c 100%)`,
-                },
-                {
-                  label: "متوسط يومي",
-                  value: formatNumber(reportData.averagePerDay),
-                  icon: Clock,
-                  gradient: `linear-gradient(135deg, ${COLORS.cyan} 0%, #0e7490 100%)`,
-                },
+                { label: "إجمالي المرضى", value: fmt(reportData.totalPatients), icon: Users, gradient: "from-blue-600 to-blue-800" },
+                { label: "إجمالي المواعيد", value: fmt(reportData.totalAppointments), icon: Calendar, gradient: "from-emerald-600 to-emerald-800" },
+                { label: "إجمالي الإيرادات", value: fmt(reportData.totalRevenue) + " ر.ي", icon: DollarSign, gradient: "from-amber-600 to-amber-800" },
+                { label: "معدل الحضور والالتزام", value: reportData.attendanceRate + "%", icon: TrendingUp, gradient: "from-purple-600 to-purple-800" },
+                { label: "المرضى الجدد", value: fmt(reportData.newPatients), icon: Award, gradient: "from-rose-600 to-rose-800" },
+                { label: "المعدل اليومي", value: fmt(reportData.averagePerDay), icon: Clock, gradient: "from-cyan-600 to-cyan-800" },
               ].map((stat, i) => (
-                <div
-                  key={i}
-                  className="relative overflow-hidden rounded-xl shadow-lg p-4 text-white transform transition-transform hover:scale-105 print:break-inside-avoid"
-                  style={{ background: stat.gradient }}
-                >
-                  <div className="absolute -top-6 -right-6 w-24 h-24 rounded-full bg-white opacity-10" />
-                  <div className="absolute -bottom-8 -left-8 w-32 h-32 rounded-full bg-black opacity-10" />
-                  <div className="relative z-10">
-                    <div className="flex items-center justify-between mb-2">
-                      <span className="text-xs font-medium opacity-90">{stat.label}</span>
-                      <div className="bg-white bg-opacity-20 rounded-lg p-2">
+                <div key={i} className={`relative overflow-hidden rounded-2xl p-5 text-white shadow-md bg-gradient-to-br ${stat.gradient} transition-transform hover:-translate-y-1 duration-300`}>
+                  <div className="absolute -top-4 -left-4 w-16 h-16 rounded-full bg-white/10 blur-lg" />
+                  <div className="relative z-10 flex flex-col justify-between h-full gap-3">
+                    <div className="flex items-center justify-between">
+                      <span className="text-[10px] font-bold text-white/85">{stat.label}</span>
+                      <div className="bg-white/15 rounded-lg p-1.5">
                         <stat.icon className="w-4 h-4" />
                       </div>
                     </div>
-                    <p className="text-2xl font-bold">{stat.value}</p>
+                    <div className="text-xl font-black tracking-tight">{stat.value}</div>
                   </div>
                 </div>
               ))}
             </div>
 
-            {/* مؤشر الأداء */}
-            <div className="bg-white rounded-xl shadow-sm border border-slate-200 p-5 print:break-inside-avoid">
-              <h3 className="font-bold text-slate-800 text-sm mb-4 flex items-center gap-2">
-                <BarChart3 className="w-4 h-4" style={{ color: COLORS.primary }} />
-                مؤشر الأداء الشامل
-              </h3>
-              <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+            {/* لوحة قياس دقة مؤشر الأداء والالتزام العملياتي */}
+            <div className="bg-white rounded-2xl shadow-sm border border-slate-100 p-5">
+              <div className="flex items-center justify-between mb-4">
+                <span className="font-extrabold text-slate-800 text-sm">مؤشرات الجودة والفعالية السريرية</span>
+                <span className="text-xs text-emerald-600 font-bold bg-emerald-50 px-2.5 py-1 rounded-lg">معدلات ممتازة</span>
+              </div>
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
                 {[
-                  {
-                    label: "معدل الحضور",
-                    val: reportData.attendanceRate,
-                    color: COLORS.green,
-                  },
-                  {
-                    label: "نسبة المرضى الجدد",
-                    val: Math.round(
-                      (reportData.newPatients / Math.max(reportData.totalPatients, 1)) * 100
-                    ),
-                    color: COLORS.blue,
-                  },
-                  {
-                    label: "كفاءة الإيرادات",
-                    val: Math.min(
-                      100,
-                      Math.round(
-                        (reportData.totalRevenue /
-                          Math.max(reportData.totalAppointments * 500, 1)) *
-                          100
-                      )
-                    ),
-                    color: COLORS.gold,
-                  },
+                  { label: "معدل التزام وحضور المواعيد", val: reportData.attendanceRate, color: C.green },
+                  { label: "معدل نمو واستقطاب المرضى الجدد", val: Math.round((reportData.newPatients / Math.max(reportData.totalPatients, 1)) * 100), color: C.blue },
+                  { label: "كفاءة الفواتير والتحصيل المالي", val: Math.min(100, Math.round((reportData.totalRevenue / Math.max(reportData.totalAppointments * 200, 1)) * 100)), color: C.goldLight },
                 ].map((item, i) => (
-                  <div key={i} className="space-y-2">
-                    <div className="flex items-center justify-between text-sm">
+                  <div key={i} className="space-y-1.5">
+                    <div className="flex justify-between text-xs font-semibold">
                       <span className="text-slate-600">{item.label}</span>
-                      <span className="font-bold" style={{ color: item.color }}>
-                        {item.val}%
-                      </span>
+                      <span className="font-bold" style={{ color: item.color }}>{item.val}%</span>
                     </div>
                     <div className="h-2.5 bg-slate-100 rounded-full overflow-hidden">
-                      <div
-                        className="h-full rounded-full transition-all duration-1000"
-                        style={{
-                          width: item.val + "%",
-                          background: `linear-gradient(90deg, ${item.color}, ${item.color}99)`,
-                        }}
-                      />
+                      <div className="h-full rounded-full transition-all duration-1000"
+                        style={{ width: item.val + "%", background: `linear-gradient(90deg, ${item.color}, ${item.color}bb)` }} />
                     </div>
                   </div>
                 ))}
               </div>
             </div>
 
-            {/* الرسوم البيانية */}
+            {/* الرسوم البيانية الكبرى */}
             <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+              
               {/* المواعيد اليومية */}
-              <div className="bg-white rounded-xl shadow-sm border border-slate-200 p-5 print:break-inside-avoid">
-                <h3 className="text-sm font-bold text-slate-800 mb-4 flex items-center gap-2">
-                  <Calendar className="w-4 h-4" style={{ color: COLORS.blue }} />
-                  المواعيد اليومية
-                </h3>
-                <div className="h-64 print:h-48">
+              <div className="bg-white rounded-2xl shadow-sm border border-slate-100 overflow-hidden">
+                <div className="flex items-center gap-2 px-5 py-4 border-b border-slate-50">
+                  <div className="w-8 h-8 rounded-xl flex items-center justify-center bg-blue-50">
+                    <Calendar className="w-4 h-4 text-blue-600" />
+                  </div>
+                  <h3 className="font-extrabold text-slate-800 text-sm">إحصائيات المواعيد اليومية</h3>
+                </div>
+                <div className="p-4 h-64">
                   <ResponsiveContainer width="100%" height="100%">
-                    <AreaChart data={reportData.dailyAppointments.slice(-30)}>
+                    <AreaChart data={reportData.dailyAppointments.slice(-15)}>
                       <defs>
-                        <linearGradient id="colorCount" x1="0" y1="0" x2="0" y2="1">
-                          <stop offset="5%" stopColor={COLORS.blue} stopOpacity={0.3} />
-                          <stop offset="95%" stopColor={COLORS.blue} stopOpacity={0} />
+                        <linearGradient id="gBlue" x1="0" y1="0" x2="0" y2="1">
+                          <stop offset="5%" stopColor={C.blue} stopOpacity={0.25} />
+                          <stop offset="95%" stopColor={C.blue} stopOpacity={0.01} />
                         </linearGradient>
                       </defs>
-                      <CartesianGrid strokeDasharray="3 3" stroke="#f0f0f0" />
-                      <XAxis
-                        dataKey="date"
-                        tickFormatter={shortDate}
-                        tick={{ fontSize: 10, fill: COLORS.slate }}
-                      />
-                      <YAxis tick={{ fontSize: 10, fill: COLORS.slate }} />
+                      <CartesianGrid strokeDasharray="3 3" stroke="#f1f5f9" />
+                      <XAxis dataKey="date" tickFormatter={shortDate} tick={{ fontSize: 9, fill: C.slate }} />
+                      <YAxis tick={{ fontSize: 9, fill: C.slate }} />
                       <Tooltip />
-                      <Area
-                        type="monotone"
-                        dataKey="count"
-                        name="المواعيد"
-                        stroke={COLORS.blue}
-                        strokeWidth={2}
-                        fill="url(#colorCount)"
-                      />
+                      <Area type="monotone" dataKey="count" name="المواعيد" stroke={C.blue} strokeWidth={2.5}
+                        fill="url(#gBlue)" dot={{ r: 3, fill: C.blue, strokeWidth: 0 }} />
                     </AreaChart>
                   </ResponsiveContainer>
                 </div>
               </div>
 
               {/* الإيرادات اليومية */}
-              <div className="bg-white rounded-xl shadow-sm border border-slate-200 p-5 print:break-inside-avoid">
-                <h3 className="text-sm font-bold text-slate-800 mb-4 flex items-center gap-2">
-                  <DollarSign className="w-4 h-4" style={{ color: COLORS.gold }} />
-                  الإيرادات اليومية
-                </h3>
-                <div className="h-64 print:h-48">
+              <div className="bg-white rounded-2xl shadow-sm border border-slate-100 overflow-hidden">
+                <div className="flex items-center gap-2 px-5 py-4 border-b border-slate-50">
+                  <div className="w-8 h-8 rounded-xl flex items-center justify-center bg-amber-50">
+                    <DollarSign className="w-4 h-4 text-amber-600" />
+                  </div>
+                  <h3 className="font-extrabold text-slate-800 text-sm">حركة نمو الإيرادات اليومية</h3>
+                </div>
+                <div className="p-4 h-64">
                   <ResponsiveContainer width="100%" height="100%">
-                    <AreaChart data={reportData.dailyRevenue.slice(-30)}>
+                    <AreaChart data={reportData.dailyRevenue.slice(-15)}>
                       <defs>
-                        <linearGradient id="colorRevenue" x1="0" y1="0" x2="0" y2="1">
-                          <stop offset="5%" stopColor={COLORS.gold} stopOpacity={0.3} />
-                          <stop offset="95%" stopColor={COLORS.gold} stopOpacity={0} />
+                        <linearGradient id="gGold" x1="0" y1="0" x2="0" y2="1">
+                          <stop offset="5%" stopColor={C.goldLight} stopOpacity={0.25} />
+                          <stop offset="95%" stopColor={C.goldLight} stopOpacity={0.01} />
                         </linearGradient>
                       </defs>
-                      <CartesianGrid strokeDasharray="3 3" stroke="#f0f0f0" />
-                      <XAxis
-                        dataKey="date"
-                        tickFormatter={shortDate}
-                        tick={{ fontSize: 10, fill: COLORS.slate }}
-                      />
-                      <YAxis
-                        tick={{ fontSize: 10, fill: COLORS.slate }}
-                        tickFormatter={formatNumber}
-                      />
+                      <CartesianGrid strokeDasharray="3 3" stroke="#f1f5f9" />
+                      <XAxis dataKey="date" tickFormatter={shortDate} tick={{ fontSize: 9, fill: C.slate }} />
+                      <YAxis tick={{ fontSize: 9, fill: C.slate }} tickFormatter={(v) => fmt(v)} />
                       <Tooltip />
-                      <Area
-                        type="monotone"
-                        dataKey="amount"
-                        name="الإيرادات"
-                        stroke={COLORS.gold}
-                        strokeWidth={2}
-                        fill="url(#colorRevenue)"
-                      />
+                      <Area type="monotone" dataKey="amount" name="الإيرادات" stroke={C.goldLight} strokeWidth={2.5}
+                        fill="url(#gGold)" dot={{ r: 3, fill: C.goldLight, strokeWidth: 0 }} />
                     </AreaChart>
                   </ResponsiveContainer>
                 </div>
               </div>
+
             </div>
 
-            {/* توزيع الخدمات + أفضل الخدمات */}
-            <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-              <div className="bg-white rounded-xl shadow-sm border border-slate-200 p-5 lg:col-span-2 print:break-inside-avoid">
-                <h3 className="text-sm font-bold text-slate-800 mb-4 flex items-center gap-2">
-                  <Activity className="w-4 h-4" style={{ color: COLORS.purple }} />
-                  توزيع الخدمات
-                </h3>
-                <div className="h-72 print:h-56">
+            {/* توزيع الخدمات الطبية وعيادات التخصص الأعلى أداءً */}
+            <div className="grid grid-cols-1 lg:grid-cols-5 gap-6 page-break-before">
+              
+              <div className="bg-white rounded-2xl shadow-sm border border-slate-100 overflow-hidden lg:col-span-3">
+                <div className="flex items-center gap-2 px-5 py-4 border-b border-slate-50">
+                  <div className="w-8 h-8 rounded-xl flex items-center justify-center bg-purple-50">
+                    <Activity className="w-4 h-4 text-purple-600" />
+                  </div>
+                  <h3 className="font-extrabold text-slate-800 text-sm">توزيع الخدمات والعيادات</h3>
+                </div>
+                <div className="p-4 h-72">
                   <ResponsiveContainer width="100%" height="100%">
                     <PieChart>
                       <Pie
                         data={reportData.serviceDistribution}
                         cx="50%"
                         cy="50%"
-                        innerRadius="50%"
-                        outerRadius="80%"
-                        paddingAngle={2}
+                        innerRadius="48%"
+                        outerRadius="72%"
+                        paddingAngle={4}
                         dataKey="value"
                       >
                         {reportData.serviceDistribution.map((_, idx) => (
-                          <Cell
-                            key={idx}
-                            fill={PIE_COLORS[idx % PIE_COLORS.length]}
-                          />
+                          <Cell key={idx} fill={PIE_COLORS[idx % PIE_COLORS.length]} />
                         ))}
                       </Pie>
-                      <Tooltip
-                        formatter={(val) => [formatNumber(Number(val)) + " موعد", ""]}
-                      />
-                      <Legend
-                        layout="vertical"
-                        align="right"
-                        verticalAlign="middle"
-                        iconType="circle"
-                        iconSize={8}
-                      />
+                      <Tooltip formatter={(val) => [fmt(Number(val)) + " موعد", ""]} />
+                      <Legend iconType="circle" iconSize={8} wrapperStyle={{ fontSize: 11 }} />
                     </PieChart>
                   </ResponsiveContainer>
                 </div>
               </div>
 
-              <div className="bg-white rounded-xl shadow-sm border border-slate-200 p-5 print:break-inside-avoid">
-                <h3 className="text-sm font-bold text-slate-800 mb-4 flex items-center gap-2">
-                  <Award className="w-4 h-4" style={{ color: COLORS.orange }} />
-                  أفضل الخدمات
-                </h3>
-                <div className="space-y-3">
+              <div className="bg-white rounded-2xl shadow-sm border border-slate-100 overflow-hidden lg:col-span-2 flex flex-col justify-between">
+                <div className="flex items-center gap-2 px-5 py-4 border-b border-slate-50">
+                  <div className="w-8 h-8 rounded-xl flex items-center justify-center bg-rose-50">
+                    <Award className="w-4 h-4 text-rose-600" />
+                  </div>
+                  <h3 className="font-extrabold text-slate-800 text-sm">الخدمات الأكثر طلباً</h3>
+                </div>
+                <div className="p-5 space-y-4 flex-1 flex flex-col justify-center">
                   {reportData.topServices.map((s, i) => {
                     const max = reportData.topServices[0]?.value || 1;
                     const pct = (s.value / max) * 100;
+                    const colors = [C.blue, C.green, C.goldLight, C.purple, C.rose];
                     return (
-                      <div key={i}>
-                        <div className="flex items-center justify-between text-xs mb-1">
-                          <span className="text-slate-700 font-medium">{s.name}</span>
-                          <span className="font-bold text-slate-800">
-                            {formatNumber(s.value)}
-                          </span>
+                      <div key={i} className="space-y-1">
+                        <div className="flex items-center justify-between text-xs">
+                          <span className="text-slate-700 font-bold truncate max-w-[150px]">{s.name}</span>
+                          <span className="font-black" style={{ color: colors[i] }}>{fmt(s.value)}</span>
                         </div>
                         <div className="h-2 bg-slate-100 rounded-full overflow-hidden">
-                          <div
-                            className="h-full rounded-full transition-all duration-500"
-                            style={{
-                              width: pct + "%",
-                              background: PIE_COLORS[i % PIE_COLORS.length],
-                            }}
-                          />
+                          <div className="h-full rounded-full transition-all duration-1000"
+                            style={{ width: pct + "%", background: colors[i] }} />
                         </div>
                       </div>
                     );
                   })}
                 </div>
               </div>
+
             </div>
 
-            {/* المقارنة الشهرية */}
-            <div className="bg-white rounded-xl shadow-sm border border-slate-200 p-5 print:break-inside-avoid">
-              <h3 className="text-sm font-bold text-slate-800 mb-4 flex items-center gap-2">
-                <TrendingUp className="w-4 h-4" style={{ color: COLORS.teal }} />
-                المقارنة الشهرية (آخر 6 أشهر)
-              </h3>
-              <div className="h-72 print:h-56">
-                <ResponsiveContainer width="100%" height="100%">
-                  <BarChart data={reportData.monthlyComparison}>
-                    <CartesianGrid strokeDasharray="3 3" stroke="#f0f0f0" />
-                    <XAxis
-                      dataKey="month"
-                      tickFormatter={getMonthLabel}
-                      tick={{ fontSize: 10, fill: COLORS.slate }}
-                    />
-                    <YAxis
-                      yAxisId="left"
-                      tick={{ fontSize: 10, fill: COLORS.slate }}
-                    />
-                    <YAxis
-                      yAxisId="right"
-                      orientation="right"
-                      tick={{ fontSize: 10, fill: COLORS.slate }}
-                    />
-                    <Tooltip />
-                    <Legend />
-                    <Bar
-                      yAxisId="left"
-                      dataKey="appointments"
-                      name="المواعيد"
-                      fill={COLORS.blue}
-                      radius={[4, 4, 0, 0]}
-                    />
-                    <Bar
-                      yAxisId="right"
-                      dataKey="revenue"
-                      name="الإيرادات"
-                      fill={COLORS.gold}
-                      radius={[4, 4, 0, 0]}
-                    />
-                  </BarChart>
-                </ResponsiveContainer>
-              </div>
-            </div>
-
-            {/* جدول التفاصيل */}
-            <div className="bg-white rounded-xl shadow-sm border border-slate-200 overflow-hidden print:break-inside-avoid">
-              <div className="px-5 py-4 border-b border-slate-200">
-                <h3 className="text-sm font-bold text-slate-800 flex items-center gap-2">
-                  <FileText className="w-4 h-4" style={{ color: COLORS.teal }} />
-                  تفاصيل يومية
-                </h3>
+            {/* جدول تفصيلي بالأداء اليومي للمبيعات للطباعة المباشرة */}
+            <div className="bg-white rounded-2xl shadow-sm border border-slate-100 overflow-hidden">
+              <div className="flex items-center justify-between px-5 py-4 border-b border-slate-50">
+                <div className="flex items-center gap-2">
+                  <div className="w-8 h-8 rounded-xl flex items-center justify-center bg-teal-50">
+                    <FileText className="w-4 h-4 text-teal-600" />
+                  </div>
+                  <h3 className="font-extrabold text-slate-800 text-sm">سجلات الأداء والتحصيل للفترة الحالية</h3>
+                </div>
+                <span className="text-xxs text-slate-400 font-bold">عرض 10 أيام</span>
               </div>
               <div className="overflow-x-auto">
-                <table className="w-full">
-                  <thead className="bg-slate-50">
-                    <tr>
-                      <th className="px-4 py-3 text-right text-xs font-bold text-slate-600">
-                        التاريخ
-                      </th>
-                      <th className="px-4 py-3 text-center text-xs font-bold text-slate-600">
-                        المواعيد
-                      </th>
-                      <th className="px-4 py-3 text-center text-xs font-bold text-slate-600">
-                        الإيرادات
-                      </th>
-                      <th className="px-4 py-3 text-center text-xs font-bold text-slate-600">
-                        الحالة
-                      </th>
+                <table className="w-full text-right border-collapse">
+                  <thead>
+                    <tr className="bg-slate-50 border-b border-slate-100 text-slate-500 text-xs font-bold">
+                      <th className="p-4">التاريخ</th>
+                      <th className="p-4">عدد المواعيد</th>
+                      <th className="p-4">مجموع المبيعات المحصلة</th>
+                      <th className="p-4">مستوى الكفاءة العامة</th>
                     </tr>
                   </thead>
-                  <tbody>
-                    {reportData.dailyAppointments.slice(0, 15).map((day, idx) => {
-                      const rev = reportData.dailyRevenue.find(
-                        (r) => r.date === day.date
-                      );
-                      const avg = reportData.averagePerDay;
-                      const status =
-                        day.count > avg * 1.2
-                          ? {
-                              label: "ممتاز",
-                              color: "text-green-600",
-                              bg: "bg-green-50",
-                            }
-                          : day.count < avg * 0.8
-                          ? {
-                              label: "منخفض",
-                              color: "text-red-600",
-                              bg: "bg-red-50",
-                            }
-                          : {
-                              label: "معتدل",
-                              color: "text-amber-600",
-                              bg: "bg-amber-50",
-                            };
+                  <tbody className="divide-y divide-slate-100 text-xs font-bold text-slate-700">
+                    {reportData.dailyAppointments.slice(0, 10).map((day, idx) => {
+                      const rev = reportData.dailyRevenue.find(r => r.date === day.date);
+                      const isHigh = day.count >= reportData.averagePerDay;
                       return (
-                        <tr
-                          key={idx}
-                          className={idx % 2 === 0 ? "bg-white" : "bg-slate-50"}
-                        >
-                          <td className="px-4 py-3 text-sm text-slate-700">
-                            {day.date}
-                          </td>
-                          <td className="px-4 py-3 text-center text-sm font-bold text-slate-800">
-                            {formatNumber(day.count)}
-                          </td>
-                          <td className="px-4 py-3 text-center text-sm font-bold text-amber-600">
-                            {formatNumber(rev?.amount || 0)} ر.ي
-                          </td>
-                          <td className="px-4 py-3 text-center">
-                            <span
-                              className={`text-xs font-bold px-2 py-1 rounded-lg ${status.bg} ${status.color}`}
-                            >
-                              {status.label}
+                        <tr key={idx} className="hover:bg-slate-50/50 transition-colors">
+                          <td className="p-4 text-slate-500 font-mono">{day.date}</td>
+                          <td className="p-4">{fmt(day.count)}</td>
+                          <td className="p-4 text-[#b45309]">{fmt(rev?.amount || 0)} ر.ي</td>
+                          <td className="p-4">
+                            <span className={`inline-block text-[10px] px-2.5 py-0.5 rounded-md font-bold ${isHigh ? "bg-emerald-50 text-emerald-700" : "bg-amber-50 text-amber-700"}`}>
+                              {isHigh ? "ممتاز" : "مستقر"}
                             </span>
                           </td>
                         </tr>
@@ -887,147 +714,84 @@ export default function ReportsPage() {
               </div>
             </div>
 
-            {/* QR Code */}
-            <div className="bg-white rounded-xl shadow-sm border border-slate-200 p-6 print:break-inside-avoid">
-              <div className="flex flex-col md:flex-row items-center gap-6">
-                <div
-                  className="flex-shrink-0 p-4 rounded-xl border-4"
-                  style={{
-                    borderColor: COLORS.gold,
-                    boxShadow: `0 4px 20px ${COLORS.gold}33`,
-                  }}
-                >
-                  <QRCodeCanvas value={qrLink} size={120} level="H" includeMargin />
-                </div>
-                <div className="flex-1 text-center md:text-right">
-                  <h3 className="text-lg font-bold text-slate-800 mb-2">
-                    احجز موعدك عبر تيليجرام
-                  </h3>
-                  <p className="text-sm text-slate-600 mb-3">
-                    امسح رمز QR بتطبيق تيليجرام للحجز الفوري
-                  </p>
-                  <p className="text-xs text-slate-400 font-mono break-all">{qrLink}</p>
-                  <div className="mt-3 flex flex-wrap gap-2 justify-center md:justify-start">
-                    {["حجز سريع", "بدون انتظار", "تأكيد فوري"].map((tag, i) => (
-                      <span
-                        key={i}
-                        className="text-xs px-3 py-1 rounded-full font-medium text-white"
-                        style={{
-                          background: [COLORS.blue, COLORS.green, COLORS.purple][i],
-                        }}
-                      >
-                        ✓ {tag}
-                      </span>
-                    ))}
-                  </div>
+            {/* كود QR مدمج بتصميم أرينا الفخم يربط مع Telegram */}
+            <div className="bg-white rounded-3xl p-6 shadow-sm border border-slate-100 flex flex-col md:flex-row items-center gap-6">
+              <div className="p-2.5 bg-slate-50 rounded-2xl border-2 border-[#b45309] shadow-inner">
+                <QRCodeCanvas value={qrLink} size={110} level="H" includeMargin />
+              </div>
+              <div className="text-center md:text-right space-y-2 flex-1">
+                <h4 className="text-base font-extrabold text-slate-900">منظومة الحجز والتأكيد الرقمي التلقائي</h4>
+                <p className="text-xs text-slate-500 leading-relaxed max-w-xl">
+                  بإمكان المرضى مسح رمز الـ QR مباشرة من خلال تطبيق تيليجرام للوصول إلى الحجز المباشر والمؤتمت، وحجز العيادة المناسبة والتأكيد الفوري عبر السيرفر دون تدخل بشري.
+                </p>
+                <div className="flex flex-wrap gap-2 justify-center md:justify-start pt-1.5">
+                  <span className="text-[10px] bg-slate-100 text-slate-700 px-3 py-1 rounded-full font-bold">✓ حجز فوري مؤمن</span>
+                  <span className="text-[10px] bg-slate-100 text-slate-700 px-3 py-1 rounded-full font-bold">✓ كود تشفير الحالات</span>
                 </div>
               </div>
             </div>
+
           </div>
         ) : (
-          <div className="text-center py-20">
-            <Activity className="w-16 h-16 mx-auto mb-4 text-slate-300" />
-            <p className="text-slate-500">لا توجد بيانات كافية لعرض التقرير</p>
+          <div className="text-center py-20 bg-white rounded-2xl border border-slate-100">
+            <Activity className="w-12 h-12 text-slate-300 mx-auto mb-3" />
+            <p className="text-slate-500 text-sm font-bold">عذراً، لا تتوفر أي بيانات أو سجلات كافية حالياً للفترة الزمنية المحددة.</p>
           </div>
         )}
       </main>
 
-      {/* التذييل */}
-      <footer
-        className="mt-8 py-4 text-center print:hidden"
-        style={{
-          background: `linear-gradient(135deg, ${COLORS.primary} 0%, ${COLORS.primaryLight} 100%)`,
-        }}
-      >
-        <p className="text-white text-opacity-60 text-xs">
-          © {new Date().getFullYear()} {clinicName} | Smart Clinic
-        </p>
+      {/* ===== الفوتر المخصص للشاشة ===== */}
+      <footer className="bg-slate-950 py-6 border-t border-slate-900 text-center print:hidden">
+        <p className="text-slate-500 text-xxs font-bold">© {new Date().getFullYear()} {clinicName} | جميع الحقوق محفوظة لعيادتك الذكية</p>
       </footer>
 
-      {/* أنماط الطباعة */}
+      {/* ===== تنسيق الأداء الفاخر للطباعة المتصفحية الفائقة ===== */}
       <style>{`
-        @import url('https://fonts.googleapis.com/css2?family=Cairo:wght@400;600;700;800&display=swap');
+        @import url('https://fonts.googleapis.com/css2?family=Cairo:wght@400;600;700;900&display=swap');
         
         * {
-          font-family: 'Cairo', sans-serif;
+          font-family: 'Cairo', sans-serif !important;
         }
 
+        /* تحسينات تخطيط الطباعة الدقيقة */
         @media print {
           @page {
             size: A4;
-            margin: 12mm;
+            margin: 12mm 12mm 12mm 12mm;
           }
-          
           body {
-            background: white !important;
+            background-color: white !important;
             -webkit-print-color-adjust: exact !important;
             print-color-adjust: exact !important;
           }
-          
           .print\\:hidden {
             display: none !important;
           }
-          
-          .print\\:flex {
+          .hidden.print\\:flex {
             display: flex !important;
           }
-          
-          .print\\:break-inside-avoid {
-            break-inside: avoid;
-            page-break-inside: avoid;
+          #report-content {
+            width: 100% !important;
+            margin: 0 !important;
+            padding: 0 !important;
           }
-          
-          * {
+          .bg-white {
+            border: none !important;
             box-shadow: none !important;
           }
-          
-          .h-64 {
-            height: 240px !important;
+          .page-break-before {
+            page-break-before: always;
           }
-          
-          .h-72 {
-            height: 260px !important;
+          table {
+            page-break-inside: avoid;
           }
-
-          .print\\:h-48 {
-            height: 190px !important;
-          }
-
-          .print\\:h-56 {
-            height: 220px !important;
-          }
-          
-          .lg\\:grid-cols-6 {
-            grid-template-columns: repeat(3, 1fr) !important;
-          }
-          
-          .lg\\:grid-cols-2 {
-            grid-template-columns: repeat(2, 1fr) !important;
-          }
-          
-          .lg\\:col-span-2 {
-            grid-column: span 2 / span 2 !important;
-          }
-          
-          .lg\\:grid-cols-3 {
-            grid-template-columns: repeat(3, 1fr) !important;
-          }
-          
-          .space-y-6 > * + * {
-            margin-top: 1rem !important;
-          }
-
-          [style*="background"] {
-            -webkit-print-color-adjust: exact;
-            print-color-adjust: exact;
-          }
-
-          svg {
-            print-color-adjust: exact;
-            -webkit-print-color-adjust: exact;
+          tr {
+            page-break-inside: avoid;
+            page-break-after: auto;
           }
         }
       `}</style>
+
     </div>
   );
 }
