@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useState, useRef } from "react";
 import { useNavigate } from "react-router-dom";
 import { format } from "date-fns";
 import { useAuth } from "@/lib/auth";
@@ -11,10 +11,10 @@ import { toast } from "@/hooks/use-toast";
 import { 
   CalendarDays, CheckCircle, Clock, LogOut, QrCode, Search, 
   ShieldCheck, Stethoscope, Wallet, Users, TrendingUp, Timer, 
-  Camera, X 
+  Camera, X, Loader2 
 } from "lucide-react";
 import { BarChart, Bar, PieChart, Pie, Cell, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid, Legend } from "recharts";
-import { QrReader } from "react-qr-reader";
+import { Html5Qrcode } from "html5-qrcode";
 
 type Appointment = {
   id: string;
@@ -44,7 +44,10 @@ export default function ReceptionPage() {
   
   // QR Scanner states
   const [scannerOpen, setScannerOpen] = useState(false);
-  const [scanning, setScanning] = useState(false);
+  const [isScanning, setIsScanning] = useState(false);
+  const scannerRef = useRef<Html5Qrcode | null>(null);
+  const scannerContainerRef = useRef<HTMLDivElement>(null);
+  const isStartingRef = useRef(false);
 
   useEffect(() => {
     if (!authLoading && !user) navigate("/auth");
@@ -76,6 +79,18 @@ export default function ReceptionPage() {
       .subscribe();
     return () => { supabase.removeChannel(channel); };
   }, [clinic, unlocked, today]);
+
+  // Cleanup scanner on unmount
+  useEffect(() => {
+    return () => {
+      if (scannerRef.current) {
+        try {
+          scannerRef.current.stop().catch(() => {});
+          scannerRef.current.clear();
+        } catch (_) {}
+      }
+    };
+  }, []);
 
   const filtered = useMemo(() => appointments.filter((a) => {
     const matchesSearch =
@@ -130,60 +145,120 @@ export default function ReceptionPage() {
     else toast({ title: "تم تسجيل عدم الحضور", description: "أُغلق الموعد كـ (لم يصل)" });
   };
 
-  // QR Scanner Functions using react-qr-reader (ZXing by Google)
-  const handleScan = (result: any) => {
-    if (result) {
-      const decodedText = result.getText();
-      setScanning(false);
+  // ===== QR Scanner Functions (مع إصلاح الإغلاق الفوري) =====
+  const startScanner = async () => {
+    // منع فتح الماسح مرتين
+    if (isStartingRef.current) return;
+    isStartingRef.current = true;
+
+    setScannerOpen(true);
+    setIsScanning(true);
+    
+    // الانتظار حتى يظهر العنصر في DOM
+    await new Promise(resolve => setTimeout(resolve, 800));
+    
+    const container = scannerContainerRef.current;
+    if (!container) {
+      setIsScanning(false);
       setScannerOpen(false);
-      
-      // Try to find appointment by ID or reservation code
-      const found = appointments.find(a => 
-        a.id === decodedText || 
-        a.reservation_code === decodedText ||
-        a.reservation_code.toLowerCase() === decodedText.toLowerCase()
-      );
-      
-      if (found) {
-        if (!found.arrived_at) {
-          markArrived(found.id);
-        } else {
-          toast({ title: "تنبيه", description: "هذا الموعد تم تسجيل حضوره مسبقاً" });
+      isStartingRef.current = false;
+      toast({ title: "خطأ", description: "تعذر العثور على عنصر الماسح", variant: "destructive" });
+      return;
+    }
+
+    try {
+      // إنشاء كائن الماسح
+      const scanner = new Html5Qrcode("qr-reader");
+      scannerRef.current = scanner;
+
+      // بدء المسح
+      await scanner.start(
+        { 
+          facingMode: "environment",
+          aspectRatio: 1.0
+        },
+        {
+          fps: 10,
+          qrbox: { width: 250, height: 250 },
+        },
+        (decodedText) => {
+          // نجاح المسح
+          scanner.stop().catch(() => {});
+          scanner.clear();
+          setIsScanning(false);
+          setScannerOpen(false);
+          isStartingRef.current = false;
+          
+          // البحث عن الموعد
+          const found = appointments.find(a => 
+            a.id === decodedText || 
+            a.reservation_code === decodedText ||
+            a.reservation_code.toLowerCase() === decodedText.toLowerCase()
+          );
+          
+          if (found) {
+            if (!found.arrived_at) {
+              markArrived(found.id);
+            } else {
+              toast({ title: "تنبيه", description: "هذا الموعد تم تسجيل حضوره مسبقاً" });
+            }
+          } else {
+            toast({ 
+              title: "لم يتم العثور على الموعد", 
+              description: `الكود: ${decodedText}`, 
+              variant: "destructive" 
+            });
+          }
+        },
+        (error) => {
+          // تجاهل أخطاء المسح العادية
+          if (error && !error.includes("No QR code found")) {
+            console.warn("Scan error:", error);
+          }
         }
+      );
+    } catch (error: any) {
+      console.error("Scanner error:", error);
+      setIsScanning(false);
+      setScannerOpen(false);
+      isStartingRef.current = false;
+      
+      // رسائل خطأ مخصصة
+      if (error?.message?.includes("Permission") || error?.message?.includes("permission")) {
+        toast({ 
+          title: "الرجاء منح إذن الكاميرا", 
+          description: "اذهب إلى إعدادات المتصفح واسمح للكاميرا ثم أعد المحاولة", 
+          variant: "destructive" 
+        });
+      } else if (error?.message?.includes("NotAllowedError")) {
+        toast({ 
+          title: "تم رفض إذن الكاميرا", 
+          description: "يرجى منح الإذن للكاميرا في إعدادات المتصفح", 
+          variant: "destructive" 
+        });
       } else {
         toast({ 
-          title: "لم يتم العثور على الموعد", 
-          description: `الكود: ${decodedText}`, 
+          title: "خطأ في الكاميرا", 
+          description: error?.message || "تأكد من وجود كاميرا وحاول مجدداً", 
           variant: "destructive" 
         });
       }
     }
   };
 
-  const handleError = (err: any) => {
-    console.warn("QR Scanner error:", err);
-    // If it's a permission error, show a message
-    if (err?.message?.includes("Permission") || err?.message?.includes("permission")) {
-      toast({ 
-        title: "الرجاء منح إذن الكاميرا", 
-        description: "اذهب إلى إعدادات المتصفح واسمح للكاميرا ثم أعد المحاولة", 
-        variant: "destructive" 
-      });
-      setScannerOpen(false);
-      setScanning(false);
+  const stopScanner = async () => {
+    setIsScanning(false);
+    setScannerOpen(false);
+    isStartingRef.current = false;
+    if (scannerRef.current) {
+      try {
+        await scannerRef.current.stop();
+        scannerRef.current.clear();
+      } catch (_) {}
     }
   };
 
-  const startScanner = () => {
-    setScannerOpen(true);
-    setScanning(true);
-  };
-
-  const stopScanner = () => {
-    setScannerOpen(false);
-    setScanning(false);
-  };
-
+  // ===== Render =====
   if (authLoading || clinicLoading) return <div className="min-h-screen bg-mesh flex items-center justify-center text-muted-foreground">جاري التحميل...</div>;
 
   if (clinicError) {
@@ -207,7 +282,7 @@ export default function ReceptionPage() {
 
   return (
     <div className="min-h-screen bg-mesh flex flex-col">
-      {/* QR Scanner Modal using react-qr-reader */}
+      {/* Scanner Modal */}
       {scannerOpen && (
         <div className="fixed inset-0 z-50 bg-black/90 backdrop-blur-lg flex items-center justify-center p-4">
           <div className="bg-white dark:bg-gray-900 rounded-3xl max-w-md w-full p-6 shadow-2xl relative">
@@ -219,22 +294,23 @@ export default function ReceptionPage() {
             </button>
             
             <h3 className="text-lg font-bold text-center text-foreground mb-4">
-              {scanning ? "مسح QR" : "جاري التحميل..."}
+              {isScanning ? "مسح QR" : "جاري التحميل..."}
             </h3>
             
             <div className="relative aspect-square w-full max-w-sm mx-auto overflow-hidden rounded-2xl bg-black">
-              <QrReader
-                onResult={handleScan}
-                onError={handleError}
-                constraints={{ 
-                  facingMode: "environment",
-                  aspectRatio: 1
-                }}
-                containerStyle={{ width: '100%', height: '100%' }}
-                videoStyle={{ objectFit: 'cover' }}
+              <div 
+                id="qr-reader" 
+                ref={scannerContainerRef}
+                className="w-full h-full"
+                style={{ minHeight: "250px" }}
               />
-              {scanning && (
+              {isScanning && (
                 <div className="absolute inset-0 border-2 border-primary/50 rounded-2xl animate-pulse pointer-events-none" />
+              )}
+              {!isScanning && (
+                <div className="absolute inset-0 flex items-center justify-center">
+                  <Loader2 className="w-8 h-8 animate-spin text-white" />
+                </div>
               )}
             </div>
             
@@ -253,6 +329,7 @@ export default function ReceptionPage() {
         </div>
       )}
 
+      {/* PIN Lock */}
       {!unlocked && (
         <div className="fixed inset-0 z-50 bg-background/95 backdrop-blur-xl flex items-center justify-center p-4">
           <div className="card-modern p-8 w-full max-w-sm text-center space-y-5">
@@ -264,6 +341,7 @@ export default function ReceptionPage() {
         </div>
       )}
 
+      {/* Header */}
       <header className="glass-strong sticky top-0 z-40">
         <div className="container mx-auto px-4 h-18 py-3 flex items-center justify-between">
           <div className="flex items-center gap-3">
@@ -280,6 +358,7 @@ export default function ReceptionPage() {
         </div>
       </header>
 
+      {/* Main Content */}
       <main className="flex-1 container mx-auto px-4 py-6 space-y-6">
         <StatsAndCharts appointments={appointments} />
 
