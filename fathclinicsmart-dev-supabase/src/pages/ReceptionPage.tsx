@@ -21,8 +21,9 @@ import {
   Users,
   TrendingUp,
   Timer,
-  X,
   Camera,
+  X,
+  Loader2,
 } from "lucide-react";
 import {
   BarChart,
@@ -37,7 +38,7 @@ import {
   CartesianGrid,
   Legend,
 } from "recharts";
-import Html5Qrcode from "html5-qrcode";
+import { Html5Qrcode } from "html5-qrcode";
 
 type Appointment = {
   id: string;
@@ -61,21 +62,15 @@ export default function ReceptionPage() {
   const [appointments, setAppointments] = useState<Appointment[]>([]);
   const [search, setSearch] = useState("");
   const todayStr = format(new Date(), "yyyy-MM-dd");
-  const currentMonthStr = format(new Date(), "yyyy-MM");
-
-  // الفلاتر
   const [dateFilter, setDateFilter] = useState<string>(todayStr);
-  const [monthFilter, setMonthFilter] = useState<string>(""); // YYYY-MM
   const [statusFilter, setStatusFilter] = useState<string>("active");
-
-  // حالة ماسح QR
-  const [scannerOpen, setScannerOpen] = useState(false);
-  const [isScanning, setIsScanning] = useState(false);
-  const scannerRef = useRef<HTMLDivElement>(null);
-  const html5QrCodeRef = useRef<any>(null);
-
-  // تحديد اليوم للاستعلام
   const today = dateFilter;
+
+  // QR Scanner states
+  const [scannerOpen, setScannerOpen] = useState(false);
+  const [scanning, setScanning] = useState(false);
+  const scannerRef = useRef<Html5Qrcode | null>(null);
+  const scannerContainerRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
     if (!authLoading && !user) navigate("/auth");
@@ -87,62 +82,42 @@ export default function ReceptionPage() {
     if (role === "cashier") navigate("/cashier", { replace: true });
   }, [role, clinicLoading, navigate]);
 
-  // دالة جلب المواعيد مع دعم فلتر اليوم أو الشهر
   const fetchAppointments = async () => {
     if (!clinic || !unlocked) return;
-
-    let query = supabase
+    const { data, error } = await supabase
       .from("appointments")
       .select(
         "id,date,time,status,reservation_code,arrived_at,payment_status,entered_at,patients(name,phone),services(name,price)"
       )
       .eq("clinic_id", clinic.id)
+      .eq("date", today)
       .order("time", { ascending: true });
-
-    if (monthFilter) {
-      const [year, month] = monthFilter.split("-");
-      const lastDay = new Date(Number(year), Number(month), 0).getDate();
-      const startDate = `${year}-${month}-01`;
-      const endDate = `${year}-${month}-${String(lastDay).padStart(2, "0")}`;
-      query = query.gte("date", startDate).lte("date", endDate);
-    } else {
-      query = query.eq("date", today);
-    }
-
-    const { data, error } = await query;
     if (!error) setAppointments((data || []) as Appointment[]);
   };
 
-  // الاشتراك في Realtime (يعمل مع جميع الفلاتر)
   useEffect(() => {
     if (!clinic || !unlocked) return;
     fetchAppointments();
-
     const channel = supabase
-      .channel(`reception-${clinic.id}`)
+      .channel(`reception-${clinic.id}-${today}`)
       .on(
         "postgres_changes",
-        {
-          event: "*",
-          schema: "public",
-          table: "appointments",
-          filter: `clinic_id=eq.${clinic.id}`,
-        },
+        { event: "*", schema: "public", table: "appointments", filter: `clinic_id=eq.${clinic.id}` },
         fetchAppointments
       )
       .subscribe();
-
     return () => {
       supabase.removeChannel(channel);
     };
-  }, [clinic, unlocked, dateFilter, monthFilter]); // يعاد الاشتراك عند تغير الفلتر
+  }, [clinic, unlocked, today]);
 
-  // تنظيف الماسح عند الإغلاق
+  // Cleanup QR scanner on unmount
   useEffect(() => {
     return () => {
-      if (html5QrCodeRef.current) {
+      if (scannerRef.current) {
         try {
-          html5QrCodeRef.current.stop();
+          scannerRef.current.stop().catch(() => {});
+          scannerRef.current.clear();
         } catch (_) {}
       }
     };
@@ -157,14 +132,10 @@ export default function ReceptionPage() {
           a.patients?.phone?.includes(search);
         if (!matchesSearch) return false;
         if (statusFilter === "all") return true;
-        if (statusFilter === "active")
-          return !["cancelled", "completed"].includes(a.status);
-        if (statusFilter === "arrived")
-          return !!a.arrived_at && a.status !== "completed";
-        if (statusFilter === "waiting")
-          return !a.arrived_at && !["cancelled", "completed"].includes(a.status);
-        if (statusFilter === "completed")
-          return a.status === "completed" || !!a.entered_at;
+        if (statusFilter === "active") return !["cancelled", "completed"].includes(a.status);
+        if (statusFilter === "arrived") return !!a.arrived_at && a.status !== "completed";
+        if (statusFilter === "waiting") return !a.arrived_at && !["cancelled", "completed"].includes(a.status);
+        if (statusFilter === "completed") return a.status === "completed" || !!a.entered_at;
         if (statusFilter === "paid") return a.payment_status === "paid";
         return a.status === statusFilter;
       }),
@@ -173,12 +144,7 @@ export default function ReceptionPage() {
 
   const unlock = () => {
     if (pin === (clinic?.reception_pin || "1234")) setUnlocked(true);
-    else
-      toast({
-        title: "رمز غير صحيح",
-        description: "تحقق من رمز الاستقبال في الإعدادات",
-        variant: "destructive",
-      });
+    else toast({ title: "رمز غير صحيح", description: "تحقق من رمز الاستقبال في الإعدادات", variant: "destructive" });
   };
 
   const markArrived = async (appointmentId: string) => {
@@ -188,12 +154,7 @@ export default function ReceptionPage() {
       .update({ arrived_at: new Date().toISOString(), department: "استقبال" })
       .eq("id", appointmentId)
       .eq("clinic_id", clinic.id);
-    if (error)
-      toast({
-        title: "خطأ",
-        description: "فشل تحديث الموعد",
-        variant: "destructive",
-      });
+    if (error) toast({ title: "خطأ", description: "فشل تحديث الموعد", variant: "destructive" });
     else toast({ title: "تم تأكيد الحضور", description: "انتقلت الحالة إلى الصندوق" });
   };
 
@@ -204,12 +165,7 @@ export default function ReceptionPage() {
       .update({ status: "completed", department: "المعاينة" })
       .eq("id", appointmentId)
       .eq("clinic_id", clinic.id);
-    if (error)
-      toast({
-        title: "خطأ",
-        description: "فشل تسجيل الدخول",
-        variant: "destructive",
-      });
+    if (error) toast({ title: "خطأ", description: "فشل تسجيل الدخول", variant: "destructive" });
     else toast({ title: "تم الدخول", description: "أُضيفت الحالة إلى المعاينات" });
   };
 
@@ -220,106 +176,92 @@ export default function ReceptionPage() {
       .update({ status: "cancelled" })
       .eq("id", appointmentId)
       .eq("clinic_id", clinic.id);
-    if (error)
-      toast({
-        title: "خطأ",
-        description: "فشل التحديث",
-        variant: "destructive",
-      });
+    if (error) toast({ title: "خطأ", description: "فشل التحديث", variant: "destructive" });
     else toast({ title: "تم تسجيل عدم الحضور", description: "أُغلق الموعد كـ (لم يصل)" });
   };
 
-  // ========== دوال الماسح الضوئي ==========
+  // QR Scanner Functions
   const startScanner = async () => {
-    if (!scannerRef.current) return;
-    setIsScanning(true);
+    setScannerOpen(true);
+    setScanning(true);
+
+    // Wait for DOM to render
+    await new Promise((resolve) => setTimeout(resolve, 300));
+
+    if (!scannerContainerRef.current) {
+      setScanning(false);
+      toast({ title: "خطأ", description: "تعذر بدء الماسح", variant: "destructive" });
+      return;
+    }
+
     try {
-      html5QrCodeRef.current = new Html5Qrcode(scannerRef.current);
-      await html5QrCodeRef.current.start(
+      const scanner = new Html5Qrcode("qr-reader");
+      scannerRef.current = scanner;
+
+      await scanner.start(
         { facingMode: "environment" },
-        { fps: 10, qrbox: { width: 250, height: 250 } },
-        onScanSuccess,
-        onScanError
+        {
+          fps: 10,
+          qrbox: { width: 250, height: 250 },
+          aspectRatio: 1.0,
+        },
+        (decodedText) => {
+          // Stop scanner on successful scan
+          scanner.stop().catch(() => {});
+          scanner.clear();
+          setScanning(false);
+          setScannerOpen(false);
+
+          // Try to find appointment by ID or reservation code
+          const found = appointments.find(
+            (a) =>
+              a.id === decodedText ||
+              a.reservation_code === decodedText ||
+              a.reservation_code.toLowerCase() === decodedText.toLowerCase()
+          );
+
+          if (found) {
+            if (!found.arrived_at) {
+              markArrived(found.id);
+            } else {
+              toast({ title: "تنبيه", description: "هذا الموعد تم تسجيل حضوره مسبقاً" });
+            }
+          } else {
+            toast({
+              title: "لم يتم العثور على الموعد",
+              description: `الكود: ${decodedText}`,
+              variant: "destructive",
+            });
+          }
+        },
+        (error) => {
+          // Ignore errors during scanning (they're normal)
+          if (error && !error.includes("No QR code found")) {
+            console.warn("Scan error:", error);
+          }
+        }
       );
-    } catch (err) {
-      console.error("Scanner error:", err);
+    } catch (error) {
+      console.error("Scanner error:", error);
+      setScanning(false);
       toast({
-        title: "خطأ",
-        description: "تعذر تشغيل الكاميرا. تأكد من صلاحية الوصول.",
+        title: "خطأ في الكاميرا",
+        description: "تأكد من منح الإذن للكاميرا وحاول مجدداً",
         variant: "destructive",
       });
-      setIsScanning(false);
     }
   };
 
   const stopScanner = async () => {
-    if (html5QrCodeRef.current) {
+    setScanning(false);
+    setScannerOpen(false);
+    if (scannerRef.current) {
       try {
-        await html5QrCodeRef.current.stop();
-        await html5QrCodeRef.current.clear();
+        await scannerRef.current.stop();
+        scannerRef.current.clear();
       } catch (_) {}
-      html5QrCodeRef.current = null;
-    }
-    setIsScanning(false);
-  };
-
-  const onScanSuccess = async (decodedText: string, decodedResult: any) => {
-    // إيقاف الماسح فوراً
-    await stopScanner();
-    setScannerOpen(false);
-
-    // البحث عن الموعد: إما بالـ ID أو بالـ reservation_code
-    const trimmed = decodedText.trim();
-    let appointmentId: string | null = null;
-
-    // محاولة البحث بالـ ID (UUID)
-    const uuidMatch = trimmed.match(
-      /[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}/i
-    );
-    if (uuidMatch) {
-      const found = appointments.find((a) => a.id === uuidMatch[0]);
-      if (found) appointmentId = found.id;
-    }
-
-    // إذا لم يُعثر، البحث بالـ reservation_code
-    if (!appointmentId) {
-      const codeMatch = trimmed.toUpperCase().match(/RE-\d{4}/);
-      if (codeMatch) {
-        const found = appointments.find(
-          (a) => a.reservation_code.toUpperCase() === codeMatch[0]
-        );
-        if (found) appointmentId = found.id;
-      }
-    }
-
-    if (appointmentId) {
-      await markArrived(appointmentId);
-    } else {
-      toast({
-        title: "لم يتم العثور على الموعد",
-        description: "تأكد من أن الكود صحيح وأن الموعد ضمن قائمة اليوم.",
-        variant: "destructive",
-      });
     }
   };
-
-  const onScanError = (err: any) => {
-    // تجاهل الأخطاء المتكررة (حلقة القراءة)
-    // console.warn(err);
-  };
-
-  const openScanner = async () => {
-    setScannerOpen(true);
-    // انتظر قليلاً حتى يظهر الـ DOM ثم شغّل الماسح
-    setTimeout(() => startScanner(), 300);
-  };
-
-  const closeScanner = async () => {
-    await stopScanner();
-    setScannerOpen(false);
-  };
-
-  // ========== نهاية دوال الماسح ==========
 
   if (authLoading || clinicLoading)
     return (
@@ -331,9 +273,7 @@ export default function ReceptionPage() {
   if (clinicError) {
     return (
       <div className="min-h-screen bg-mesh flex items-center justify-center p-4">
-        <div className="card-modern p-6 max-w-md text-center text-destructive font-bold">
-          {clinicError}
-        </div>
+        <div className="card-modern p-6 max-w-md text-center text-destructive font-bold">{clinicError}</div>
       </div>
     );
   }
@@ -345,8 +285,8 @@ export default function ReceptionPage() {
           <div className="text-3xl">⛔</div>
           <h1 className="text-xl font-black text-foreground">لا يمكن الدخول</h1>
           <p className="text-sm text-muted-foreground leading-relaxed">
-            أنت موظف في عيادة <b>{clinic?.name || ""}</b>. هذه العيادة منتهية
-            الاشتراك. يرجى من صاحب العيادة تجديد الاشتراك.
+            أنت موظف في عيادة <b>{clinic?.name || ""}</b>. هذه العيادة منتهية الاشتراك. يرجى من صاحب العيادة تجديد
+            الاشتراك.
           </p>
           <Button onClick={signOut} className="w-full">
             تسجيل الخروج
@@ -358,7 +298,42 @@ export default function ReceptionPage() {
 
   return (
     <div className="min-h-screen bg-mesh flex flex-col">
-      {/* قفل PIN */}
+      {/* QR Scanner Modal */}
+      {scannerOpen && (
+        <div className="fixed inset-0 z-50 bg-black/90 backdrop-blur-lg flex items-center justify-center p-4">
+          <div className="bg-white dark:bg-gray-900 rounded-3xl max-w-md w-full p-6 shadow-2xl relative">
+            <button
+              onClick={stopScanner}
+              className="absolute top-3 right-3 z-10 p-2 rounded-full bg-gray-200 dark:bg-gray-700 hover:bg-gray-300 dark:hover:bg-gray-600 transition"
+            >
+              <X className="w-5 h-5" />
+            </button>
+
+            <h3 className="text-lg font-bold text-center text-foreground mb-4">
+              {scanning ? "مسح QR" : "جاري التحميل..."}
+            </h3>
+
+            <div className="relative aspect-square w-full max-w-sm mx-auto overflow-hidden rounded-2xl bg-black/10">
+              <div id="qr-reader" ref={scannerContainerRef} className="w-full h-full" />
+              {scanning && (
+                <div className="absolute inset-0 border-2 border-primary/50 rounded-2xl animate-pulse pointer-events-none" />
+              )}
+              {!scanning && (
+                <div className="absolute inset-0 flex items-center justify-center">
+                  <Loader2 className="w-8 h-8 animate-spin text-primary" />
+                </div>
+              )}
+            </div>
+
+            <p className="text-xs text-center text-muted-foreground mt-4">ضع كود QR داخل الإطار للمسح التلقائي</p>
+
+            <Button variant="outline" className="w-full mt-4" onClick={stopScanner}>
+              إلغاء
+            </Button>
+          </div>
+        </div>
+      )}
+
       {!unlocked && (
         <div className="fixed inset-0 z-50 bg-background/95 backdrop-blur-xl flex items-center justify-center p-4">
           <div className="card-modern p-8 w-full max-w-sm text-center space-y-5">
@@ -380,7 +355,6 @@ export default function ReceptionPage() {
         </div>
       )}
 
-      {/* Header */}
       <header className="glass-strong sticky top-0 z-40">
         <div className="container mx-auto px-4 h-18 py-3 flex items-center justify-between">
           <div className="flex items-center gap-3">
@@ -393,11 +367,10 @@ export default function ReceptionPage() {
             </div>
           </div>
           <div className="flex gap-2">
-            <Button
-              variant="ghost"
-              size="icon"
-              onClick={() => navigate("/cashier")}
-            >
+            <Button variant="ghost" size="icon" onClick={startScanner} className="hover:bg-primary/10">
+              <Camera className="w-5 h-5" />
+            </Button>
+            <Button variant="ghost" size="icon" onClick={() => navigate("/cashier")}>
               <Wallet className="w-5 h-5" />
             </Button>
             <Button variant="ghost" size="icon" onClick={signOut}>
@@ -408,10 +381,8 @@ export default function ReceptionPage() {
       </header>
 
       <main className="flex-1 container mx-auto px-4 py-6 space-y-6">
-        {/* الإحصائيات والرسوم البيانية */}
         <StatsAndCharts appointments={appointments} />
 
-        {/* شريط الأدوات */}
         <div className="flex flex-col md:flex-row gap-3 md:items-center">
           <div className="relative flex-1">
             <Search className="absolute right-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
@@ -422,31 +393,12 @@ export default function ReceptionPage() {
               className="pr-10"
             />
           </div>
-
-          {/* فلتر اليوم */}
           <Input
             type="date"
             value={dateFilter}
-            onChange={(e) => {
-              setDateFilter(e.target.value || todayStr);
-              setMonthFilter(""); // إلغاء فلتر الشهر عند اختيار يوم
-            }}
+            onChange={(e) => setDateFilter(e.target.value || todayStr)}
             className="md:w-44"
           />
-
-          {/* فلتر الشهر */}
-          <Input
-            type="month"
-            value={monthFilter}
-            onChange={(e) => {
-              setMonthFilter(e.target.value);
-              if (e.target.value) {
-                setDateFilter(todayStr); // إعادة تعيين اليوم للافتراضي عند اختيار شهر
-              }
-            }}
-            className="md:w-44"
-          />
-
           <select
             value={statusFilter}
             onChange={(e) => setStatusFilter(e.target.value)}
@@ -460,24 +412,12 @@ export default function ReceptionPage() {
             <option value="completed">تم الدخول</option>
             <option value="cancelled">ملغي/لم يصل</option>
           </select>
-
           <Button variant="outline" onClick={fetchAppointments}>
             <CalendarDays className="w-4 h-4" />
             تحديث
           </Button>
-
-          {/* زر مسح QR */}
-          <Button
-            variant="default"
-            className="bg-emerald-600 hover:bg-emerald-700 text-white"
-            onClick={openScanner}
-          >
-            <Camera className="w-4 h-4 ml-1" />
-            مسح QR
-          </Button>
         </div>
 
-        {/* قائمة المواعيد */}
         <div className="grid gap-3">
           {filtered.map((a) => {
             const confirmedNotArrived = a.status === "confirmed" && !a.arrived_at;
@@ -513,21 +453,15 @@ export default function ReceptionPage() {
                       </span>
                     )}
                   </div>
-                  <h2 className="font-bold text-foreground">
-                    {a.patients?.name || "مريض"}
-                  </h2>
+                  <h2 className="font-bold text-foreground">{a.patients?.name || "مريض"}</h2>
                   <p className="text-sm text-muted-foreground">
-                    {a.patients?.phone || "بدون هاتف"} —{" "}
-                    {a.services?.name || "بدون خدمة"}
+                    {a.patients?.phone || "بدون هاتف"} — {a.services?.name || "بدون خدمة"}
                   </p>
                 </div>
                 <div className="flex gap-2 flex-wrap justify-end">
                   {!a.arrived_at && (
                     <>
-                      <Button
-                        className="bg-emerald-600 hover:bg-emerald-700"
-                        onClick={() => markArrived(a.id)}
-                      >
+                      <Button className="bg-emerald-600 hover:bg-emerald-700" onClick={() => markArrived(a.id)}>
                         <CheckCircle className="w-4 h-4" />
                         وصل
                       </Button>
@@ -553,70 +487,24 @@ export default function ReceptionPage() {
           {filtered.length === 0 && (
             <div className="card-modern p-12 text-center text-muted-foreground">
               <QrCode className="w-10 h-10 mx-auto mb-3" />
-              لا توجد مواعيد نشطة
+              لا توجد مواعيد نشطة اليوم
             </div>
           )}
         </div>
       </main>
-
-      {/* مودال الماسح الضوئي */}
-      {scannerOpen && (
-        <div className="fixed inset-0 z-50 bg-black/80 backdrop-blur-sm flex items-center justify-center p-4">
-          <div className="bg-background rounded-3xl p-6 max-w-md w-full shadow-2xl border border-border relative">
-            <div className="flex items-center justify-between mb-4">
-              <h3 className="text-xl font-bold text-foreground">مسح QR</h3>
-              <Button
-                variant="ghost"
-                size="icon"
-                onClick={closeScanner}
-                className="h-8 w-8 rounded-full hover:bg-destructive/10"
-              >
-                <X className="w-5 h-5" />
-              </Button>
-            </div>
-            <div className="relative bg-black rounded-xl overflow-hidden aspect-square">
-              <div ref={scannerRef} className="w-full h-full" />
-              {isScanning && (
-                <div className="absolute inset-0 border-2 border-emerald-400/50 rounded-xl animate-pulse pointer-events-none" />
-              )}
-              {!isScanning && (
-                <div className="absolute inset-0 flex items-center justify-center text-white/50">
-                  <Camera className="w-12 h-12" />
-                  <p className="mr-2 text-sm">جارٍ تحضير الكاميرا...</p>
-                </div>
-              )}
-            </div>
-            <p className="text-xs text-muted-foreground text-center mt-3">
-              قرّب الكاميرا من رمز QR المطبوع على بطاقة الحجز
-            </p>
-          </div>
-        </div>
-      )}
-
       <Footer />
     </div>
   );
 }
 
-// ============================================================
-// مكون الإحصائيات والرسوم البيانية
-// ============================================================
-
 function StatsAndCharts({ appointments }: { appointments: Appointment[] }) {
   const nonCancelled = appointments.filter((a) => a.status !== "cancelled");
   const total = nonCancelled.length;
-  const arrived = nonCancelled.filter(
-    (a) => !!a.arrived_at || ["arrived", "paid", "completed"].includes(a.status)
-  ).length;
-  const waiting = nonCancelled.filter(
-    (a) => !a.arrived_at && a.status !== "completed"
-  ).length;
-  const examined = nonCancelled.filter(
-    (a) => a.status === "completed" || !!a.entered_at
-  ).length;
+  const arrived = nonCancelled.filter((a) => !!a.arrived_at || ["arrived", "paid", "completed"].includes(a.status)).length;
+  const waiting = nonCancelled.filter((a) => !a.arrived_at && a.status !== "completed").length;
+  const examined = nonCancelled.filter((a) => a.status === "completed" || !!a.entered_at).length;
   const confirmedRate = total > 0 ? Math.round((arrived / total) * 100) : 0;
 
-  // التوزيع بالساعة 8..20
   const hourly = useMemo(() => {
     const buckets: Record<number, number> = {};
     for (let h = 8; h <= 20; h++) buckets[h] = 0;
@@ -638,11 +526,41 @@ function StatsAndCharts({ appointments }: { appointments: Appointment[] }) {
 
   const PIE_COLORS = ["hsl(var(--primary))", "hsl(var(--accent))", "hsl(152 69% 40%)"];
   const stats = [
-    { label: "إجمالي اليوم", value: total, icon: CalendarDays, tint: "from-primary/20 to-primary/5", iconClass: "text-primary" },
-    { label: "حضور", value: arrived, icon: CheckCircle, tint: "from-emerald-500/20 to-emerald-500/5", iconClass: "text-emerald-500" },
-    { label: "بانتظار", value: waiting, icon: Timer, tint: "from-amber-500/20 to-amber-500/5", iconClass: "text-amber-500" },
-    { label: "الحالات المعاينة", value: examined, icon: Stethoscope, tint: "from-teal-500/20 to-teal-500/5", iconClass: "text-teal-500" },
-    { label: "نسبة الحضور", value: `${confirmedRate}%`, icon: TrendingUp, tint: "from-accent/20 to-accent/5", iconClass: "text-accent" },
+    {
+      label: "إجمالي اليوم",
+      value: total,
+      icon: CalendarDays,
+      tint: "from-primary/20 to-primary/5",
+      iconClass: "text-primary",
+    },
+    {
+      label: "حضور",
+      value: arrived,
+      icon: CheckCircle,
+      tint: "from-emerald-500/20 to-emerald-500/5",
+      iconClass: "text-emerald-500",
+    },
+    {
+      label: "بانتظار",
+      value: waiting,
+      icon: Timer,
+      tint: "from-amber-500/20 to-amber-500/5",
+      iconClass: "text-amber-500",
+    },
+    {
+      label: "الحالات المعاينة",
+      value: examined,
+      icon: Stethoscope,
+      tint: "from-teal-500/20 to-teal-500/5",
+      iconClass: "text-teal-500",
+    },
+    {
+      label: "نسبة الحضور",
+      value: `${confirmedRate}%`,
+      icon: TrendingUp,
+      tint: "from-accent/20 to-accent/5",
+      iconClass: "text-accent",
+    },
   ];
 
   return (
@@ -655,12 +573,8 @@ function StatsAndCharts({ appointments }: { appointments: Appointment[] }) {
           >
             <div className="flex items-center justify-between">
               <div>
-                <p className="text-xs text-muted-foreground font-medium">
-                  {s.label}
-                </p>
-                <p className="text-2xl font-black text-foreground mt-1">
-                  {s.value}
-                </p>
+                <p className="text-xs text-muted-foreground font-medium">{s.label}</p>
+                <p className="text-2xl font-black text-foreground mt-1">{s.value}</p>
               </div>
               <div className="w-11 h-11 rounded-2xl bg-background/60 flex items-center justify-center backdrop-blur">
                 <s.icon className={`w-5 h-5 ${s.iconClass}`} />
@@ -677,15 +591,8 @@ function StatsAndCharts({ appointments }: { appointments: Appointment[] }) {
             <h3 className="font-bold text-foreground">التوزيع الزمني للمواعيد</h3>
           </div>
           <ResponsiveContainer width="100%" height={220}>
-            <BarChart
-              data={hourly}
-              margin={{ top: 5, right: 8, left: -20, bottom: 0 }}
-            >
-              <CartesianGrid
-                strokeDasharray="3 3"
-                stroke="hsl(var(--border))"
-                vertical={false}
-              />
+            <BarChart data={hourly} margin={{ top: 5, right: 8, left: -20, bottom: 0 }}>
+              <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" vertical={false} />
               <XAxis
                 dataKey="hour"
                 tick={{ fill: "hsl(var(--muted-foreground))", fontSize: 11 }}
@@ -707,11 +614,7 @@ function StatsAndCharts({ appointments }: { appointments: Appointment[] }) {
                   color: "hsl(var(--foreground))",
                 }}
               />
-              <Bar
-                dataKey="count"
-                fill="hsl(var(--primary))"
-                radius={[8, 8, 0, 0]}
-              />
+              <Bar dataKey="count" fill="hsl(var(--primary))" radius={[8, 8, 0, 0]} />
             </BarChart>
           </ResponsiveContainer>
         </div>
@@ -745,9 +648,7 @@ function StatsAndCharts({ appointments }: { appointments: Appointment[] }) {
                   color: "hsl(var(--foreground))",
                 }}
               />
-              <Legend
-                wrapperStyle={{ color: "hsl(var(--muted-foreground))", fontSize: 12 }}
-              />
+              <Legend wrapperStyle={{ color: "hsl(var(--muted-foreground))", fontSize: 12 }} />
             </PieChart>
           </ResponsiveContainer>
         </div>
