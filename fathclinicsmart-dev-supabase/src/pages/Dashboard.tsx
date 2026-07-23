@@ -190,7 +190,7 @@ export default function Dashboard() {
     navigate("/");
   };
 
-  const whatsappSubscribeUrl = `https://wa.me/967715365516?text=${encodeURIComponent("السلام عليكم، أرغب بتجديد اشتراك عيادتي.")}`;
+  const whatsappSubscribeUrl = `https://wa.me/966576651187?text=${encodeURIComponent("السلام عليكم، أرغب بتجديد اشتراك عيادتي.")}`;
 
   const conversionRate = useMemo(() => {
     if (!stats.totalAppointments) return 0;
@@ -244,20 +244,13 @@ export default function Dashboard() {
               <AlertTriangle className="w-10 h-10 text-warning" />
             </div>
             <h2 className="text-3xl font-black text-foreground mb-4">انتهت الفترة التجريبية</h2>
-            <p className="text-muted-foreground mb-8 leading-relaxed">يرجى الاشتراك للاستمرار.</p>
-            <div className="bg-muted/50 rounded-2xl p-6 text-right mb-6 space-y-3">
-              <div className="flex items-center justify-between">
-                <span className="font-mono text-primary font-bold" dir="ltr">SA6080205413910222121014</span>
-                <span className="text-muted-foreground">بنك الراجحي</span>
-              </div>
-              <div className="flex items-center justify-between">
-                <span className="font-mono text-primary font-bold">3135756163</span>
-                <span className="text-muted-foreground">بنك الكريمي (سعودي)</span>
-              </div>
-              <div className="flex items-center justify-between">
-                <span className="font-mono text-primary font-bold">3135756171</span>
-                <span className="text-muted-foreground">بنك الكريمي (يمني)</span>
-              </div>
+            <p className="text-muted-foreground mb-8 leading-relaxed">
+              يرجى التواصل مع فريق الدعم لتجديد الاشتراك واستعادة الخدمة.
+            </p>
+            <div className="bg-muted/30 rounded-2xl p-6 text-center mb-6">
+              <p className="text-muted-foreground text-sm leading-relaxed">
+                للاستفسار والاشتراك، يرجى التواصل مع فريق الدعم عبر واتساب.
+              </p>
             </div>
             <div className="flex flex-col sm:flex-row gap-3 justify-center items-stretch">
               <a
