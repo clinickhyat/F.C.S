@@ -1,7 +1,7 @@
 import { useClinic } from "@/hooks/useClinic";
 import { useAuth } from "@/lib/auth";
 import { useNavigate } from "react-router-dom";
-import { AlertTriangle, LogOut, MessageCircle, PhoneCall } from "lucide-react";
+import { AlertTriangle, LogOut, MessageCircle } from "lucide-react";
 import { Button } from "@/components/ui/button";
 
 export function SubscriptionLock() {
@@ -11,7 +11,6 @@ export function SubscriptionLock() {
 
   if (!isTrialExpired) return null;
 
-  // الرقم غير معروض في الواجهة، يظهر فقط في رابط الزر
   const whatsappSupportUrl = `https://wa.me/966576651187?text=${encodeURIComponent(
     "السلام عليكم، أرغب بتجديد اشتراك عيادتي."
   )}`;
