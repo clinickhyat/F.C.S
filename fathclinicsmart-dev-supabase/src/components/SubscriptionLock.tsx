@@ -11,6 +11,7 @@ export function SubscriptionLock() {
 
   if (!isTrialExpired) return null;
 
+  // رقم الواتساب الجديد
   const whatsappSubscribeUrl = `https://wa.me/966576651187?text=${encodeURIComponent("السلام عليكم، أرغب بتجديد اشتراك عيادتي.")}`;
 
   const handleSignOut = async () => {
@@ -33,6 +34,8 @@ export function SubscriptionLock() {
             <span className="font-mono text-primary font-bold" dir="ltr">SA6080205413910222121014</span>
             <span className="text-muted-foreground">بنك الراجحي</span>
           </div>
+          {/* تم حذف بنك الكريمي (سعودي) وبنك الكريمي (يمني) */}
+        </div>
         <div className="flex flex-col sm:flex-row gap-3 justify-center items-stretch">
           <a
             href={whatsappSubscribeUrl}
