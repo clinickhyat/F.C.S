@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useState, useRef, useCallback } from "react";
 import { useNavigate } from "react-router-dom";
 import { format } from "date-fns";
 import { useAuth } from "@/lib/auth";
@@ -8,8 +8,13 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Footer } from "@/components/layout/Footer";
 import { toast } from "@/hooks/use-toast";
-import { CalendarDays, CheckCircle, Clock, LogOut, QrCode, Search, ShieldCheck, Stethoscope, Wallet, Users, TrendingUp, Timer } from "lucide-react";
+import { 
+  CalendarDays, CheckCircle, Clock, LogOut, QrCode, Search, 
+  ShieldCheck, Stethoscope, Wallet, Users, TrendingUp, Timer, 
+  Camera, X, Loader2, AlertCircle, Image, Upload
+} from "lucide-react";
 import { BarChart, Bar, PieChart, Pie, Cell, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid, Legend } from "recharts";
+import { Html5Qrcode } from "html5-qrcode";
 
 type Appointment = {
   id: string;
@@ -24,6 +29,9 @@ type Appointment = {
   services: { name: string; price: number | null } | null;
 };
 
+// ─── ثابت: معرف عنصر الماسح ───
+const QR_ELEMENT_ID = "qr-reader-container";
+
 export default function ReceptionPage() {
   const navigate = useNavigate();
   const { user, signOut, loading: authLoading } = useAuth();
@@ -37,6 +45,19 @@ export default function ReceptionPage() {
   const [statusFilter, setStatusFilter] = useState<string>("active");
   const today = dateFilter;
 
+  // ─── حالة الماسح ───
+  const [scannerOpen, setScannerOpen] = useState(false);
+  const [scannerStatus, setScannerStatus] = useState<"idle" | "loading" | "active" | "error">("idle");
+  const [cameraError, setCameraError] = useState<string | null>(null);
+  const scannerRef = useRef<Html5Qrcode | null>(null);
+  const appointmentsRef = useRef<Appointment[]>([]);
+  const fileInputRef = useRef<HTMLInputElement>(null);
+
+  useEffect(() => {
+    appointmentsRef.current = appointments;
+  }, [appointments]);
+
+  // ─── المصادقة ───
   useEffect(() => {
     if (!authLoading && !user) navigate("/auth");
   }, [authLoading, user, navigate]);
@@ -47,6 +68,7 @@ export default function ReceptionPage() {
     if (role === "cashier") navigate("/cashier", { replace: true });
   }, [role, clinicLoading, navigate]);
 
+  // ─── جلب المواعيد ───
   const fetchAppointments = async () => {
     if (!clinic || !unlocked) return;
     const { data, error } = await supabase
@@ -68,6 +90,311 @@ export default function ReceptionPage() {
     return () => { supabase.removeChannel(channel); };
   }, [clinic, unlocked, today]);
 
+  // ─── تنظيف الماسح عند الخروج ───
+  useEffect(() => {
+    return () => { destroyScanner(); };
+  }, []);
+
+  // ─── دالة تدمير الماسح ───
+  const destroyScanner = async () => {
+    if (!scannerRef.current) return;
+    try {
+      if (scannerRef.current.isScanning) {
+        await scannerRef.current.stop();
+      }
+      scannerRef.current.clear();
+    } catch (_) {}
+    finally {
+      scannerRef.current = null;
+    }
+  };
+
+  // ─── ترجمة رسائل الخطأ ───
+  const getFriendlyError = (error: any): string => {
+    const msg = String(error?.message || error || "");
+    if (msg.includes("NotAllowedError") || msg.includes("Permission")) {
+      return "🔒 لم يتم منح إذن الكاميرا. افتح إعدادات المتصفح وامنح الإذن ثم أعد المحاولة.";
+    }
+    if (msg.includes("NotFoundError") || msg.includes("DevicesNotFoundError")) {
+      return "📷 لا توجد كاميرا في جهازك أو لم يتم التعرف عليها.";
+    }
+    if (msg.includes("NotReadableError") || msg.includes("TrackStartError")) {
+      return "⚠️ الكاميرا مستخدمة من تطبيق آخر. أغلق التطبيقات الأخرى وأعد المحاولة.";
+    }
+    if (msg.includes("OverconstrainedError")) {
+      return "⚙️ إعدادات الكاميرا غير مدعومة. سيتم المحاولة بإعدادات مختلفة.";
+    }
+    if (msg.includes("NotSupportedError")) {
+      return "🌐 متصفحك لا يدعم الوصول للكاميرا. جرب Chrome أو Safari.";
+    }
+    return `❌ فشل فتح الكاميرا. حاول مرة أخرى. (${msg.slice(0, 60)})`;
+  };
+
+  // ─── معالجة الكود الممسوح (من الكاميرا أو الصورة) ───
+  const handleScannedCode = useCallback((decodedText: string) => {
+    const currentAppointments = appointmentsRef.current;
+    const found = currentAppointments.find(a =>
+      a.id === decodedText ||
+      a.reservation_code === decodedText ||
+      a.reservation_code.toLowerCase() === decodedText.toLowerCase()
+    );
+
+    if (found) {
+      if (!found.arrived_at) {
+        markArrived(found.id);
+      } else {
+        toast({ title: "تنبيه", description: "هذا الموعد تم تسجيل حضوره مسبقاً" });
+      }
+    } else {
+      toast({
+        title: "لم يتم العثور على الموعد",
+        description: `الكود الممسوح: ${decodedText}`,
+        variant: "destructive",
+      });
+    }
+  }, []);
+
+  // ─── إيقاف الماسح ───
+  const stopScanner = useCallback(async () => {
+    await destroyScanner();
+    setScannerOpen(false);
+    setScannerStatus("idle");
+    setCameraError(null);
+  }, []);
+
+  // ─── تشغيل الماسح (الكاميرا) ───
+  const startScanner = useCallback(async () => {
+    // تنظيف أي ماسح سابق
+    await destroyScanner();
+
+    setCameraError(null);
+    setScannerStatus("loading");
+    setScannerOpen(true);
+
+    // انتظار ظهور العنصر في DOM
+    await new Promise<void>((resolve) => {
+      requestAnimationFrame(() => {
+        requestAnimationFrame(() => {
+          resolve();
+        });
+      });
+    });
+    await new Promise(resolve => setTimeout(resolve, 300));
+
+    const element = document.getElementById(QR_ELEMENT_ID);
+    if (!element) {
+      setCameraError("❌ تعذر تهيئة الماسح. أعد المحاولة.");
+      setScannerStatus("error");
+      return;
+    }
+
+    if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
+      setCameraError("🌐 متصفحك لا يدعم الوصول للكاميرا.");
+      setScannerStatus("error");
+      return;
+    }
+
+    // التحقق من وجود كاميرات
+    try {
+      const devices = await navigator.mediaDevices.enumerateDevices();
+      const videoDevices = devices.filter(d => d.kind === "videoinput");
+      if (videoDevices.length === 0) {
+        setCameraError("📷 لا توجد كاميرا متصلة بجهازك.");
+        setScannerStatus("error");
+        return;
+      }
+    } catch (_) {
+      // نكمل حتى لو فشل enumerateDevices
+    }
+
+    // المحاولة الأولى: كاميرا خلفية
+    const tryStart = async (facingMode: "environment" | "user"): Promise<boolean> => {
+      try {
+        const scanner = new Html5Qrcode(QR_ELEMENT_ID, { verbose: false });
+        scannerRef.current = scanner;
+
+        await scanner.start(
+          { facingMode },
+          {
+            fps: 10,
+            qrbox: (w: number, h: number) => {
+              const size = Math.floor(Math.min(w, h) * 0.7);
+              return { width: size, height: size };
+            },
+            aspectRatio: 1.0,
+          },
+          (decodedText) => {
+            stopScanner().then(() => handleScannedCode(decodedText));
+          },
+          () => {} // تجاهل أخطاء المسح العادية
+        );
+
+        setScannerStatus("active");
+        return true;
+      } catch (error: any) {
+        if (scannerRef.current) {
+          try { scannerRef.current.clear(); } catch (_) {}
+          scannerRef.current = null;
+        }
+        throw error;
+      }
+    };
+
+    try {
+      await tryStart("environment");
+      return;
+    } catch (firstError: any) {
+      console.warn("Rear camera failed:", firstError?.message);
+
+      const isPermissionError = firstError?.message?.includes("NotAllowedError") ||
+                                firstError?.message?.includes("Permission");
+      if (isPermissionError) {
+        setCameraError(getFriendlyError(firstError));
+        setScannerStatus("error");
+        return;
+      }
+
+      // المحاولة الثانية: كاميرا أمامية
+      try {
+        const el = document.getElementById(QR_ELEMENT_ID);
+        if (el) el.innerHTML = "";
+        await new Promise(resolve => setTimeout(resolve, 200));
+        await tryStart("user");
+        return;
+      } catch (secondError: any) {
+        console.error("Front camera also failed:", secondError?.message);
+
+        // المحاولة الثالثة: استخدام deviceId مباشرة
+        try {
+          const el = document.getElementById(QR_ELEMENT_ID);
+          if (el) el.innerHTML = "";
+          await new Promise(resolve => setTimeout(resolve, 200));
+
+          const scanner = new Html5Qrcode(QR_ELEMENT_ID, { verbose: false });
+          scannerRef.current = scanner;
+
+          const cameras = await Html5Qrcode.getCameras();
+          if (cameras && cameras.length > 0) {
+            await scanner.start(
+              cameras[0].id,
+              { fps: 10, qrbox: { width: 250, height: 250 } },
+              (decodedText) => {
+                stopScanner().then(() => handleScannedCode(decodedText));
+              },
+              () => {}
+            );
+            setScannerStatus("active");
+            return;
+          }
+          throw new Error("No cameras found");
+        } catch (thirdError: any) {
+          console.error("All camera attempts failed:", thirdError?.message);
+          setCameraError(getFriendlyError(thirdError));
+          setScannerStatus("error");
+        }
+      }
+    }
+  }, [stopScanner, handleScannedCode]);
+
+  // ─── مسح QR من صورة مرفوعة ───
+  const scanImageFile = useCallback(async (file: File) => {
+    // إظهار حالة التحميل
+    setScannerStatus("loading");
+    setCameraError(null);
+
+    try {
+      // إنشاء كائن ماسح مؤقت (نستخدم العنصر الموجود لكنه لن يظهر)
+      const scanner = new Html5Qrcode(QR_ELEMENT_ID, { verbose: false });
+
+      // قراءة الصورة كـ Image
+      const img = new Image();
+      const objectURL = URL.createObjectURL(file);
+      img.src = objectURL;
+
+      await new Promise((resolve, reject) => {
+        img.onload = resolve;
+        img.onerror = reject;
+      });
+
+      // مسح الصورة باستخدام scanner.scanImage
+      const decodedText = await scanner.scanImage(img, true);
+      
+      // تنظيف
+      try { scanner.clear(); } catch (_) {}
+      URL.revokeObjectURL(objectURL);
+
+      // معالجة النتيجة
+      handleScannedCode(decodedText);
+      // إغلاق المودال بعد نجاح المسح
+      stopScanner();
+    } catch (error) {
+      console.error("Error scanning image:", error);
+      setCameraError("❌ فشل قراءة QR من الصورة. تأكد من وضوح الكود وجودته.");
+      setScannerStatus("error");
+      // إعادة تعيين input file
+      if (fileInputRef.current) fileInputRef.current.value = "";
+    }
+  }, [handleScannedCode, stopScanner]);
+
+  // ─── معالج رفع الملف ───
+  const handleFileUpload = (event: React.ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0];
+    if (!file) return;
+    scanImageFile(file);
+  };
+
+  // ─── دوال التحديث ───
+  const unlock = () => {
+    if (pin === (clinic?.reception_pin || "1234")) {
+      setUnlocked(true);
+    } else {
+      toast({ title: "رمز غير صحيح", description: "تحقق من رمز الاستقبال في الإعدادات", variant: "destructive" });
+    }
+  };
+
+  const markArrived = async (appointmentId: string) => {
+    if (!clinic) return;
+    const { error } = await supabase
+      .from("appointments")
+      .update({ arrived_at: new Date().toISOString(), department: "استقبال" })
+      .eq("id", appointmentId)
+      .eq("clinic_id", clinic.id);
+    if (error) {
+      toast({ title: "خطأ", description: "فشل تحديث الموعد", variant: "destructive" });
+    } else {
+      toast({ title: "✅ تم تأكيد الحضور", description: "انتقلت الحالة إلى الصندوق" });
+    }
+  };
+
+  const markEntered = async (appointmentId: string) => {
+    if (!clinic) return;
+    const { error } = await supabase
+      .from("appointments")
+      .update({ status: "completed", department: "المعاينة" })
+      .eq("id", appointmentId)
+      .eq("clinic_id", clinic.id);
+    if (error) {
+      toast({ title: "خطأ", description: "فشل تسجيل الدخول", variant: "destructive" });
+    } else {
+      toast({ title: "تم الدخول", description: "أُضيفت الحالة إلى المعاينات" });
+    }
+  };
+
+  const markNoShow = async (appointmentId: string) => {
+    if (!clinic) return;
+    const { error } = await supabase
+      .from("appointments")
+      .update({ status: "cancelled" })
+      .eq("id", appointmentId)
+      .eq("clinic_id", clinic.id);
+    if (error) {
+      toast({ title: "خطأ", description: "فشل التحديث", variant: "destructive" });
+    } else {
+      toast({ title: "تم تسجيل عدم الحضور", description: "أُغلق الموعد كـ (لم يصل)" });
+    }
+  };
+
+  // ─── فلترة المواعيد ───
   const filtered = useMemo(() => appointments.filter((a) => {
     const matchesSearch =
       a.reservation_code.toLowerCase().includes(search.toLowerCase()) ||
@@ -83,45 +410,10 @@ export default function ReceptionPage() {
     return a.status === statusFilter;
   }), [appointments, search, statusFilter]);
 
-  const unlock = () => {
-    if (pin === (clinic?.reception_pin || "1234")) setUnlocked(true);
-    else toast({ title: "رمز غير صحيح", description: "تحقق من رمز الاستقبال في الإعدادات", variant: "destructive" });
-  };
-
-  const markArrived = async (appointmentId: string) => {
-    if (!clinic) return;
-    const { error } = await supabase
-      .from("appointments")
-      .update({ arrived_at: new Date().toISOString(), department: "استقبال" })
-      .eq("id", appointmentId)
-      .eq("clinic_id", clinic.id);
-    if (error) toast({ title: "خطأ", description: "فشل تحديث الموعد", variant: "destructive" });
-    else toast({ title: "تم تأكيد الحضور", description: "انتقلت الحالة إلى الصندوق" });
-  };
-
-  const markEntered = async (appointmentId: string) => {
-    if (!clinic) return;
-    const { error } = await supabase
-      .from("appointments")
-      .update({ status: "completed", department: "المعاينة" })
-      .eq("id", appointmentId)
-      .eq("clinic_id", clinic.id);
-    if (error) toast({ title: "خطأ", description: "فشل تسجيل الدخول", variant: "destructive" });
-    else toast({ title: "تم الدخول", description: "أُضيفت الحالة إلى المعاينات" });
-  };
-
-  const markNoShow = async (appointmentId: string) => {
-    if (!clinic) return;
-    const { error } = await supabase
-      .from("appointments")
-      .update({ status: "cancelled" })
-      .eq("id", appointmentId)
-      .eq("clinic_id", clinic.id);
-    if (error) toast({ title: "خطأ", description: "فشل التحديث", variant: "destructive" });
-    else toast({ title: "تم تسجيل عدم الحضور", description: "أُغلق الموعد كـ (لم يصل)" });
-  };
-
-  if (authLoading || clinicLoading) return <div className="min-h-screen bg-mesh flex items-center justify-center text-muted-foreground">جاري التحميل...</div>;
+  // ─── Guard ───
+  if (authLoading || clinicLoading) {
+    return <div className="min-h-screen bg-mesh flex items-center justify-center text-muted-foreground">جاري التحميل...</div>;
+  }
 
   if (clinicError) {
     return <div className="min-h-screen bg-mesh flex items-center justify-center p-4"><div className="card-modern p-6 max-w-md text-center text-destructive font-bold">{clinicError}</div></div>;
@@ -142,8 +434,99 @@ export default function ReceptionPage() {
     );
   }
 
+  // ─── Render ───
   return (
     <div className="min-h-screen bg-mesh flex flex-col">
+      {/* مودال الماسح */}
+      {scannerOpen && (
+        <div className="fixed inset-0 z-50 bg-black/90 backdrop-blur-lg flex items-center justify-center p-4">
+          <div className="bg-white dark:bg-gray-900 rounded-3xl max-w-sm w-full shadow-2xl overflow-hidden">
+            <div className="flex items-center justify-between px-5 pt-5 pb-3">
+              <h3 className="text-lg font-bold text-foreground">مسح QR Code</h3>
+              <button onClick={stopScanner} className="p-2 rounded-full bg-gray-100 dark:bg-gray-800 hover:bg-gray-200 dark:hover:bg-gray-700 transition">
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            {/* حاوية الكاميرا/الصورة */}
+            <div className="relative mx-5 mb-2 rounded-2xl overflow-hidden bg-black" style={{ aspectRatio: "1/1" }}>
+              <div id={QR_ELEMENT_ID} className="w-full h-full" />
+
+              {scannerStatus === "loading" && (
+                <div className="absolute inset-0 flex flex-col items-center justify-center bg-black/70">
+                  <Loader2 className="w-10 h-10 animate-spin text-white mb-3" />
+                  <p className="text-white text-sm font-medium">جاري المعالجة...</p>
+                </div>
+              )}
+
+              {scannerStatus === "active" && (
+                <div className="absolute inset-0 pointer-events-none flex items-center justify-center">
+                  <div className="relative w-48 h-48">
+                    <div className="absolute top-0 left-0 w-8 h-8 border-t-4 border-l-4 border-primary rounded-tl-lg" />
+                    <div className="absolute top-0 right-0 w-8 h-8 border-t-4 border-r-4 border-primary rounded-tr-lg" />
+                    <div className="absolute bottom-0 left-0 w-8 h-8 border-b-4 border-l-4 border-primary rounded-bl-lg" />
+                    <div className="absolute bottom-0 right-0 w-8 h-8 border-b-4 border-r-4 border-primary rounded-br-lg" />
+                    <div className="absolute top-0 left-0 right-0 h-0.5 bg-primary animate-bounce" style={{ animationDuration: "1.5s" }} />
+                  </div>
+                </div>
+              )}
+
+              {scannerStatus === "error" && (
+                <div className="absolute inset-0 flex flex-col items-center justify-center bg-black/85 p-5 text-center">
+                  <AlertCircle className="w-12 h-12 text-red-400 mb-3" />
+                  <p className="text-white text-sm leading-relaxed mb-4">{cameraError}</p>
+                </div>
+              )}
+            </div>
+
+            {/* أزرار التحكم */}
+            <div className="flex flex-wrap gap-2 px-5 pb-5">
+              <Button 
+                variant="outline" 
+                className="flex-1" 
+                onClick={stopScanner}
+              >
+                إلغاء
+              </Button>
+              
+              {scannerStatus === "error" && (
+                <Button 
+                  className="flex-1" 
+                  onClick={startScanner}
+                >
+                  إعادة المحاولة (كاميرا)
+                </Button>
+              )}
+
+              {/* زر رفع صورة (يعمل دائماً) */}
+              <input
+                type="file"
+                accept="image/*"
+                ref={fileInputRef}
+                onChange={handleFileUpload}
+                className="hidden"
+              />
+              <Button 
+                variant="secondary" 
+                className="flex-1 gap-2"
+                onClick={() => fileInputRef.current?.click()}
+                disabled={scannerStatus === "loading"}
+              >
+                <Image className="w-4 h-4" />
+                رفع صورة
+              </Button>
+            </div>
+
+            {scannerStatus === "active" && (
+              <p className="text-xs text-center text-muted-foreground px-5 pb-3">
+                وجّه الكاميرا نحو QR Code للمسح التلقائي
+              </p>
+            )}
+          </div>
+        </div>
+      )}
+
+      {/* قفل PIN */}
       {!unlocked && (
         <div className="fixed inset-0 z-50 bg-background/95 backdrop-blur-xl flex items-center justify-center p-4">
           <div className="card-modern p-8 w-full max-w-sm text-center space-y-5">
@@ -155,6 +538,7 @@ export default function ReceptionPage() {
         </div>
       )}
 
+      {/* الهيدر */}
       <header className="glass-strong sticky top-0 z-40">
         <div className="container mx-auto px-4 h-18 py-3 flex items-center justify-between">
           <div className="flex items-center gap-3">
@@ -162,14 +546,17 @@ export default function ReceptionPage() {
             <div><h1 className="text-xl font-bold text-foreground">الاستقبال</h1><p className="text-xs text-muted-foreground">مواعيد اليوم</p></div>
           </div>
           <div className="flex gap-2">
+            <Button variant="ghost" size="icon" onClick={startScanner} className="hover:bg-primary/10" title="مسح QR">
+              <Camera className="w-5 h-5" />
+            </Button>
             <Button variant="ghost" size="icon" onClick={() => navigate("/cashier")}><Wallet className="w-5 h-5" /></Button>
             <Button variant="ghost" size="icon" onClick={signOut}><LogOut className="w-5 h-5" /></Button>
           </div>
         </div>
       </header>
 
+      {/* المحتوى الرئيسي */}
       <main className="flex-1 container mx-auto px-4 py-6 space-y-6">
-        {/* Stats Cards */}
         <StatsAndCharts appointments={appointments} />
 
         <div className="flex flex-col md:flex-row gap-3 md:items-center">
@@ -229,6 +616,7 @@ export default function ReceptionPage() {
   );
 }
 
+// ─── مكون الإحصائيات ───
 function StatsAndCharts({ appointments }: { appointments: Appointment[] }) {
   const nonCancelled = appointments.filter((a) => a.status !== "cancelled");
   const total = nonCancelled.length;
@@ -237,7 +625,6 @@ function StatsAndCharts({ appointments }: { appointments: Appointment[] }) {
   const examined = nonCancelled.filter((a) => a.status === "completed" || !!a.entered_at).length;
   const confirmedRate = total > 0 ? Math.round((arrived / total) * 100) : 0;
 
-  // Hourly distribution 8..20
   const hourly = useMemo(() => {
     const buckets: Record<number, number> = {};
     for (let h = 8; h <= 20; h++) buckets[h] = 0;
@@ -292,10 +679,7 @@ function StatsAndCharts({ appointments }: { appointments: Appointment[] }) {
               <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" vertical={false} />
               <XAxis dataKey="hour" tick={{ fill: "hsl(var(--muted-foreground))", fontSize: 11 }} axisLine={{ stroke: "hsl(var(--border))" }} tickLine={false} />
               <YAxis allowDecimals={false} tick={{ fill: "hsl(var(--muted-foreground))", fontSize: 11 }} axisLine={{ stroke: "hsl(var(--border))" }} tickLine={false} />
-              <Tooltip
-                cursor={{ fill: "hsl(var(--muted) / 0.4)" }}
-                contentStyle={{ background: "hsl(var(--popover))", border: "1px solid hsl(var(--border))", borderRadius: 12, color: "hsl(var(--foreground))" }}
-              />
+              <Tooltip cursor={{ fill: "hsl(var(--muted) / 0.4)" }} contentStyle={{ background: "hsl(var(--popover))", border: "1px solid hsl(var(--border))", borderRadius: 12, color: "hsl(var(--foreground))" }} />
               <Bar dataKey="count" fill="hsl(var(--primary))" radius={[8, 8, 0, 0]} />
             </BarChart>
           </ResponsiveContainer>
