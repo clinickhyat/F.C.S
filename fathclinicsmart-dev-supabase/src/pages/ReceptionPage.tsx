@@ -11,7 +11,7 @@ import { toast } from "@/hooks/use-toast";
 import { 
   CalendarDays, CheckCircle, Clock, LogOut, QrCode, Search, 
   ShieldCheck, Stethoscope, Wallet, Users, TrendingUp, Timer, 
-  Camera, X, Loader2, AlertCircle 
+  Camera, X, Loader2, AlertCircle, Image, Upload
 } from "lucide-react";
 import { BarChart, Bar, PieChart, Pie, Cell, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid, Legend } from "recharts";
 import { Html5Qrcode } from "html5-qrcode";
@@ -51,6 +51,7 @@ export default function ReceptionPage() {
   const [cameraError, setCameraError] = useState<string | null>(null);
   const scannerRef = useRef<Html5Qrcode | null>(null);
   const appointmentsRef = useRef<Appointment[]>([]);
+  const fileInputRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
     appointmentsRef.current = appointments;
@@ -129,7 +130,7 @@ export default function ReceptionPage() {
     return `❌ فشل فتح الكاميرا. حاول مرة أخرى. (${msg.slice(0, 60)})`;
   };
 
-  // ─── معالجة الكود الممسوح ───
+  // ─── معالجة الكود الممسوح (من الكاميرا أو الصورة) ───
   const handleScannedCode = useCallback((decodedText: string) => {
     const currentAppointments = appointmentsRef.current;
     const found = currentAppointments.find(a =>
@@ -161,7 +162,7 @@ export default function ReceptionPage() {
     setCameraError(null);
   }, []);
 
-  // ─── تشغيل الماسح (المنطق الذكي) ───
+  // ─── تشغيل الماسح (الكاميرا) ───
   const startScanner = useCallback(async () => {
     // تنظيف أي ماسح سابق
     await destroyScanner();
@@ -295,6 +296,53 @@ export default function ReceptionPage() {
     }
   }, [stopScanner, handleScannedCode]);
 
+  // ─── مسح QR من صورة مرفوعة ───
+  const scanImageFile = useCallback(async (file: File) => {
+    // إظهار حالة التحميل
+    setScannerStatus("loading");
+    setCameraError(null);
+
+    try {
+      // إنشاء كائن ماسح مؤقت (نستخدم العنصر الموجود لكنه لن يظهر)
+      const scanner = new Html5Qrcode(QR_ELEMENT_ID, { verbose: false });
+
+      // قراءة الصورة كـ Image
+      const img = new Image();
+      const objectURL = URL.createObjectURL(file);
+      img.src = objectURL;
+
+      await new Promise((resolve, reject) => {
+        img.onload = resolve;
+        img.onerror = reject;
+      });
+
+      // مسح الصورة باستخدام scanner.scanImage
+      const decodedText = await scanner.scanImage(img, true);
+      
+      // تنظيف
+      try { scanner.clear(); } catch (_) {}
+      URL.revokeObjectURL(objectURL);
+
+      // معالجة النتيجة
+      handleScannedCode(decodedText);
+      // إغلاق المودال بعد نجاح المسح
+      stopScanner();
+    } catch (error) {
+      console.error("Error scanning image:", error);
+      setCameraError("❌ فشل قراءة QR من الصورة. تأكد من وضوح الكود وجودته.");
+      setScannerStatus("error");
+      // إعادة تعيين input file
+      if (fileInputRef.current) fileInputRef.current.value = "";
+    }
+  }, [handleScannedCode, stopScanner]);
+
+  // ─── معالج رفع الملف ───
+  const handleFileUpload = (event: React.ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0];
+    if (!file) return;
+    scanImageFile(file);
+  };
+
   // ─── دوال التحديث ───
   const unlock = () => {
     if (pin === (clinic?.reception_pin || "1234")) {
@@ -400,13 +448,14 @@ export default function ReceptionPage() {
               </button>
             </div>
 
-            <div className="relative mx-5 mb-4 rounded-2xl overflow-hidden bg-black" style={{ aspectRatio: "1/1" }}>
+            {/* حاوية الكاميرا/الصورة */}
+            <div className="relative mx-5 mb-2 rounded-2xl overflow-hidden bg-black" style={{ aspectRatio: "1/1" }}>
               <div id={QR_ELEMENT_ID} className="w-full h-full" />
 
               {scannerStatus === "loading" && (
                 <div className="absolute inset-0 flex flex-col items-center justify-center bg-black/70">
                   <Loader2 className="w-10 h-10 animate-spin text-white mb-3" />
-                  <p className="text-white text-sm font-medium">جاري تشغيل الكاميرا...</p>
+                  <p className="text-white text-sm font-medium">جاري المعالجة...</p>
                 </div>
               )}
 
@@ -426,11 +475,46 @@ export default function ReceptionPage() {
                 <div className="absolute inset-0 flex flex-col items-center justify-center bg-black/85 p-5 text-center">
                   <AlertCircle className="w-12 h-12 text-red-400 mb-3" />
                   <p className="text-white text-sm leading-relaxed mb-4">{cameraError}</p>
-                  <Button onClick={startScanner} className="bg-primary text-white text-sm px-6" size="sm">
-                    إعادة المحاولة
-                  </Button>
                 </div>
               )}
+            </div>
+
+            {/* أزرار التحكم */}
+            <div className="flex flex-wrap gap-2 px-5 pb-5">
+              <Button 
+                variant="outline" 
+                className="flex-1" 
+                onClick={stopScanner}
+              >
+                إلغاء
+              </Button>
+              
+              {scannerStatus === "error" && (
+                <Button 
+                  className="flex-1" 
+                  onClick={startScanner}
+                >
+                  إعادة المحاولة (كاميرا)
+                </Button>
+              )}
+
+              {/* زر رفع صورة (يعمل دائماً) */}
+              <input
+                type="file"
+                accept="image/*"
+                ref={fileInputRef}
+                onChange={handleFileUpload}
+                className="hidden"
+              />
+              <Button 
+                variant="secondary" 
+                className="flex-1 gap-2"
+                onClick={() => fileInputRef.current?.click()}
+                disabled={scannerStatus === "loading"}
+              >
+                <Image className="w-4 h-4" />
+                رفع صورة
+              </Button>
             </div>
 
             {scannerStatus === "active" && (
@@ -438,13 +522,6 @@ export default function ReceptionPage() {
                 وجّه الكاميرا نحو QR Code للمسح التلقائي
               </p>
             )}
-
-            <div className="flex gap-3 px-5 pb-5">
-              <Button variant="outline" className="flex-1" onClick={stopScanner}>إغلاق</Button>
-              {scannerStatus === "error" && (
-                <Button className="flex-1" onClick={startScanner}>إعادة المحاولة</Button>
-              )}
-            </div>
           </div>
         </div>
       )}
