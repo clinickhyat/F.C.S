@@ -11,7 +11,7 @@ import { toast } from "@/hooks/use-toast";
 import { 
   CalendarDays, CheckCircle, Clock, LogOut, QrCode, Search, 
   ShieldCheck, Stethoscope, Wallet, Users, TrendingUp, Timer, 
-  Camera, X, Loader2 
+  Camera, X, Loader2, AlertCircle 
 } from "lucide-react";
 import { BarChart, Bar, PieChart, Pie, Cell, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid, Legend } from "recharts";
 import { Html5Qrcode } from "html5-qrcode";
@@ -44,10 +44,10 @@ export default function ReceptionPage() {
   
   // QR Scanner states
   const [scannerOpen, setScannerOpen] = useState(false);
-  const [isScanning, setIsScanning] = useState(false);
+  const [scanning, setScanning] = useState(false);
+  const [cameraError, setCameraError] = useState<string | null>(null);
   const scannerRef = useRef<Html5Qrcode | null>(null);
   const scannerContainerRef = useRef<HTMLDivElement>(null);
-  const isStartingRef = useRef(false);
 
   useEffect(() => {
     if (!authLoading && !user) navigate("/auth");
@@ -145,51 +145,79 @@ export default function ReceptionPage() {
     else toast({ title: "تم تسجيل عدم الحضور", description: "أُغلق الموعد كـ (لم يصل)" });
   };
 
-  // ===== QR Scanner Functions (مع إصلاح الإغلاق الفوري) =====
-  const startScanner = async () => {
-    // منع فتح الماسح مرتين
-    if (isStartingRef.current) return;
-    isStartingRef.current = true;
+  // ===== SMART QR SCANNER WITH FALLBACK =====
+  const getAvailableCameras = async (): Promise<MediaDeviceInfo[]> => {
+    try {
+      const devices = await navigator.mediaDevices.enumerateDevices();
+      return devices.filter(device => device.kind === 'videoinput');
+    } catch {
+      return [];
+    }
+  };
 
+  const startScanner = async () => {
+    // Reset error state
+    setCameraError(null);
     setScannerOpen(true);
-    setIsScanning(true);
+    setScanning(true);
     
-    // الانتظار حتى يظهر العنصر في DOM
-    await new Promise(resolve => setTimeout(resolve, 800));
-    
-    const container = scannerContainerRef.current;
-    if (!container) {
-      setIsScanning(false);
-      setScannerOpen(false);
-      isStartingRef.current = false;
-      toast({ title: "خطأ", description: "تعذر العثور على عنصر الماسح", variant: "destructive" });
+    // Check if camera is available first
+    const cameras = await getAvailableCameras();
+    if (cameras.length === 0) {
+      setCameraError("لا توجد كاميرا متصلة بجهازك. يرجى توصيل كاميرا والمحاولة مجدداً.");
+      setScanning(false);
+      toast({ 
+        title: "لا توجد كاميرا", 
+        description: "لا يمكن العثور على كاميرا في جهازك.", 
+        variant: "destructive" 
+      });
       return;
     }
 
+    // Wait for DOM element
+    await new Promise(resolve => setTimeout(resolve, 600));
+    
+    if (!scannerContainerRef.current) {
+      setScanning(false);
+      toast({ title: "خطأ", description: "تعذر بدء الماسح", variant: "destructive" });
+      return;
+    }
+
+    // Try to find rear camera first, fallback to front
+    let facingMode: "environment" | "user" = "environment";
+    const rearCam = cameras.find(c => 
+      c.label?.toLowerCase().includes('back') || 
+      c.label?.toLowerCase().includes('rear') ||
+      c.label?.toLowerCase().includes('environment')
+    );
+    if (!rearCam) {
+      facingMode = "user";
+      console.warn("No rear camera found, using front camera");
+    }
+
     try {
-      // إنشاء كائن الماسح
       const scanner = new Html5Qrcode("qr-reader");
       scannerRef.current = scanner;
 
-      // بدء المسح
+      // First, try to start with the selected facing mode
       await scanner.start(
-        { 
-          facingMode: "environment",
+        { facingMode: facingMode },
+        {
+          fps: 15,
+          qrbox: { width: 250, height: 250 },
           aspectRatio: 1.0
         },
-        {
-          fps: 10,
-          qrbox: { width: 250, height: 250 },
-        },
         (decodedText) => {
-          // نجاح المسح
-          scanner.stop().catch(() => {});
-          scanner.clear();
-          setIsScanning(false);
+          // Success - stop scanner immediately
+          try {
+            scanner.stop().catch(() => {});
+            scanner.clear();
+          } catch (_) {}
+          setScanning(false);
           setScannerOpen(false);
-          isStartingRef.current = false;
+          setCameraError(null);
           
-          // البحث عن الموعد
+          // Find appointment
           const found = appointments.find(a => 
             a.id === decodedText || 
             a.reservation_code === decodedText ||
@@ -211,45 +239,102 @@ export default function ReceptionPage() {
           }
         },
         (error) => {
-          // تجاهل أخطاء المسح العادية
-          if (error && !error.includes("No QR code found")) {
+          // Ignore "No QR code found" errors (they are normal)
+          if (error && !error.includes("No QR code found") && !error.includes("NotFoundException")) {
             console.warn("Scan error:", error);
           }
         }
       );
     } catch (error: any) {
       console.error("Scanner error:", error);
-      setIsScanning(false);
-      setScannerOpen(false);
-      isStartingRef.current = false;
       
-      // رسائل خطأ مخصصة
-      if (error?.message?.includes("Permission") || error?.message?.includes("permission")) {
+      // If rear camera fails, try front camera
+      if (facingMode === "environment" && !error?.message?.includes("Permission")) {
+        try {
+          setCameraError("محاولة استخدام الكاميرا الأمامية...");
+          // Try front camera
+          const frontScanner = new Html5Qrcode("qr-reader");
+          scannerRef.current = frontScanner;
+          await frontScanner.start(
+            { facingMode: "user" },
+            { fps: 15, qrbox: { width: 250, height: 250 } },
+            (decodedText) => {
+              try { frontScanner.stop().catch(() => {}); } catch (_) {}
+              setScanning(false);
+              setScannerOpen(false);
+              setCameraError(null);
+              // Similar find logic
+              const found = appointments.find(a => 
+                a.id === decodedText || 
+                a.reservation_code === decodedText ||
+                a.reservation_code.toLowerCase() === decodedText.toLowerCase()
+              );
+              if (found) {
+                if (!found.arrived_at) markArrived(found.id);
+                else toast({ title: "تنبيه", description: "تم تسجيل حضوره مسبقاً" });
+              } else {
+                toast({ title: "لم يتم العثور على الموعد", description: `الكود: ${decodedText}`, variant: "destructive" });
+              }
+            },
+            (err) => {
+              if (err && !err.includes("No QR code found") && !err.includes("NotFoundException")) {
+                console.warn("Front scan error:", err);
+              }
+            }
+          );
+          return; // Success with front camera
+        } catch (frontError: any) {
+          console.error("Front camera also failed:", frontError);
+          setScanning(false);
+          setCameraError("فشلت الكاميرا الخلفية والأمامية. تأكد من منح الإذن.");
+        }
+      }
+
+      // If we reach here, both attempts failed
+      setScanning(false);
+      setCameraError(error?.message || "فشل فتح الكاميرا. حاول مرة أخرى.");
+      
+      // User-friendly error messages
+      if (error?.message?.includes("Permission") || error?.message?.includes("NotAllowedError")) {
         toast({ 
-          title: "الرجاء منح إذن الكاميرا", 
-          description: "اذهب إلى إعدادات المتصفح واسمح للكاميرا ثم أعد المحاولة", 
+          title: "📷 أذن الكاميرا مطلوب", 
+          description: "يرجى الضغط على زر 'السماح' في المتصفح للوصول إلى الكاميرا، ثم أعد المحاولة.", 
+          variant: "destructive",
+          duration: 6000
+        });
+      } else if (error?.message?.includes("NotFoundError")) {
+        toast({ 
+          title: "لا توجد كاميرا", 
+          description: "تأكد من وجود كاميرا متصلة بجهازك.", 
           variant: "destructive" 
         });
-      } else if (error?.message?.includes("NotAllowedError")) {
+      } else if (error?.message?.includes("NotReadableError")) {
         toast({ 
-          title: "تم رفض إذن الكاميرا", 
-          description: "يرجى منح الإذن للكاميرا في إعدادات المتصفح", 
+          title: "الكاميرا مستخدمة من تطبيق آخر", 
+          description: "أغلق أي تطبيق آخر يستخدم الكاميرا (مثل التصوير أو المكالمات) ثم أعد المحاولة.", 
           variant: "destructive" 
         });
       } else {
         toast({ 
           title: "خطأ في الكاميرا", 
-          description: error?.message || "تأكد من وجود كاميرا وحاول مجدداً", 
+          description: error?.message || "حدث خطأ غير متوقع. حاول إعادة تحميل الصفحة.", 
           variant: "destructive" 
         });
       }
+      
+      // Auto close after 4 seconds if error
+      setTimeout(() => {
+        if (scannerOpen) {
+          stopScanner();
+        }
+      }, 4000);
     }
   };
 
   const stopScanner = async () => {
-    setIsScanning(false);
+    setScanning(false);
     setScannerOpen(false);
-    isStartingRef.current = false;
+    setCameraError(null);
     if (scannerRef.current) {
       try {
         await scannerRef.current.stop();
@@ -294,22 +379,34 @@ export default function ReceptionPage() {
             </button>
             
             <h3 className="text-lg font-bold text-center text-foreground mb-4">
-              {isScanning ? "مسح QR" : "جاري التحميل..."}
+              {scanning ? "مسح QR" : "جاري التحميل..."}
             </h3>
             
-            <div className="relative aspect-square w-full max-w-sm mx-auto overflow-hidden rounded-2xl bg-black">
+            <div className="relative aspect-square w-full max-w-sm mx-auto overflow-hidden rounded-2xl bg-black/5">
               <div 
                 id="qr-reader" 
                 ref={scannerContainerRef}
                 className="w-full h-full"
-                style={{ minHeight: "250px" }}
               />
-              {isScanning && (
+              {scanning && (
                 <div className="absolute inset-0 border-2 border-primary/50 rounded-2xl animate-pulse pointer-events-none" />
               )}
-              {!isScanning && (
+              {!scanning && !cameraError && (
                 <div className="absolute inset-0 flex items-center justify-center">
-                  <Loader2 className="w-8 h-8 animate-spin text-white" />
+                  <Loader2 className="w-8 h-8 animate-spin text-primary" />
+                </div>
+              )}
+              {cameraError && (
+                <div className="absolute inset-0 flex flex-col items-center justify-center bg-black/50 p-4 text-center">
+                  <AlertCircle className="w-10 h-10 text-destructive mb-2" />
+                  <p className="text-white text-sm font-medium">{cameraError}</p>
+                  <Button 
+                    variant="outline" 
+                    className="mt-3 bg-white/10 text-white border-white/20"
+                    onClick={startScanner}
+                  >
+                    إعادة المحاولة
+                  </Button>
                 </div>
               )}
             </div>
@@ -318,13 +415,24 @@ export default function ReceptionPage() {
               ضع كود QR داخل الإطار للمسح التلقائي
             </p>
             
-            <Button 
-              variant="outline" 
-              className="w-full mt-4"
-              onClick={stopScanner}
-            >
-              إلغاء
-            </Button>
+            <div className="flex gap-2 mt-4">
+              <Button 
+                variant="outline" 
+                className="w-full"
+                onClick={stopScanner}
+              >
+                إلغاء
+              </Button>
+              {cameraError && (
+                <Button 
+                  variant="default" 
+                  className="w-full"
+                  onClick={startScanner}
+                >
+                  إعادة المحاولة
+                </Button>
+              )}
+            </div>
           </div>
         </div>
       )}
