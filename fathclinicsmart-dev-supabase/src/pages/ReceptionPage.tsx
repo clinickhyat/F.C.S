@@ -1,17 +1,3 @@
-احسنت هذا رائع جدا ولكن ايضا اريد ان يمكن ان يقرا من المعرض ايضاةصورة ويمسحها 
-
-ايضا لاحظ اذا مسحها اريد يتحول الموعد الى الى وصل حيث هنالك زرين كما هما موجودان مسبقا بعظ تاكيد الحضور من تليجرام  
-الزرارن هما 
- وصل ولم يصل عند مسح الكود  يكون وصل 
-مثلا لاستكمال الالية التي كانت سابقا
-
-
-دون تعارضها 
-واكمال باقي الكود كماهو 
-
-سوء وايضا وصول يمكن يدويا  
-يبقى ايضاوكماةهو وانما هذه ميزة اخرى عن كريق مسح الباركود 
-
 import { useEffect, useMemo, useState, useRef, useCallback } from "react";
 import { useNavigate } from "react-router-dom";
 import { format } from "date-fns";
@@ -25,7 +11,7 @@ import { toast } from "@/hooks/use-toast";
 import { 
   CalendarDays, CheckCircle, Clock, LogOut, QrCode, Search, 
   ShieldCheck, Stethoscope, Wallet, Users, TrendingUp, Timer, 
-  Camera, X, Loader2, AlertCircle 
+  Camera, X, Loader2, AlertCircle, Image as ImageIcon, Upload, RefreshCw
 } from "lucide-react";
 import { BarChart, Bar, PieChart, Pie, Cell, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid, Legend } from "recharts";
 import { Html5Qrcode } from "html5-qrcode";
@@ -43,7 +29,7 @@ type Appointment = {
   services: { name: string; price: number | null } | null;
 };
 
-// ─── ثابت: معرف عنصر الماسح ───
+// ─── معرف عنصر الماسح ───
 const QR_ELEMENT_ID = "qr-reader-container";
 
 export default function ReceptionPage() {
@@ -59,12 +45,15 @@ export default function ReceptionPage() {
   const [statusFilter, setStatusFilter] = useState<string>("active");
   const today = dateFilter;
 
-  // ─── حالة الماسح ───
+  // ─── حالة الماسح والصور ───
   const [scannerOpen, setScannerOpen] = useState(false);
   const [scannerStatus, setScannerStatus] = useState<"idle" | "loading" | "active" | "error">("idle");
   const [cameraError, setCameraError] = useState<string | null>(null);
+  const [uploadingImage, setUploadingImage] = useState(false);
+  
   const scannerRef = useRef<Html5Qrcode | null>(null);
   const appointmentsRef = useRef<Appointment[]>([]);
+  const fileInputRef = useRef<HTMLInputElement | null>(null);
 
   useEffect(() => {
     appointmentsRef.current = appointments;
@@ -134,34 +123,30 @@ export default function ReceptionPage() {
     if (msg.includes("NotReadableError") || msg.includes("TrackStartError")) {
       return "⚠️ الكاميرا مستخدمة من تطبيق آخر. أغلق التطبيقات الأخرى وأعد المحاولة.";
     }
-    if (msg.includes("OverconstrainedError")) {
-      return "⚙️ إعدادات الكاميرا غير مدعومة. سيتم المحاولة بإعدادات مختلفة.";
-    }
-    if (msg.includes("NotSupportedError")) {
-      return "🌐 متصفحك لا يدعم الوصول للكاميرا. جرب Chrome أو Safari.";
-    }
-    return `❌ فشل فتح الكاميرا. حاول مرة أخرى. (${msg.slice(0, 60)})`;
+    return `❌ فشل فتح الكاميرا. حاول مرة أخرى أو قم برفع صورة الموعد من المعرض.`;
   };
 
   // ─── معالجة الكود الممسوح ───
   const handleScannedCode = useCallback((decodedText: string) => {
     const currentAppointments = appointmentsRef.current;
+    const cleanCode = decodedText.trim();
+
     const found = currentAppointments.find(a =>
-      a.id === decodedText ||
-      a.reservation_code === decodedText ||
-      a.reservation_code.toLowerCase() === decodedText.toLowerCase()
+      a.id === cleanCode ||
+      a.reservation_code === cleanCode ||
+      a.reservation_code.toLowerCase() === cleanCode.toLowerCase()
     );
 
     if (found) {
       if (!found.arrived_at) {
-        markArrived(found.id);
+        markArrived(found.id); // تحويل الحالة تلقائياً إلى "وصل"
       } else {
-        toast({ title: "تنبيه", description: "هذا الموعد تم تسجيل حضوره مسبقاً" });
+        toast({ title: "تنبيه", description: `الموعد (${found.reservation_code}) تم تسجيل حضوره مسبقاً` });
       }
     } else {
       toast({
         title: "لم يتم العثور على الموعد",
-        description: `الكود الممسوح: ${decodedText}`,
+        description: `الكود الممسوح: ${cleanCode}`,
         variant: "destructive",
       });
     }
@@ -175,16 +160,14 @@ export default function ReceptionPage() {
     setCameraError(null);
   }, []);
 
-  // ─── تشغيل الماسح (المنطق الذكي) ───
+  // ─── تشغيل الكاميرا المباشرة ───
   const startScanner = useCallback(async () => {
-    // تنظيف أي ماسح سابق
     await destroyScanner();
 
     setCameraError(null);
     setScannerStatus("loading");
     setScannerOpen(true);
 
-    // انتظار ظهور العنصر في DOM
     await new Promise<void>((resolve) => {
       requestAnimationFrame(() => {
         requestAnimationFrame(() => {
@@ -192,7 +175,7 @@ export default function ReceptionPage() {
         });
       });
     });
-    await new Promise(resolve => setTimeout(resolve, 300));
+    await new Promise(resolve => setTimeout(resolve, 250));
 
     const element = document.getElementById(QR_ELEMENT_ID);
     if (!element) {
@@ -202,25 +185,11 @@ export default function ReceptionPage() {
     }
 
     if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
-      setCameraError("🌐 متصفحك لا يدعم الوصول للكاميرا.");
+      setCameraError("🌐 متصفحك لا يدعم الوصول للكاميرا. يمكنك رفع صورة الكود من المعرض.");
       setScannerStatus("error");
       return;
     }
 
-    // التحقق من وجود كاميرات
-    try {
-      const devices = await navigator.mediaDevices.enumerateDevices();
-      const videoDevices = devices.filter(d => d.kind === "videoinput");
-      if (videoDevices.length === 0) {
-        setCameraError("📷 لا توجد كاميرا متصلة بجهازك.");
-        setScannerStatus("error");
-        return;
-      }
-    } catch (_) {
-      // نكمل حتى لو فشل enumerateDevices
-    }
-
-    // المحاولة الأولى: كاميرا خلفية
     const tryStart = async (facingMode: "environment" | "user"): Promise<boolean> => {
       try {
         const scanner = new Html5Qrcode(QR_ELEMENT_ID, { verbose: false });
@@ -239,7 +208,7 @@ export default function ReceptionPage() {
           (decodedText) => {
             stopScanner().then(() => handleScannedCode(decodedText));
           },
-          () => {} // تجاهل أخطاء المسح العادية
+          () => {}
         );
 
         setScannerStatus("active");
@@ -257,59 +226,112 @@ export default function ReceptionPage() {
       await tryStart("environment");
       return;
     } catch (firstError: any) {
-      console.warn("Rear camera failed:", firstError?.message);
-
-      const isPermissionError = firstError?.message?.includes("NotAllowedError") ||
-                                firstError?.message?.includes("Permission");
-      if (isPermissionError) {
-        setCameraError(getFriendlyError(firstError));
-        setScannerStatus("error");
-        return;
-      }
-
-      // المحاولة الثانية: كاميرا أمامية
       try {
         const el = document.getElementById(QR_ELEMENT_ID);
         if (el) el.innerHTML = "";
-        await new Promise(resolve => setTimeout(resolve, 200));
+        await new Promise(resolve => setTimeout(resolve, 150));
         await tryStart("user");
         return;
       } catch (secondError: any) {
-        console.error("Front camera also failed:", secondError?.message);
-
-        // المحاولة الثالثة: استخدام deviceId مباشرة
-        try {
-          const el = document.getElementById(QR_ELEMENT_ID);
-          if (el) el.innerHTML = "";
-          await new Promise(resolve => setTimeout(resolve, 200));
-
-          const scanner = new Html5Qrcode(QR_ELEMENT_ID, { verbose: false });
-          scannerRef.current = scanner;
-
-          const cameras = await Html5Qrcode.getCameras();
-          if (cameras && cameras.length > 0) {
-            await scanner.start(
-              cameras[0].id,
-              { fps: 10, qrbox: { width: 250, height: 250 } },
-              (decodedText) => {
-                stopScanner().then(() => handleScannedCode(decodedText));
-              },
-              () => {}
-            );
-            setScannerStatus("active");
-            return;
-          }
-          throw new Error("No cameras found");
-        } catch (thirdError: any) {
-          console.error("All camera attempts failed:", thirdError?.message);
-          setCameraError(getFriendlyError(thirdError));
-          setScannerStatus("error");
-        }
+        setCameraError(getFriendlyError(secondError));
+        setScannerStatus("error");
       }
     }
   }, [stopScanner, handleScannedCode]);
 
-  // ─── دوال التحديث ───
+  // ─── معالجة صورة المعرض للقراءة الذكية (لقطات الشاشة) ───
+  const processImageForQR = (file: File): Promise<File> => {
+    return new Promise((resolve, reject) => {
+      const img = new Image();
+      img.onload = () => {
+        const canvas = document.createElement("canvas");
+        const ctx = canvas.getContext("2d");
+        if (!ctx) return reject("فشل إنشاء Canvas");
+
+        let width = img.width;
+        let height = img.height;
+        const maxDim = 1000;
+
+        if (width > maxDim || height > maxDim) {
+          if (width > height) {
+            height = Math.round((height * maxDim) / width);
+            width = maxDim;
+          } else {
+            width = Math.round((width * maxDim) / height);
+            height = maxDim;
+          }
+        }
+
+        canvas.width = width;
+        canvas.height = height;
+        ctx.drawImage(img, 0, 0, width, height);
+
+        canvas.toBlob((blob) => {
+          if (blob) {
+            resolve(new File([blob], file.name, { type: "image/png" }));
+          } else {
+            reject("فشل تحويل الصورة");
+          }
+        }, "image/png");
+      };
+      img.onerror = () => reject("فشل تحميل الصورة");
+      img.src = URL.createObjectURL(file);
+    });
+  };
+
+  // ─── قراءة QR من المعرض ───
+  const handleFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    setUploadingImage(true);
+    setCameraError(null);
+
+    if (scannerRef.current?.isScanning) {
+      try { await scannerRef.current.stop(); } catch (_) {}
+    }
+
+    let html5QrCode = scannerRef.current;
+    if (!html5QrCode) {
+      const el = document.getElementById(QR_ELEMENT_ID);
+      if (el) {
+        html5QrCode = new Html5Qrcode(QR_ELEMENT_ID, { verbose: false });
+        scannerRef.current = html5QrCode;
+      }
+    }
+
+    if (!html5QrCode) {
+      toast({ title: "خطأ", description: "عنصر الماسح غير متوفر", variant: "destructive" });
+      setUploadingImage(false);
+      return;
+    }
+
+    try {
+      const decodedText = await html5QrCode.scanFile(file, false);
+      await stopScanner();
+      handleScannedCode(decodedText);
+    } catch (firstErr) {
+      try {
+        const resizedFile = await processImageForQR(file);
+        const decodedText = await html5QrCode.scanFile(resizedFile, false);
+        await stopScanner();
+        handleScannedCode(decodedText);
+      } catch (secondErr) {
+        toast({
+          title: "فشل قراءة QR من الصورة",
+          description: "تأكد من اختيار صورة تحتوي على كود QR واضح، أو استخدم الكاميرا مباشرة.",
+          variant: "destructive",
+        });
+        setCameraError("لم نتمكن من التعرف على كود QR في هذه الصورة. يرجى تجريب صورة أكثر وضوحاً.");
+        setScannerStatus("error");
+      }
+    } finally {
+      setUploadingImage(false);
+      if (fileInputRef.current) fileInputRef.current.value = "";
+    }
+  };
+
+  // ─── دوال التحديث اليدوي ───
   const unlock = () => {
     if (pin === (clinic?.reception_pin || "1234")) {
       setUnlocked(true);
@@ -328,7 +350,7 @@ export default function ReceptionPage() {
     if (error) {
       toast({ title: "خطأ", description: "فشل تحديث الموعد", variant: "destructive" });
     } else {
-      toast({ title: "✅ تم تأكيد الحضور", description: "انتقلت الحالة إلى الصندوق" });
+      toast({ title: "✅ تم تأكيد الحضور", description: "تم تحويل الموعد إلى (وصل)" });
     }
   };
 
@@ -376,7 +398,6 @@ export default function ReceptionPage() {
     return a.status === statusFilter;
   }), [appointments, search, statusFilter]);
 
-  // ─── Guard ───
   if (authLoading || clinicLoading) {
     return <div className="min-h-screen bg-mesh flex items-center justify-center text-muted-foreground">جاري التحميل...</div>;
   }
@@ -400,9 +421,16 @@ export default function ReceptionPage() {
     );
   }
 
-  // ─── Render ───
   return (
     <div className="min-h-screen bg-mesh flex flex-col">
+      <input
+        type="file"
+        ref={fileInputRef}
+        accept="image/*"
+        className="hidden"
+        onChange={handleFileUpload}
+      />
+
       {/* مودال الماسح */}
       {scannerOpen && (
         <div className="fixed inset-0 z-50 bg-black/90 backdrop-blur-lg flex items-center justify-center p-4">
@@ -417,14 +445,16 @@ export default function ReceptionPage() {
             <div className="relative mx-5 mb-4 rounded-2xl overflow-hidden bg-black" style={{ aspectRatio: "1/1" }}>
               <div id={QR_ELEMENT_ID} className="w-full h-full" />
 
-              {scannerStatus === "loading" && (
-                <div className="absolute inset-0 flex flex-col items-center justify-center bg-black/70">
-                  <Loader2 className="w-10 h-10 animate-spin text-white mb-3" />
-                  <p className="text-white text-sm font-medium">جاري تشغيل الكاميرا...</p>
+              {(scannerStatus === "loading" || uploadingImage) && (
+                <div className="absolute inset-0 flex flex-col items-center justify-center bg-black/80 z-20">
+                  <Loader2 className="w-10 h-10 animate-spin text-primary mb-3" />
+                  <p className="text-white text-sm font-medium">
+                    {uploadingImage ? "جاري قراءة الصورة..." : "جاري تشغيل الكاميرا..."}
+                  </p>
                 </div>
               )}
 
-              {scannerStatus === "active" && (
+              {scannerStatus === "active" && !uploadingImage && (
                 <div className="absolute inset-0 pointer-events-none flex items-center justify-center">
                   <div className="relative w-48 h-48">
                     <div className="absolute top-0 left-0 w-8 h-8 border-t-4 border-l-4 border-primary rounded-tl-lg" />
@@ -436,28 +466,40 @@ export default function ReceptionPage() {
                 </div>
               )}
 
-              {scannerStatus === "error" && (
-                <div className="absolute inset-0 flex flex-col items-center justify-center bg-black/85 p-5 text-center">
+              {scannerStatus === "error" && !uploadingImage && (
+                <div className="absolute inset-0 flex flex-col items-center justify-center bg-black/90 p-5 text-center z-20">
                   <AlertCircle className="w-12 h-12 text-red-400 mb-3" />
-                  <p className="text-white text-sm leading-relaxed mb-4">{cameraError}</p>
-                  <Button onClick={startScanner} className="bg-primary text-white text-sm px-6" size="sm">
-                    إعادة المحاولة
-                  </Button>
+                  <p className="text-white text-xs leading-relaxed mb-4">{cameraError}</p>
+                  <div className="flex gap-2 w-full">
+                    <Button onClick={startScanner} className="flex-1 bg-primary text-white text-xs" size="sm">
+                      <RefreshCw className="w-3.5 h-3.5 ml-1" />
+                      إعادة المحاولة
+                    </Button>
+                  </div>
                 </div>
               )}
             </div>
 
+            <div className="px-5 pb-3">
+              <Button 
+                variant="outline" 
+                className="w-full gap-2 border-dashed border-primary/50 hover:bg-primary/5 text-primary text-xs h-10"
+                onClick={() => fileInputRef.current?.click()}
+                disabled={uploadingImage}
+              >
+                <ImageIcon className="w-4 h-4" />
+                اختيار صورة من المعرض (لقطة شاشة)
+              </Button>
+            </div>
+
             {scannerStatus === "active" && (
-              <p className="text-xs text-center text-muted-foreground px-5 pb-3">
-                وجّه الكاميرا نحو QR Code للمسح التلقائي
+              <p className="text-[11px] text-center text-muted-foreground px-5 pb-3">
+                وجّه الكاميرا نحو الكود أو اختر صورة من المعرض
               </p>
             )}
 
-            <div className="flex gap-3 px-5 pb-5">
-              <Button variant="outline" className="flex-1" onClick={stopScanner}>إغلاق</Button>
-              {scannerStatus === "error" && (
-                <Button className="flex-1" onClick={startScanner}>إعادة المحاولة</Button>
-              )}
+            <div className="flex gap-2 px-5 pb-5">
+              <Button variant="ghost" className="w-full text-xs" onClick={stopScanner}>إغلاق</Button>
             </div>
           </div>
         </div>
@@ -483,8 +525,11 @@ export default function ReceptionPage() {
             <div><h1 className="text-xl font-bold text-foreground">الاستقبال</h1><p className="text-xs text-muted-foreground">مواعيد اليوم</p></div>
           </div>
           <div className="flex gap-2">
-            <Button variant="ghost" size="icon" onClick={startScanner} className="hover:bg-primary/10" title="مسح QR">
+            <Button variant="ghost" size="icon" onClick={startScanner} className="hover:bg-primary/10" title="مسح QR بواسطة الكاميرا">
               <Camera className="w-5 h-5" />
+            </Button>
+            <Button variant="ghost" size="icon" onClick={() => fileInputRef.current?.click()} className="hover:bg-primary/10" title="مسح QR من المعرض">
+              <Upload className="w-5 h-5" />
             </Button>
             <Button variant="ghost" size="icon" onClick={() => navigate("/cashier")}><Wallet className="w-5 h-5" /></Button>
             <Button variant="ghost" size="icon" onClick={signOut}><LogOut className="w-5 h-5" /></Button>
@@ -641,11 +686,3 @@ function StatsAndCharts({ appointments }: { appointments: Appointment[] }) {
     </div>
   );
 }
-لاحظ يعني هذا الغلط 
-❌ فشل قراءة QR من الصورة. تأكد من وضوح الكود وجودته.
-
-لاحظ الصورة .يعطيني غلط قراءة QR
-تاكد من وضوح الكود وجودة الصورة 
-
-
-لازال نفس الغلط 
