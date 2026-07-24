@@ -29,8 +29,9 @@ type Appointment = {
   services: { name: string; price: number | null } | null;
 };
 
-// ─── معرف عنصر الماسح ───
-const QR_ELEMENT_ID = "qr-reader-container";
+// ─── معرفات عناصر الماسح ───
+const QR_CAMERA_ELEMENT_ID = "qr-camera-container";
+const QR_FILE_ELEMENT_ID = "qr-hidden-file-reader";
 
 export default function ReceptionPage() {
   const navigate = useNavigate();
@@ -126,6 +127,21 @@ export default function ReceptionPage() {
     return `❌ فشل فتح الكاميرا. حاول مرة أخرى أو قم برفع صورة الموعد من المعرض.`;
   };
 
+  // ─── تحديث حالة الموعد إلى "وصل" ───
+  const markArrived = async (appointmentId: string) => {
+    if (!clinic) return;
+    const { error } = await supabase
+      .from("appointments")
+      .update({ arrived_at: new Date().toISOString(), department: "استقبال" })
+      .eq("id", appointmentId)
+      .eq("clinic_id", clinic.id);
+    if (error) {
+      toast({ title: "خطأ", description: "فشل تحديث الموعد", variant: "destructive" });
+    } else {
+      toast({ title: "✅ تم تأكيد الحضور", description: "تم تحويل الموعد إلى (وصل)" });
+    }
+  };
+
   // ─── معالجة الكود الممسوح ───
   const handleScannedCode = useCallback((decodedText: string) => {
     const currentAppointments = appointmentsRef.current;
@@ -139,7 +155,7 @@ export default function ReceptionPage() {
 
     if (found) {
       if (!found.arrived_at) {
-        markArrived(found.id); // تحويل الحالة تلقائياً إلى "وصل"
+        markArrived(found.id);
       } else {
         toast({ title: "تنبيه", description: `الموعد (${found.reservation_code}) تم تسجيل حضوره مسبقاً` });
       }
@@ -177,7 +193,7 @@ export default function ReceptionPage() {
     });
     await new Promise(resolve => setTimeout(resolve, 250));
 
-    const element = document.getElementById(QR_ELEMENT_ID);
+    const element = document.getElementById(QR_CAMERA_ELEMENT_ID);
     if (!element) {
       setCameraError("❌ تعذر تهيئة الماسح. أعد المحاولة.");
       setScannerStatus("error");
@@ -192,7 +208,7 @@ export default function ReceptionPage() {
 
     const tryStart = async (facingMode: "environment" | "user"): Promise<boolean> => {
       try {
-        const scanner = new Html5Qrcode(QR_ELEMENT_ID, { verbose: false });
+        const scanner = new Html5Qrcode(QR_CAMERA_ELEMENT_ID, { verbose: false });
         scannerRef.current = scanner;
 
         await scanner.start(
@@ -227,7 +243,7 @@ export default function ReceptionPage() {
       return;
     } catch (firstError: any) {
       try {
-        const el = document.getElementById(QR_ELEMENT_ID);
+        const el = document.getElementById(QR_CAMERA_ELEMENT_ID);
         if (el) el.innerHTML = "";
         await new Promise(resolve => setTimeout(resolve, 150));
         await tryStart("user");
@@ -239,7 +255,7 @@ export default function ReceptionPage() {
     }
   }, [stopScanner, handleScannedCode]);
 
-  // ─── معالجة صورة المعرض للقراءة الذكية (لقطات الشاشة) ───
+  // ─── معالجة الصورة المرفوعة وضبط قياساتها ───
   const processImageForQR = (file: File): Promise<File> => {
     return new Promise((resolve, reject) => {
       const img = new Image();
@@ -287,44 +303,35 @@ export default function ReceptionPage() {
     setUploadingImage(true);
     setCameraError(null);
 
-    if (scannerRef.current?.isScanning) {
-      try { await scannerRef.current.stop(); } catch (_) {}
-    }
-
-    let html5QrCode = scannerRef.current;
-    if (!html5QrCode) {
-      const el = document.getElementById(QR_ELEMENT_ID);
-      if (el) {
-        html5QrCode = new Html5Qrcode(QR_ELEMENT_ID, { verbose: false });
-        scannerRef.current = html5QrCode;
-      }
-    }
-
-    if (!html5QrCode) {
-      toast({ title: "خطأ", description: "عنصر الماسح غير متوفر", variant: "destructive" });
-      setUploadingImage(false);
-      return;
-    }
+    // إيقاف بث الكاميرا الحية إذا كانت تعمل
+    await destroyScanner();
 
     try {
-      const decodedText = await html5QrCode.scanFile(file, false);
+      // استخدام العنصر الخفي الثابت الموجود دائماً في الصفحة
+      const fileScanner = new Html5Qrcode(QR_FILE_ELEMENT_ID, { verbose: false });
+      let decodedText = "";
+
+      try {
+        decodedText = await fileScanner.scanFile(file, false);
+      } catch (firstErr) {
+        // إذا فشلت القراءة المباشرة، نعيد معالجة الصورة وقصها تلقائياً
+        const resizedFile = await processImageForQR(file);
+        decodedText = await fileScanner.scanFile(resizedFile, false);
+      }
+
+      // إغلاق المودال والبدء في تنفيذ الحضور
       await stopScanner();
       handleScannedCode(decodedText);
-    } catch (firstErr) {
-      try {
-        const resizedFile = await processImageForQR(file);
-        const decodedText = await html5QrCode.scanFile(resizedFile, false);
-        await stopScanner();
-        handleScannedCode(decodedText);
-      } catch (secondErr) {
-        toast({
-          title: "فشل قراءة QR من الصورة",
-          description: "تأكد من اختيار صورة تحتوي على كود QR واضح، أو استخدم الكاميرا مباشرة.",
-          variant: "destructive",
-        });
-        setCameraError("لم نتمكن من التعرف على كود QR في هذه الصورة. يرجى تجريب صورة أكثر وضوحاً.");
-        setScannerStatus("error");
-      }
+
+    } catch (err) {
+      console.error("فشل قراءة الصورة:", err);
+      toast({
+        title: "فشل قراءة QR من الصورة",
+        description: "تأكد من اختيار صورة تحتوي على كود QR واضح، أو استخدم الكاميرا مباشرة.",
+        variant: "destructive",
+      });
+      setCameraError("لم نتمكن من التعرف على كود QR في هذه الصورة. يرجى تجريب صورة أكثر وضوحاً.");
+      setScannerStatus("error");
     } finally {
       setUploadingImage(false);
       if (fileInputRef.current) fileInputRef.current.value = "";
@@ -337,20 +344,6 @@ export default function ReceptionPage() {
       setUnlocked(true);
     } else {
       toast({ title: "رمز غير صحيح", description: "تحقق من رمز الاستقبال في الإعدادات", variant: "destructive" });
-    }
-  };
-
-  const markArrived = async (appointmentId: string) => {
-    if (!clinic) return;
-    const { error } = await supabase
-      .from("appointments")
-      .update({ arrived_at: new Date().toISOString(), department: "استقبال" })
-      .eq("id", appointmentId)
-      .eq("clinic_id", clinic.id);
-    if (error) {
-      toast({ title: "خطأ", description: "فشل تحديث الموعد", variant: "destructive" });
-    } else {
-      toast({ title: "✅ تم تأكيد الحضور", description: "تم تحويل الموعد إلى (وصل)" });
     }
   };
 
@@ -423,6 +416,10 @@ export default function ReceptionPage() {
 
   return (
     <div className="min-h-screen bg-mesh flex flex-col">
+      {/* عنصر خفي لقراءة الصور من المعرض بشكل ثابت ودائم */}
+      <div id={QR_FILE_ELEMENT_ID} className="hidden" />
+
+      {/* مدخل ملفات الصور الخفي */}
       <input
         type="file"
         ref={fileInputRef}
@@ -443,7 +440,7 @@ export default function ReceptionPage() {
             </div>
 
             <div className="relative mx-5 mb-4 rounded-2xl overflow-hidden bg-black" style={{ aspectRatio: "1/1" }}>
-              <div id={QR_ELEMENT_ID} className="w-full h-full" />
+              <div id={QR_CAMERA_ELEMENT_ID} className="w-full h-full" />
 
               {(scannerStatus === "loading" || uploadingImage) && (
                 <div className="absolute inset-0 flex flex-col items-center justify-center bg-black/80 z-20">
