@@ -72,7 +72,7 @@ export default function ReceptionPage() {
   }, [role, clinicLoading, navigate]);
 
   // ─── جلب المواعيد ───
-  const fetchAppointments = async () => {
+  const fetchAppointments = useCallback(async () => {
     if (!clinic || !unlocked) return;
     const { data, error } = await supabase
       .from("appointments")
@@ -81,7 +81,7 @@ export default function ReceptionPage() {
       .eq("date", today)
       .order("time", { ascending: true });
     if (!error) setAppointments((data || []) as Appointment[]);
-  };
+  }, [clinic, unlocked, today]);
 
   useEffect(() => {
     if (!clinic || !unlocked) return;
@@ -91,7 +91,7 @@ export default function ReceptionPage() {
       .on("postgres_changes", { event: "*", schema: "public", table: "appointments", filter: `clinic_id=eq.${clinic.id}` }, fetchAppointments)
       .subscribe();
     return () => { supabase.removeChannel(channel); };
-  }, [clinic, unlocked, today]);
+  }, [clinic, unlocked, today, fetchAppointments]);
 
   // ─── تنظيف الماسح عند الخروج ───
   useEffect(() => {
@@ -138,35 +138,64 @@ export default function ReceptionPage() {
     if (error) {
       toast({ title: "خطأ", description: "فشل تحديث الموعد", variant: "destructive" });
     } else {
-      toast({ title: "✅ تم تأكيد الحضور", description: "تم تحويل الموعد إلى (وصل)" });
+      toast({ title: "✅ تم تأكيد الحضور", description: "تحولت حالة الموعد تلقائياً إلى (وصل)" });
+      fetchAppointments();
     }
   };
 
-  // ─── معالجة الكود الممسوح ───
-  const handleScannedCode = useCallback((decodedText: string) => {
-    const currentAppointments = appointmentsRef.current;
-    const cleanCode = decodedText.trim();
+  // ─── معالجة واستخراج الكود الممسوح ذكياً ───
+  const handleScannedCode = useCallback(async (decodedText: string) => {
+    const rawText = decodedText.trim();
+    
+    // 1. استخراج كود الحجز من النصوص المركبة (مثل لقطات الشاشات للتيلجرام والواتساب)
+    let extractedCode = rawText;
+    const match = rawText.match(/RE-[A-Za-z0-9]+/i) || rawText.match(/RE-\d+/i);
+    if (match) {
+      extractedCode = match[0];
+    }
 
-    const found = currentAppointments.find(a =>
-      a.id === cleanCode ||
-      a.reservation_code === cleanCode ||
-      a.reservation_code.toLowerCase() === cleanCode.toLowerCase()
+    const currentAppointments = appointmentsRef.current;
+
+    // 2. البحث في المواعيد المحملة محلياً
+    let found = currentAppointments.find(a =>
+      a.id === rawText ||
+      a.reservation_code.toLowerCase() === rawText.toLowerCase() ||
+      a.reservation_code.toLowerCase() === extractedCode.toLowerCase() ||
+      rawText.toLowerCase().includes(a.reservation_code.toLowerCase())
     );
+
+    // 3. إذا لم يوجد في القائمة المحلية، نبحث مباشرة في Supabase (ربما التاريخ مختلف)
+    if (!found && clinic) {
+      const { data } = await supabase
+        .from("appointments")
+        .select("id,date,time,status,reservation_code,arrived_at,payment_status,entered_at,patients(name,phone),services(name,price)")
+        .eq("clinic_id", clinic.id)
+        .or(`reservation_code.ilike.${extractedCode},reservation_code.ilike.${rawText},id.eq.${rawText}`)
+        .maybeSingle();
+
+      if (data) {
+        found = data as Appointment;
+        // إذا كان الموعد في تاريخ آخر، نغير الفلتر التلقائي إلى ذلك التاريخ ليظهر
+        if (found.date !== dateFilter) {
+          setDateFilter(found.date);
+        }
+      }
+    }
 
     if (found) {
       if (!found.arrived_at) {
-        markArrived(found.id);
+        await markArrived(found.id);
       } else {
         toast({ title: "تنبيه", description: `الموعد (${found.reservation_code}) تم تسجيل حضوره مسبقاً` });
       }
     } else {
       toast({
         title: "لم يتم العثور على الموعد",
-        description: `الكود الممسوح: ${cleanCode}`,
+        description: `الكود الممسوح: ${extractedCode}`,
         variant: "destructive",
       });
     }
-  }, []);
+  }, [clinic, dateFilter, fetchAppointments]);
 
   // ─── إيقاف الماسح ───
   const stopScanner = useCallback(async () => {
@@ -255,7 +284,7 @@ export default function ReceptionPage() {
     }
   }, [stopScanner, handleScannedCode]);
 
-  // ─── معالجة الصورة المرفوعة وضبط قياساتها ───
+  // ─── معالجة الصورة المرفوعة ───
   const processImageForQR = (file: File): Promise<File> => {
     return new Promise((resolve, reject) => {
       const img = new Image();
@@ -303,23 +332,19 @@ export default function ReceptionPage() {
     setUploadingImage(true);
     setCameraError(null);
 
-    // إيقاف بث الكاميرا الحية إذا كانت تعمل
     await destroyScanner();
 
     try {
-      // استخدام العنصر الخفي الثابت الموجود دائماً في الصفحة
       const fileScanner = new Html5Qrcode(QR_FILE_ELEMENT_ID, { verbose: false });
       let decodedText = "";
 
       try {
         decodedText = await fileScanner.scanFile(file, false);
       } catch (firstErr) {
-        // إذا فشلت القراءة المباشرة، نعيد معالجة الصورة وقصها تلقائياً
         const resizedFile = await processImageForQR(file);
         decodedText = await fileScanner.scanFile(resizedFile, false);
       }
 
-      // إغلاق المودال والبدء في تنفيذ الحضور
       await stopScanner();
       handleScannedCode(decodedText);
 
@@ -358,6 +383,7 @@ export default function ReceptionPage() {
       toast({ title: "خطأ", description: "فشل تسجيل الدخول", variant: "destructive" });
     } else {
       toast({ title: "تم الدخول", description: "أُضيفت الحالة إلى المعاينات" });
+      fetchAppointments();
     }
   };
 
@@ -372,6 +398,7 @@ export default function ReceptionPage() {
       toast({ title: "خطأ", description: "فشل التحديث", variant: "destructive" });
     } else {
       toast({ title: "تم تسجيل عدم الحضور", description: "أُغلق الموعد كـ (لم يصل)" });
+      fetchAppointments();
     }
   };
 
@@ -416,10 +443,8 @@ export default function ReceptionPage() {
 
   return (
     <div className="min-h-screen bg-mesh flex flex-col">
-      {/* عنصر خفي لقراءة الصور من المعرض بشكل ثابت ودائم */}
       <div id={QR_FILE_ELEMENT_ID} className="hidden" />
 
-      {/* مدخل ملفات الصور الخفي */}
       <input
         type="file"
         ref={fileInputRef}
