@@ -1,3 +1,17 @@
+احسنت هذا رائع جدا ولكن ايضا اريد ان يمكن ان يقرا من المعرض ايضاةصورة ويمسحها 
+
+ايضا لاحظ اذا مسحها اريد يتحول الموعد الى الى وصل حيث هنالك زرين كما هما موجودان مسبقا بعظ تاكيد الحضور من تليجرام  
+الزرارن هما 
+ وصل ولم يصل عند مسح الكود  يكون وصل 
+مثلا لاستكمال الالية التي كانت سابقا
+
+
+دون تعارضها 
+واكمال باقي الكود كماهو 
+
+سوء وايضا وصول يمكن يدويا  
+يبقى ايضاوكماةهو وانما هذه ميزة اخرى عن كريق مسح الباركود 
+
 import { useEffect, useMemo, useState, useRef, useCallback } from "react";
 import { useNavigate } from "react-router-dom";
 import { format } from "date-fns";
@@ -8,10 +22,10 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Footer } from "@/components/layout/Footer";
 import { toast } from "@/hooks/use-toast";
-import {
-  CalendarDays, CheckCircle, Clock, LogOut, QrCode, Search,
-  ShieldCheck, Stethoscope, Wallet, Users, TrendingUp, Timer,
-  Camera, X, Loader2, AlertCircle, Upload
+import { 
+  CalendarDays, CheckCircle, Clock, LogOut, QrCode, Search, 
+  ShieldCheck, Stethoscope, Wallet, Users, TrendingUp, Timer, 
+  Camera, X, Loader2, AlertCircle 
 } from "lucide-react";
 import { BarChart, Bar, PieChart, Pie, Cell, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid, Legend } from "recharts";
 import { Html5Qrcode } from "html5-qrcode";
@@ -49,10 +63,8 @@ export default function ReceptionPage() {
   const [scannerOpen, setScannerOpen] = useState(false);
   const [scannerStatus, setScannerStatus] = useState<"idle" | "loading" | "active" | "error">("idle");
   const [cameraError, setCameraError] = useState<string | null>(null);
-  const [imageScanning, setImageScanning] = useState(false);
   const scannerRef = useRef<Html5Qrcode | null>(null);
   const appointmentsRef = useRef<Appointment[]>([]);
-  const fileInputRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
     appointmentsRef.current = appointments;
@@ -131,7 +143,7 @@ export default function ReceptionPage() {
     return `❌ فشل فتح الكاميرا. حاول مرة أخرى. (${msg.slice(0, 60)})`;
   };
 
-  // ─── معالجة الكود الممسوح (مشترك بين الكاميرا والصورة) ───
+  // ─── معالجة الكود الممسوح ───
   const handleScannedCode = useCallback((decodedText: string) => {
     const currentAppointments = appointmentsRef.current;
     const found = currentAppointments.find(a =>
@@ -161,17 +173,18 @@ export default function ReceptionPage() {
     setScannerOpen(false);
     setScannerStatus("idle");
     setCameraError(null);
-    setImageScanning(false);
   }, []);
 
-  // ─── تشغيل الماسح (الكاميرا) ───
+  // ─── تشغيل الماسح (المنطق الذكي) ───
   const startScanner = useCallback(async () => {
+    // تنظيف أي ماسح سابق
     await destroyScanner();
 
     setCameraError(null);
     setScannerStatus("loading");
     setScannerOpen(true);
 
+    // انتظار ظهور العنصر في DOM
     await new Promise<void>((resolve) => {
       requestAnimationFrame(() => {
         requestAnimationFrame(() => {
@@ -194,6 +207,7 @@ export default function ReceptionPage() {
       return;
     }
 
+    // التحقق من وجود كاميرات
     try {
       const devices = await navigator.mediaDevices.enumerateDevices();
       const videoDevices = devices.filter(d => d.kind === "videoinput");
@@ -202,8 +216,11 @@ export default function ReceptionPage() {
         setScannerStatus("error");
         return;
       }
-    } catch (_) {}
+    } catch (_) {
+      // نكمل حتى لو فشل enumerateDevices
+    }
 
+    // المحاولة الأولى: كاميرا خلفية
     const tryStart = async (facingMode: "environment" | "user"): Promise<boolean> => {
       try {
         const scanner = new Html5Qrcode(QR_ELEMENT_ID, { verbose: false });
@@ -222,7 +239,7 @@ export default function ReceptionPage() {
           (decodedText) => {
             stopScanner().then(() => handleScannedCode(decodedText));
           },
-          () => {}
+          () => {} // تجاهل أخطاء المسح العادية
         );
 
         setScannerStatus("active");
@@ -250,6 +267,7 @@ export default function ReceptionPage() {
         return;
       }
 
+      // المحاولة الثانية: كاميرا أمامية
       try {
         const el = document.getElementById(QR_ELEMENT_ID);
         if (el) el.innerHTML = "";
@@ -259,6 +277,7 @@ export default function ReceptionPage() {
       } catch (secondError: any) {
         console.error("Front camera also failed:", secondError?.message);
 
+        // المحاولة الثالثة: استخدام deviceId مباشرة
         try {
           const el = document.getElementById(QR_ELEMENT_ID);
           if (el) el.innerHTML = "";
@@ -287,58 +306,6 @@ export default function ReceptionPage() {
           setScannerStatus("error");
         }
       }
-    }
-  }, [stopScanner, handleScannedCode]);
-
-  // ─── رفع صورة ومسحها ───
-  const handleImageUpload = useCallback(async (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (!file) return;
-
-    setImageScanning(true);
-    setCameraError(null);
-
-    try {
-      // قراءة الصورة كـ Data URL
-      const reader = new FileReader();
-      reader.onload = async (event) => {
-        try {
-          const imageData = event.target?.result as string;
-          // استخدام Html5Qrcode لمسح الصورة
-          const scanner = new Html5Qrcode(QR_ELEMENT_ID, { verbose: false });
-          const result = await scanner.scanImage(imageData, {
-            qrbox: { width: 250, height: 250 },
-          });
-          // نجاح المسح
-          if (result) {
-            // إغلاق المودال تلقائياً
-            await stopScanner();
-            handleScannedCode(result);
-          }
-        } catch (scanError: any) {
-          console.error("Image scan error:", scanError);
-          toast({
-            title: "❌ فشل قراءة QR من الصورة",
-            description: "تأكد من وضوح الكود وجودته.",
-            variant: "destructive",
-          });
-        } finally {
-          setImageScanning(false);
-          // إعادة تعيين قيمة input للسماح برفع نفس الملف مرة أخرى
-          if (fileInputRef.current) {
-            fileInputRef.current.value = "";
-          }
-        }
-      };
-      reader.readAsDataURL(file);
-    } catch (error) {
-      console.error("Image upload error:", error);
-      toast({
-        title: "خطأ في رفع الصورة",
-        description: "حاول مرة أخرى.",
-        variant: "destructive",
-      });
-      setImageScanning(false);
     }
   }, [stopScanner, handleScannedCode]);
 
@@ -486,37 +453,11 @@ export default function ReceptionPage() {
               </p>
             )}
 
-            <div className="flex flex-col gap-3 px-5 pb-5">
-              <div className="flex gap-3">
-                <Button variant="outline" className="flex-1" onClick={stopScanner}>إغلاق</Button>
-                {scannerStatus === "error" && (
-                  <Button className="flex-1" onClick={startScanner}>إعادة المحاولة</Button>
-                )}
-              </div>
-
-              {/* زر رفع صورة من المعرض */}
-              <div className="flex gap-3">
-                <Button
-                  variant="secondary"
-                  className="flex-1 gap-2"
-                  onClick={() => fileInputRef.current?.click()}
-                  disabled={imageScanning || scannerStatus === "loading"}
-                >
-                  {imageScanning ? (
-                    <Loader2 className="w-4 h-4 animate-spin" />
-                  ) : (
-                    <Upload className="w-4 h-4" />
-                  )}
-                  {imageScanning ? "جاري المسح..." : "رفع صورة QR"}
-                </Button>
-              </div>
-              <input
-                type="file"
-                ref={fileInputRef}
-                accept="image/*"
-                className="hidden"
-                onChange={handleImageUpload}
-              />
+            <div className="flex gap-3 px-5 pb-5">
+              <Button variant="outline" className="flex-1" onClick={stopScanner}>إغلاق</Button>
+              {scannerStatus === "error" && (
+                <Button className="flex-1" onClick={startScanner}>إعادة المحاولة</Button>
+              )}
             </div>
           </div>
         </div>
@@ -700,3 +641,11 @@ function StatsAndCharts({ appointments }: { appointments: Appointment[] }) {
     </div>
   );
 }
+لاحظ يعني هذا الغلط 
+❌ فشل قراءة QR من الصورة. تأكد من وضوح الكود وجودته.
+
+لاحظ الصورة .يعطيني غلط قراءة QR
+تاكد من وضوح الكود وجودة الصورة 
+
+
+لازال نفس الغلط 
