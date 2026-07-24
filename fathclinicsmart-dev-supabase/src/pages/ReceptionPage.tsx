@@ -8,10 +8,10 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Footer } from "@/components/layout/Footer";
 import { toast } from "@/hooks/use-toast";
-import { 
-  CalendarDays, CheckCircle, Clock, LogOut, QrCode, Search, 
-  ShieldCheck, Stethoscope, Wallet, Users, TrendingUp, Timer, 
-  Camera, X, Loader2, AlertCircle, Upload, Image as ImageIcon
+import {
+  CalendarDays, CheckCircle, Clock, LogOut, QrCode, Search,
+  ShieldCheck, Stethoscope, Wallet, Users, TrendingUp, Timer,
+  Camera, X, Loader2, AlertCircle, Upload
 } from "lucide-react";
 import { BarChart, Bar, PieChart, Pie, Cell, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid, Legend } from "recharts";
 import { Html5Qrcode } from "html5-qrcode";
@@ -49,9 +49,10 @@ export default function ReceptionPage() {
   const [scannerOpen, setScannerOpen] = useState(false);
   const [scannerStatus, setScannerStatus] = useState<"idle" | "loading" | "active" | "error">("idle");
   const [cameraError, setCameraError] = useState<string | null>(null);
-  const [scanningFile, setScanningFile] = useState(false);
+  const [imageScanning, setImageScanning] = useState(false);
   const scannerRef = useRef<Html5Qrcode | null>(null);
   const appointmentsRef = useRef<Appointment[]>([]);
+  const fileInputRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
     appointmentsRef.current = appointments;
@@ -130,7 +131,7 @@ export default function ReceptionPage() {
     return `❌ فشل فتح الكاميرا. حاول مرة أخرى. (${msg.slice(0, 60)})`;
   };
 
-  // ─── معالجة الكود الممسوح (من الكاميرا أو الصورة) ───
+  // ─── معالجة الكود الممسوح (مشترك بين الكاميرا والصورة) ───
   const handleScannedCode = useCallback((decodedText: string) => {
     const currentAppointments = appointmentsRef.current;
     const found = currentAppointments.find(a =>
@@ -141,7 +142,6 @@ export default function ReceptionPage() {
 
     if (found) {
       if (!found.arrived_at) {
-        // ✅ تحديث الموعد إلى "وصل" تلقائياً
         markArrived(found.id);
       } else {
         toast({ title: "تنبيه", description: "هذا الموعد تم تسجيل حضوره مسبقاً" });
@@ -161,18 +161,22 @@ export default function ReceptionPage() {
     setScannerOpen(false);
     setScannerStatus("idle");
     setCameraError(null);
+    setImageScanning(false);
   }, []);
 
   // ─── تشغيل الماسح (الكاميرا) ───
   const startScanner = useCallback(async () => {
     await destroyScanner();
+
     setCameraError(null);
     setScannerStatus("loading");
     setScannerOpen(true);
 
     await new Promise<void>((resolve) => {
       requestAnimationFrame(() => {
-        requestAnimationFrame(() => { resolve(); });
+        requestAnimationFrame(() => {
+          resolve();
+        });
       });
     });
     await new Promise(resolve => setTimeout(resolve, 300));
@@ -286,66 +290,57 @@ export default function ReceptionPage() {
     }
   }, [stopScanner, handleScannedCode]);
 
-  // ─── 🆕 مسح QR من الصورة (رفع من المعرض) ───
-  const handleFileScan = useCallback(async (file: File) => {
-    // التحقق من أن الملف صورة
-    if (!file.type.startsWith('image/')) {
-      toast({
-        title: "خطأ",
-        description: "الرجاء اختيار ملف صورة صالح (JPG, PNG, WebP)",
-        variant: "destructive",
-      });
-      return;
-    }
+  // ─── رفع صورة ومسحها ───
+  const handleImageUpload = useCallback(async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
 
-    setScanningFile(true);
+    setImageScanning(true);
+    setCameraError(null);
 
     try {
-      // استخدام Html5Qrcode لمسح الصورة
-      const scanner = new Html5Qrcode(QR_ELEMENT_ID, { verbose: false });
-      
-      // مسح الملف مباشرة
-      const decodedText = await scanner.scanFile(file, true);
-      
-      if (decodedText) {
-        // معالجة النتيجة بنفس دالة مسح الكاميرا
-        handleScannedCode(decodedText);
-        toast({
-          title: "✅ تم مسح QR بنجاح",
-          description: `الكود: ${decodedText}`,
-        });
-      } else {
-        toast({
-          title: "❌ فشل قراءة QR",
-          description: "تأكد من وضوح الكود وجودة الصورة",
-          variant: "destructive",
-        });
-      }
-    } catch (error: any) {
-      console.error("File scan error:", error);
+      // قراءة الصورة كـ Data URL
+      const reader = new FileReader();
+      reader.onload = async (event) => {
+        try {
+          const imageData = event.target?.result as string;
+          // استخدام Html5Qrcode لمسح الصورة
+          const scanner = new Html5Qrcode(QR_ELEMENT_ID, { verbose: false });
+          const result = await scanner.scanImage(imageData, {
+            qrbox: { width: 250, height: 250 },
+          });
+          // نجاح المسح
+          if (result) {
+            // إغلاق المودال تلقائياً
+            await stopScanner();
+            handleScannedCode(result);
+          }
+        } catch (scanError: any) {
+          console.error("Image scan error:", scanError);
+          toast({
+            title: "❌ فشل قراءة QR من الصورة",
+            description: "تأكد من وضوح الكود وجودته.",
+            variant: "destructive",
+          });
+        } finally {
+          setImageScanning(false);
+          // إعادة تعيين قيمة input للسماح برفع نفس الملف مرة أخرى
+          if (fileInputRef.current) {
+            fileInputRef.current.value = "";
+          }
+        }
+      };
+      reader.readAsDataURL(file);
+    } catch (error) {
+      console.error("Image upload error:", error);
       toast({
-        title: "❌ فشل قراءة QR",
-        description: error?.message || "تأكد من وضوح الكود وجودة الصورة",
+        title: "خطأ في رفع الصورة",
+        description: "حاول مرة أخرى.",
         variant: "destructive",
       });
-    } finally {
-      setScanningFile(false);
-      // تنظيف
-      try {
-        const el = document.getElementById(QR_ELEMENT_ID);
-        if (el) el.innerHTML = "";
-      } catch (_) {}
+      setImageScanning(false);
     }
-  }, [handleScannedCode]);
-
-  // ─── رفع الصورة من المعرض ───
-  const fileInputRef = useRef<HTMLInputElement>(null);
-
-  const triggerFileUpload = () => {
-    if (fileInputRef.current) {
-      fileInputRef.current.click();
-    }
-  };
+  }, [stopScanner, handleScannedCode]);
 
   // ─── دوال التحديث ───
   const unlock = () => {
@@ -367,7 +362,6 @@ export default function ReceptionPage() {
       toast({ title: "خطأ", description: "فشل تحديث الموعد", variant: "destructive" });
     } else {
       toast({ title: "✅ تم تأكيد الحضور", description: "انتقلت الحالة إلى الصندوق" });
-      fetchAppointments(); // تحديث القائمة
     }
   };
 
@@ -382,7 +376,6 @@ export default function ReceptionPage() {
       toast({ title: "خطأ", description: "فشل تسجيل الدخول", variant: "destructive" });
     } else {
       toast({ title: "تم الدخول", description: "أُضيفت الحالة إلى المعاينات" });
-      fetchAppointments();
     }
   };
 
@@ -397,7 +390,6 @@ export default function ReceptionPage() {
       toast({ title: "خطأ", description: "فشل التحديث", variant: "destructive" });
     } else {
       toast({ title: "تم تسجيل عدم الحضور", description: "أُغلق الموعد كـ (لم يصل)" });
-      fetchAppointments();
     }
   };
 
@@ -444,21 +436,6 @@ export default function ReceptionPage() {
   // ─── Render ───
   return (
     <div className="min-h-screen bg-mesh flex flex-col">
-      {/* 🆕 ملف رفع الصور المخفي */}
-      <input
-        type="file"
-        ref={fileInputRef}
-        accept="image/*"
-        className="hidden"
-        onChange={(e) => {
-          const file = e.target.files?.[0];
-          if (file) {
-            handleFileScan(file);
-          }
-          e.target.value = ''; // إعادة تعيين الإدخال
-        }}
-      />
-
       {/* مودال الماسح */}
       {scannerOpen && (
         <div className="fixed inset-0 z-50 bg-black/90 backdrop-blur-lg flex items-center justify-center p-4">
@@ -509,11 +486,37 @@ export default function ReceptionPage() {
               </p>
             )}
 
-            <div className="flex gap-3 px-5 pb-5">
-              <Button variant="outline" className="flex-1" onClick={stopScanner}>إغلاق</Button>
-              {scannerStatus === "error" && (
-                <Button className="flex-1" onClick={startScanner}>إعادة المحاولة</Button>
-              )}
+            <div className="flex flex-col gap-3 px-5 pb-5">
+              <div className="flex gap-3">
+                <Button variant="outline" className="flex-1" onClick={stopScanner}>إغلاق</Button>
+                {scannerStatus === "error" && (
+                  <Button className="flex-1" onClick={startScanner}>إعادة المحاولة</Button>
+                )}
+              </div>
+
+              {/* زر رفع صورة من المعرض */}
+              <div className="flex gap-3">
+                <Button
+                  variant="secondary"
+                  className="flex-1 gap-2"
+                  onClick={() => fileInputRef.current?.click()}
+                  disabled={imageScanning || scannerStatus === "loading"}
+                >
+                  {imageScanning ? (
+                    <Loader2 className="w-4 h-4 animate-spin" />
+                  ) : (
+                    <Upload className="w-4 h-4" />
+                  )}
+                  {imageScanning ? "جاري المسح..." : "رفع صورة QR"}
+                </Button>
+              </div>
+              <input
+                type="file"
+                ref={fileInputRef}
+                accept="image/*"
+                className="hidden"
+                onChange={handleImageUpload}
+              />
             </div>
           </div>
         </div>
@@ -539,22 +542,7 @@ export default function ReceptionPage() {
             <div><h1 className="text-xl font-bold text-foreground">الاستقبال</h1><p className="text-xs text-muted-foreground">مواعيد اليوم</p></div>
           </div>
           <div className="flex gap-2">
-            {/* 🆕 زر رفع الصورة */}
-            <Button 
-              variant="ghost" 
-              size="icon" 
-              onClick={triggerFileUpload}
-              className="hover:bg-primary/10 relative"
-              title="رفع صورة QR من المعرض"
-              disabled={scanningFile}
-            >
-              {scanningFile ? (
-                <Loader2 className="w-5 h-5 animate-spin" />
-              ) : (
-                <Upload className="w-5 h-5" />
-              )}
-            </Button>
-            <Button variant="ghost" size="icon" onClick={startScanner} className="hover:bg-primary/10" title="مسح QR بالكاميرا">
+            <Button variant="ghost" size="icon" onClick={startScanner} className="hover:bg-primary/10" title="مسح QR">
               <Camera className="w-5 h-5" />
             </Button>
             <Button variant="ghost" size="icon" onClick={() => navigate("/cashier")}><Wallet className="w-5 h-5" /></Button>
