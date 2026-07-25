@@ -11,7 +11,7 @@ import { Footer } from "@/components/layout/Footer";
 import { toast } from "@/hooks/use-toast";
 import {
   Banknote, CheckCircle, LogOut, Search, ShieldCheck, Stethoscope, Users,
-  Camera, X, Loader2, AlertCircle, Image as ImageIcon, Upload, RefreshCw, Printer, Download, Clock, Plus, UserPlus, DollarSign, TrendingUp, Receipt, MessageCircle, MinusCircle, Wallet, ArrowDownCircle, ArrowUpCircle
+  Camera, X, Loader2, AlertCircle, Image as ImageIcon, Upload, RefreshCw, Printer, Download, Clock, Plus, UserPlus, DollarSign, TrendingUp, Receipt, MessageCircle, MinusCircle, Wallet, ArrowDownCircle, ArrowUpCircle, Sparkles, Mail, Building2, Phone
 } from "lucide-react";
 import { BarChart, Bar, PieChart, Pie, Cell, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid, Legend } from "recharts";
 import { Html5Qrcode } from "html5-qrcode";
@@ -20,6 +20,7 @@ import html2canvas from "html2canvas";
 // ─── الأنواع والبيانات ───
 type Appointment = {
   id: string;
+  patient_id?: string;
   date: string;
   time: string;
   status: string;
@@ -29,7 +30,7 @@ type Appointment = {
   paid_amount?: number | null;
   discount_amount?: number | null;
   is_walk_in: boolean;
-  patients: { name: string; phone: string } | null;
+  patients: { id?: string; name: string; phone: string } | null;
   services: { name: string; price: number | null } | null;
   // بيانات مكملة مستخرجة من كود QR
   extracted_patient_name?: string;
@@ -55,31 +56,34 @@ const parseStructuredQrText = (text: string) => {
   let patientPhone = "";
 
   // 1. استخراج كود الحجز
-  const codeMatch = text.match(/RE-[A-Za-z0-9]+/i) || text.match(/RE-\d+/i);
+  const codeMatch = text.match(/RE-[A-Za-z0-9]+/i) || text.match(/WI-[A-Za-z0-9]+/i);
   if (codeMatch) reservationCode = codeMatch[0];
 
   // 2. استخراج اسم المريض من سطر (المريض: علي قاسم)
   const nameMatch = text.match(/المريض:\s*([^\n\r]+)/);
   if (nameMatch) {
-    patientName = nameMatch[1].replace(/@\w+/g, "").trim();
+    patientName = nameMatch[1].replace(/👤/g, "").replace(/@\w+/g, "").trim();
   }
 
   // 3. استخراج رقم الهاتف من سطر (الهاتف: +967715365516)
   const phoneMatch = text.match(/الهاتف:\s*([^\n\r]+)/);
   if (phoneMatch) {
-    patientPhone = phoneMatch[1].trim();
+    patientPhone = phoneMatch[1].replace(/📱/g, "").trim();
   }
 
   return { reservationCode, patientName, patientPhone };
 };
 
-// تنظيف وتجهيز أرقام الهواتف للواتساب
+// تنظيف وتجهيز أرقام الهواتف للواتساب برمز الدولة
 const formatPhoneForWhatsApp = (phone?: string): string => {
-  if (!phone || phone.includes("بدون") || phone.startsWith("tg:")) return "";
+  if (!phone || phone.includes("بدون") || phone.startsWith("tg:") || phone === ".") return "";
   let cleaned = phone.replace(/[^\d+]/g, "");
   if (cleaned.startsWith("+")) cleaned = cleaned.substring(1);
   if (cleaned.startsWith("00")) cleaned = cleaned.substring(2);
   if (cleaned.startsWith("0")) cleaned = "967" + cleaned.substring(1);
+  if (cleaned.length === 9 && (cleaned.startsWith("77") || cleaned.startsWith("73") || cleaned.startsWith("71") || cleaned.startsWith("70"))) {
+    cleaned = "967" + cleaned;
+  }
   return cleaned;
 };
 
@@ -109,8 +113,10 @@ export default function CashierPage() {
   const [statusFilter, setStatusFilter] = useState<string>("active");
   const today = dateFilter;
 
-  // ─── حالة السداد والسند ───
+  // ─── حالة السداد والسند وتعديل البيانات ───
   const [selectedAppointment, setSelectedAppointment] = useState<Appointment | null>(null);
+  const [editPatientName, setEditPatientName] = useState<string>("");
+  const [editPatientPhone, setEditPatientPhone] = useState<string>("");
   const [paidAmountInput, setPaidAmountInput] = useState<string>("");
   const [discountInput, setDiscountInput] = useState<string>("0");
   const [showReceipt, setShowReceipt] = useState(false);
@@ -146,7 +152,7 @@ export default function CashierPage() {
     if (!clinic || !unlocked) return;
     const { data, error } = await supabase
       .from("appointments")
-      .select("id,date,time,status,reservation_code,arrived_at,payment_status,paid_amount,discount_amount,is_walk_in,patients(name,phone),services(name,price)")
+      .select("id,patient_id,date,time,status,reservation_code,arrived_at,payment_status,paid_amount,discount_amount,is_walk_in,patients(id,name,phone),services(name,price)")
       .eq("clinic_id", clinic.id)
       .eq("date", today)
       .order("time", { ascending: true });
@@ -185,7 +191,7 @@ export default function CashierPage() {
     return `❌ فشل تشغيل الكاميرا. حاول مرة أخرى أو ارفع صورة الموعد.`;
   };
 
-  // ─── فتح نافذة تحصيل الدفع ───
+  // ─── فتح نافذة تحصيل الدفع مع ضبط البيانات الذكي ───
   const openPaymentModal = (appointment: Appointment, overrideName?: string, overridePhone?: string) => {
     const appWithOverrides = {
       ...appointment,
@@ -194,6 +200,14 @@ export default function CashierPage() {
     };
 
     setSelectedAppointment(appWithOverrides);
+
+    // تجهيز حقول تعديل البيانات إذا كان الاسم في القاعدة مجرد نقطة '.' أو هاتف tg:
+    const initialName = overrideName || (appointment.patients?.name && appointment.patients.name !== "." ? appointment.patients.name : "");
+    const initialPhone = overridePhone || (appointment.patients?.phone && !appointment.patients.phone.startsWith("tg:") ? appointment.patients.phone : "");
+
+    setEditPatientName(initialName);
+    setEditPatientPhone(initialPhone);
+
     const defaultPrice = appointment.services?.price || 0;
     setPaidAmountInput(appointment.paid_amount != null ? String(appointment.paid_amount) : String(defaultPrice));
     setDiscountInput(appointment.discount_amount != null ? String(appointment.discount_amount) : "0");
@@ -214,11 +228,11 @@ export default function CashierPage() {
     }
   };
 
-  // ─── معالجة الكود الممسوح واستخراج الاسم والرقم من البطاقة ───
+  // ─── معالجة الكود الممسوح واستخراج الاسم والرقم من كرت التلجرام ───
   const handleScannedCode = useCallback(async (decodedText: string) => {
     const rawText = decodedText.trim();
     
-    // تحليل النص المستخرج من QR (سواء كان نصاً بسيطة أو كرت تلجرام كاملاً)
+    // تحليل النص المستخرج من QR (سواء كان نصاً بسيطاً أو كرت تلجرام كاملاً)
     const { reservationCode, patientName, patientPhone } = parseStructuredQrText(rawText);
     const targetCode = reservationCode || rawText;
 
@@ -232,7 +246,7 @@ export default function CashierPage() {
     if (!found && clinic) {
       const { data } = await supabase
         .from("appointments")
-        .select("id,date,time,status,reservation_code,arrived_at,payment_status,paid_amount,discount_amount,is_walk_in,patients(name,phone),services(name,price)")
+        .select("id,patient_id,date,time,status,reservation_code,arrived_at,payment_status,paid_amount,discount_amount,is_walk_in,patients(id,name,phone),services(name,price)")
         .eq("clinic_id", clinic.id)
         .or(`reservation_code.ilike.${targetCode},reservation_code.ilike.${rawText},id.eq.${rawText}`)
         .maybeSingle();
@@ -295,7 +309,7 @@ export default function CashierPage() {
     }
   }, [stopScanner, handleScannedCode]);
 
-  // ─── معالجة الصورة لقراءات المعرض والتلجرام ───
+  // ─── معالجة الصورة لقراءات المعرض ───
   const processImageForQR = (file: File): Promise<File> => {
     return new Promise((resolve, reject) => {
       const img = new Image();
@@ -349,7 +363,7 @@ export default function CashierPage() {
     else toast({ title: "رمز غير صحيح", description: "تحقق من رمز الصندوق في الإعدادات", variant: "destructive" });
   };
 
-  // تأكيد الدفع وحفظ المبالغ والخصم
+  // تأكيد الدفع وحفظ المبالغ وتصحيح بيانات المريض في DB تلقائياً
   const handlePayNow = async () => {
     if (!selectedAppointment || !clinic) return;
     setProcessingPayment(true);
@@ -357,6 +371,17 @@ export default function CashierPage() {
     const paidVal = parseFloat(paidAmountInput) || 0;
     const discountVal = parseFloat(discountInput) || 0;
 
+    // 1. تحديث بيانات المريض حقيقياً في Supabase لإصلاح أي اسم '.' أو هاتف tg:
+    const patientId = selectedAppointment.patients?.id || selectedAppointment.patient_id;
+    if (patientId && (editPatientName.trim() || editPatientPhone.trim())) {
+      const updateData: any = {};
+      if (editPatientName.trim()) updateData.name = editPatientName.trim();
+      if (editPatientPhone.trim()) updateData.phone = editPatientPhone.trim();
+
+      await supabase.from("patients").update(updateData).eq("id", patientId);
+    }
+
+    // 2. تحديث الموعد بالحالة والسداد
     const { error } = await supabase
       .from("appointments")
       .update({ 
@@ -375,48 +400,25 @@ export default function CashierPage() {
       return;
     }
 
-    toast({ title: "✅ تم تسجيل الدفع بنجاح", description: "تم تحديث الخزينة وإصدار سند الاستلام" });
+    toast({ title: "✅ تم تسجيل الدفع بنجاح", description: "تم تصحيح بيانات المريض وإصدار السند" });
+    
     setSelectedAppointment({ 
       ...selectedAppointment, 
       payment_status: "paid",
       paid_amount: paidVal,
-      discount_amount: discountVal
+      discount_amount: discountVal,
+      extracted_patient_name: editPatientName.trim() || selectedAppointment.extracted_patient_name,
+      extracted_patient_phone: editPatientPhone.trim() || selectedAppointment.extracted_patient_phone,
+      patients: {
+        id: patientId || "",
+        name: editPatientName.trim() || selectedAppointment.patients?.name || "",
+        phone: editPatientPhone.trim() || selectedAppointment.patients?.phone || ""
+      }
     });
+
     setShowReceipt(true);
     setProcessingPayment(false);
     fetchAppointments();
-  };
-
-  // ─── تسجيل مريض مباشر ───
-  const addWalkIn = async () => {
-    if (!clinic || !patientNameInput.trim()) return;
-    const { data: patient, error: patientError } = await supabase
-      .from("patients")
-      .insert({ clinic_id: clinic.id, name: patientNameInput.trim(), phone: patientPhoneInput.trim() || "بدون هاتف" })
-      .select("id")
-      .single();
-    if (patientError || !patient) {
-      toast({ title: "خطأ", description: "فشل إضافة المريض", variant: "destructive" });
-      return;
-    }
-    const code = `WI-${Math.floor(1000 + Math.random() * 9000)}`;
-    const { error } = await supabase.from("appointments").insert({
-      clinic_id: clinic.id,
-      patient_id: patient.id,
-      date: today,
-      time: format(new Date(), "HH:mm"),
-      status: "confirmed",
-      reservation_code: code,
-      arrived_at: new Date().toISOString(),
-      payment_status: "paid",
-      is_walk_in: true,
-      department: "صندوق",
-    });
-    if (error) toast({ title: "خطأ", description: "فشل إضافة مريض مباشر", variant: "destructive" });
-    else {
-      toast({ title: "تمت الإضافة", description: `تم تسجيل المريض المباشر ${code}` });
-      setWalkInOpen(false); setPatientNameInput(""); setPatientPhoneInput(""); fetchAppointments();
-    }
   };
 
   // ─── تسجيل مصروف جديد ───
@@ -488,6 +490,7 @@ export default function CashierPage() {
       return app.extracted_patient_name.trim();
     }
     const dbName = app.patients?.name || "";
+    if (!dbName || dbName === ".") return "مريض زائر";
     return dbName.replace(/@\w+/g, "").replace(/tg:\w+/gi, "").trim() || "مريض زائر";
   };
 
@@ -497,25 +500,25 @@ export default function CashierPage() {
       return app.extracted_patient_phone.trim();
     }
     const dbPhone = app.patients?.phone || "";
-    if (dbPhone.includes("بدون") || dbPhone.startsWith("tg:")) return "غير مسجل";
+    if (!dbPhone || dbPhone.includes("بدون") || dbPhone.startsWith("tg:")) return "غير مسجل";
     return dbPhone;
   };
 
   // ─── إرسال السند عبر الواتساب برقم المريض والاسم الحقيقي ───
   const sendReceiptToWhatsApp = () => {
-    const rawPhone = getDisplayPatientPhone(selectedAppointment);
+    const rawPhone = editPatientPhone || getDisplayPatientPhone(selectedAppointment);
     const whatsappPhone = formatPhoneForWhatsApp(rawPhone);
 
     if (!whatsappPhone) {
       toast({ 
         title: "لا يوجد رقم هاتف صحيح", 
-        description: "هذا المريض ليس لديه رقم هاتف واتساب مسجل بنمط دولي في بطاقة الحجز.", 
+        description: "يرجى كتابة رقم هاتف المريض في الحقل المخصص قبل الضغط على الواتساب.", 
         variant: "destructive" 
       });
       return;
     }
 
-    const actualName = getDisplayPatientName(selectedAppointment);
+    const actualName = editPatientName || getDisplayPatientName(selectedAppointment);
     const netPaid = (selectedAppointment?.paid_amount || 0) - (selectedAppointment?.discount_amount || 0);
 
     const message = `🧾 *سند استلام مبلغ - ${clinic?.name || "العيادة الطبية"}*\n\n` +
@@ -779,19 +782,32 @@ export default function CashierPage() {
                     <Banknote className="w-6 h-6" />
                   </div>
                   <h2 className="text-xl font-bold text-foreground">تأكيد تحصيل المبلغ</h2>
-                  <p className="text-xs text-muted-foreground mt-1">راجع المبلغ والخصم قبل سداد الفاتورة</p>
+                  <p className="text-xs text-muted-foreground mt-1">تأكد من اسم ورقم هاتف المريض قبل السداد</p>
                 </div>
 
                 <div className="card-modern p-4 bg-muted/40 space-y-3 text-sm">
-                  <div className="flex justify-between border-b border-border/60 pb-2">
-                    <span className="text-muted-foreground">اسم المريض</span>
-                    <span className="font-bold text-foreground">{getDisplayPatientName(selectedAppointment)}</span>
+                  {/* إمكانية تعديل اسم المريض وركم الهتاف لإصلاح أي بيانات خاطئة من التلجرام */}
+                  <div>
+                    <label className="text-xs font-semibold text-muted-foreground block mb-1">اسم المريض (الصريح)</label>
+                    <Input 
+                      value={editPatientName} 
+                      onChange={(e) => setEditPatientName(e.target.value)} 
+                      placeholder="أدخل اسم المريض الرباعي"
+                      className="font-bold text-sm bg-background"
+                    />
                   </div>
-                  <div className="flex justify-between border-b border-border/60 pb-2">
-                    <span className="text-muted-foreground">رقم الهاتف</span>
-                    <span className="font-bold text-foreground">{getDisplayPatientPhone(selectedAppointment)}</span>
+
+                  <div>
+                    <label className="text-xs font-semibold text-muted-foreground block mb-1">رقم الهاتف (الواتساب)</label>
+                    <Input 
+                      value={editPatientPhone} 
+                      onChange={(e) => setEditPatientPhone(e.target.value)} 
+                      placeholder="مثال: +967715365516"
+                      className="font-bold text-sm bg-background dir-ltr text-right"
+                    />
                   </div>
-                  <div className="flex justify-between border-b border-border/60 pb-2">
+
+                  <div className="flex justify-between border-b border-border/60 pb-2 pt-1">
                     <span className="text-muted-foreground">كود الحجز</span>
                     <span className="font-mono font-bold text-primary">{selectedAppointment.reservation_code}</span>
                   </div>
@@ -944,6 +960,21 @@ export default function CashierPage() {
                     <MessageCircle className="w-3.5 h-3.5" />
                     واتساب
                   </Button>
+                </div>
+
+                {/* 🌟 إعلان التوقيع التجاري للنظام خارج السند المالي 🌟 */}
+                <div className="mt-4 pt-3 border-t border-border/50 text-center space-y-1 bg-muted/30 p-3 rounded-2xl">
+                  <div className="flex items-center justify-center gap-1.5 text-xs font-bold text-foreground">
+                    <Sparkles className="w-4 h-4 text-primary animate-pulse" />
+                    <span>تم تطوير هذا النظام بواسطة: نظام العيادة الذكية</span>
+                  </div>
+                  <p className="text-[10px] text-muted-foreground">حلول البرمجيات والذكاء الاصطناعي لإدارة المستشفيات والعيادات</p>
+                  <div className="pt-1 flex items-center justify-center gap-1 text-[11px] font-mono text-primary">
+                    <Mail className="w-3.5 h-3.5" />
+                    <a href="mailto:alkhyatalkhyat79@gmail.com" className="hover:underline font-bold">
+                      alkhyatalkhyat79@gmail.com
+                    </a>
+                  </div>
                 </div>
 
                 <Button variant="ghost" className="w-full text-xs mt-2" onClick={() => { setSelectedAppointment(null); setShowReceipt(false); }}>
