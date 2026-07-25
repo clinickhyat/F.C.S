@@ -22,15 +22,12 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
-import { Calendar } from "@/components/ui/calendar";
-import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { format } from "date-fns";
-import { ar } from "date-fns/locale";
 import { toast } from "@/hooks/use-toast";
 import {
   Stethoscope, Calendar as CalendarIcon, CalendarDays, Plus, Search,
   Edit, Trash2, Loader2, LogOut, Settings, LayoutDashboard,
-  CheckCircle, XCircle, Clock
+  CheckCircle, XCircle, Clock, Phone
 } from "lucide-react";
 
 interface Appointment {
@@ -41,19 +38,33 @@ interface Appointment {
   status: string;
   reservation_code: string;
   notes: string | null;
-  patients: { name: string; phone: string } | null;
+  patients: { id?: string; name: string; phone: string; telegram_user_id?: string } | null;
 }
 
 interface Patient {
   id: string;
   name: string;
   phone: string;
+  telegram_user_id?: string;
 }
+
+// ─── دوال تنظيف الأسماء والأرقام من شوائب تليجرام ───
+export const getCleanPatientName = (name?: string | null): string => {
+  if (!name || name === "." || name.trim().length < 2) return "مريض غير محدد";
+  return name.replace(/^tg:\d+/i, "").replace(/👤/g, "").replace(/@\w+/g, "").trim() || "مريض غير محدد";
+};
+
+export const getCleanPatientPhone = (phone?: string | null): string => {
+  if (!phone || phone.toLowerCase().startsWith("tg:") || phone === "." || phone === "بدون هاتف") {
+    return "حجز عبر تلجرام (بدون رقم)";
+  }
+  return phone.trim();
+};
 
 export default function AppointmentsPage() {
   const navigate = useNavigate();
   const { user, signOut, loading: authLoading } = useAuth();
-  const { clinic, loading: clinicLoading, isTrialExpired } = useClinic();
+  const { clinic, loading: clinicLoading } = useClinic();
 
   const [appointments, setAppointments] = useState<Appointment[]>([]);
   const [patients, setPatients] = useState<Patient[]>([]);
@@ -109,7 +120,7 @@ export default function AppointmentsPage() {
     setLoading(true);
     const { data, error } = await supabase
       .from("appointments")
-      .select("*, patients(name, phone)")
+      .select("*, patients(id, name, phone, telegram_user_id)")
       .eq("clinic_id", clinic.id)
       .order("date", { ascending: false })
       .order("time", { ascending: true });
@@ -122,7 +133,7 @@ export default function AppointmentsPage() {
     if (!clinic) return;
     const { data } = await supabase
       .from("patients")
-      .select("id, name, phone")
+      .select("id, name, phone, telegram_user_id")
       .eq("clinic_id", clinic.id)
       .order("name");
     setPatients(data || []);
@@ -146,7 +157,6 @@ export default function AppointmentsPage() {
   const handleAddAppointment = async () => {
     if (!clinic || !formDate) return;
 
-    // Block past time bookings (Phase 1 — Axis 12)
     const todayStr = format(new Date(), "yyyy-MM-dd");
     const pickedStr = format(formDate, "yyyy-MM-dd");
     if (pickedStr < todayStr) {
@@ -164,10 +174,8 @@ export default function AppointmentsPage() {
       }
     }
 
-
     let patientId = formPatientId;
 
-    // Create new patient if needed
     if (showNewPatient) {
       if (!newPatientName.trim() || !newPatientPhone.trim()) {
         toast({ title: "خطأ", description: "يرجى إدخال اسم ورقم هاتف المريض", variant: "destructive" });
@@ -212,29 +220,12 @@ export default function AppointmentsPage() {
       toast({ title: "تم بنجاح", description: "تمت إضافة الموعد" });
       setIsAddOpen(false);
       resetForm();
+      fetchAppointments();
     }
   };
 
   const handleEditAppointment = async () => {
     if (!selectedAppointment || !formDate) return;
-
-    // Block past time bookings on edit as well
-    const todayStr = format(new Date(), "yyyy-MM-dd");
-    const pickedStr = format(formDate, "yyyy-MM-dd");
-    if (pickedStr < todayStr) {
-      toast({ title: "تاريخ غير صالح", description: "لا يمكن الحجز في يوم فائت", variant: "destructive" });
-      return;
-    }
-    if (pickedStr === todayStr) {
-      const now = new Date();
-      const [hh, mm] = formTime.split(":").map(Number);
-      const picked = new Date();
-      picked.setHours(hh || 0, mm || 0, 0, 0);
-      if (picked.getTime() <= now.getTime()) {
-        toast({ title: "وقت غير صالح", description: "لا يمكن الحجز في وقت فائت", variant: "destructive" });
-        return;
-      }
-    }
 
     setFormSubmitting(true);
     const updates: Record<string, unknown> = {
@@ -259,6 +250,7 @@ export default function AppointmentsPage() {
       setIsEditOpen(false);
       setSelectedAppointment(null);
       resetForm();
+      fetchAppointments();
     }
   };
 
@@ -279,6 +271,7 @@ export default function AppointmentsPage() {
       toast({ title: "تم بنجاح", description: "تم حذف الموعد" });
       setIsDeleteOpen(false);
       setSelectedAppointment(null);
+      fetchAppointments();
     }
   };
 
@@ -297,10 +290,15 @@ export default function AppointmentsPage() {
     setIsDeleteOpen(true);
   };
 
-  // Filter appointments
   const filteredAppointments = appointments.filter((apt) => {
-    const matchesSearch = apt.patients?.name?.toLowerCase().includes(searchQuery.toLowerCase()) ||
+    const cleanName = getCleanPatientName(apt.patients?.name);
+    const cleanPhone = getCleanPatientPhone(apt.patients?.phone);
+
+    const matchesSearch =
+      cleanName.toLowerCase().includes(searchQuery.toLowerCase()) ||
+      cleanPhone.includes(searchQuery) ||
       apt.reservation_code.toLowerCase().includes(searchQuery.toLowerCase());
+
     const matchesStatus = statusFilter === "all" || apt.status === statusFilter;
     const matchesDate = !dateFilter || apt.date === format(dateFilter, "yyyy-MM-dd");
     return matchesSearch && matchesStatus && matchesDate;
@@ -344,7 +342,7 @@ export default function AppointmentsPage() {
   }
 
   return (
-    <div className="min-h-screen bg-mesh flex flex-col">
+    <div className="min-h-screen bg-mesh flex flex-col" dir="rtl">
       <SubscriptionLock />
       {/* Header */}
       <header className="glass-strong sticky top-0 z-40">
@@ -386,7 +384,7 @@ export default function AppointmentsPage() {
             <div className="relative">
               <Search className="absolute right-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground pointer-events-none" />
               <Input
-                placeholder="بحث بالاسم أو رقم الحجز..."
+                placeholder="بحث باسم المريض، الرقم أو كود الحجز..."
                 value={searchQuery}
                 onChange={(e) => setSearchQuery(e.target.value)}
                 className="pr-10 input-modern w-full"
@@ -438,7 +436,6 @@ export default function AppointmentsPage() {
               </div>
             </div>
             
-            {/* Status Legend */}
             <div className="hidden md:flex items-center gap-4">
               {Object.entries(statusConfig).map(([key, config]) => (
                 <div key={key} className={`flex items-center gap-2 px-3 py-1.5 rounded-full ${config.bg} ${config.border} border`}>
@@ -461,11 +458,11 @@ export default function AppointmentsPage() {
               <table className="w-full min-w-[920px] table-fixed">
                 <colgroup>
                   <col className="w-[140px]" />
-                  <col className="w-[190px]" />
+                  <col className="w-[210px]" />
                   <col className="w-[135px]" />
                   <col className="w-[110px]" />
-                  <col className="w-[150px]" />
-                  <col className="w-[190px]" />
+                  <col className="w-[140px]" />
+                  <col className="w-[180px]" />
                   <col className="w-[110px]" />
                 </colgroup>
                 <thead className="bg-muted/30">
@@ -497,6 +494,9 @@ export default function AppointmentsPage() {
                   ) : (
                     filteredAppointments.map((apt, index) => {
                       const status = statusConfig[apt.status] || statusConfig.pending;
+                      const cleanName = getCleanPatientName(apt.patients?.name);
+                      const cleanPhone = getCleanPatientPhone(apt.patients?.phone);
+
                       return (
                         <tr 
                           key={apt.id} 
@@ -510,8 +510,11 @@ export default function AppointmentsPage() {
                           </td>
                           <td className="px-6 py-4">
                             <div>
-                              <p className="font-semibold text-foreground">{apt.patients?.name}</p>
-                              <p className="text-xs text-muted-foreground">{apt.patients?.phone}</p>
+                              <p className="font-semibold text-foreground">{cleanName}</p>
+                              <p className="text-xs text-muted-foreground flex items-center gap-1 mt-0.5">
+                                <Phone className="w-3 h-3" />
+                                <span dir="ltr">{cleanPhone}</span>
+                              </p>
                             </div>
                           </td>
                           <td className="px-6 py-4">
@@ -567,13 +570,12 @@ export default function AppointmentsPage() {
 
       {/* Add Appointment Dialog */}
       <Dialog open={isAddOpen} onOpenChange={setIsAddOpen}>
-        <DialogContent className="max-w-md">
+        <DialogContent className="max-w-md" dir="rtl">
           <DialogHeader>
             <DialogTitle>إضافة موعد جديد</DialogTitle>
           </DialogHeader>
 
           <div className="space-y-4">
-            {/* Patient Selection */}
             {!showNewPatient ? (
               <div className="space-y-2">
                 <label className="text-sm font-medium">المريض</label>
@@ -583,11 +585,13 @@ export default function AppointmentsPage() {
                   </SelectTrigger>
                   <SelectContent>
                     {patients.map((p) => (
-                      <SelectItem key={p.id} value={p.id}>{p.name} - {p.phone}</SelectItem>
+                      <SelectItem key={p.id} value={p.id}>
+                        {getCleanPatientName(p.name)} - {getCleanPatientPhone(p.phone)}
+                      </SelectItem>
                     ))}
                   </SelectContent>
                 </Select>
-                <Button variant="link" size="sm" className="p-0 h-auto" onClick={() => setShowNewPatient(true)}>
+                <Button variant="link" size="sm" className="p-0 h-auto text-primary" onClick={() => setShowNewPatient(true)}>
                   + إضافة مريض جديد
                 </Button>
               </div>
@@ -597,12 +601,11 @@ export default function AppointmentsPage() {
                   <span className="text-sm font-medium">مريض جديد</span>
                   <Button variant="ghost" size="sm" onClick={() => setShowNewPatient(false)}>إلغاء</Button>
                 </div>
-                <Input placeholder="اسم المريض" value={newPatientName} onChange={(e) => setNewPatientName(e.target.value)} />
-                <Input placeholder="رقم الهاتف" value={newPatientPhone} onChange={(e) => setNewPatientPhone(e.target.value)} />
+                <Input placeholder="اسم المريض الصريح" value={newPatientName} onChange={(e) => setNewPatientName(e.target.value)} />
+                <Input placeholder="رقم الهاتف" value={newPatientPhone} onChange={(e) => setNewPatientPhone(e.target.value)} dir="ltr" />
               </div>
             )}
 
-            {/* Date */}
             <div className="space-y-2">
               <label className="text-sm font-medium">التاريخ</label>
               <Input
@@ -615,13 +618,11 @@ export default function AppointmentsPage() {
               />
             </div>
 
-            {/* Time */}
             <div className="space-y-2">
               <label className="text-sm font-medium">الوقت</label>
               <Input type="time" value={formTime} onChange={(e) => setFormTime(e.target.value)} />
             </div>
 
-            {/* Status */}
             <div className="space-y-2">
               <label className="text-sm font-medium">الحالة</label>
               <Select value={formStatus} onValueChange={setFormStatus}>
@@ -636,18 +637,17 @@ export default function AppointmentsPage() {
               </Select>
             </div>
 
-            {/* Notes */}
             <div className="space-y-2">
               <label className="text-sm font-medium">ملاحظات</label>
               <Textarea placeholder="ملاحظات إضافية..." value={formNotes} onChange={(e) => setFormNotes(e.target.value)} />
             </div>
           </div>
 
-          <DialogFooter>
+          <DialogFooter className="gap-2">
             <Button variant="outline" onClick={() => setIsAddOpen(false)}>إلغاء</Button>
             <Button onClick={handleAddAppointment} disabled={formSubmitting}>
               {formSubmitting && <Loader2 className="w-4 h-4 ml-2 animate-spin" />}
-              إضافة
+              إضافة الموعد
             </Button>
           </DialogFooter>
         </DialogContent>
@@ -655,7 +655,7 @@ export default function AppointmentsPage() {
 
       {/* Edit Appointment Dialog */}
       <Dialog open={isEditOpen} onOpenChange={setIsEditOpen}>
-        <DialogContent className="max-w-md">
+        <DialogContent className="max-w-md" dir="rtl">
           <DialogHeader>
             <DialogTitle>تعديل الموعد</DialogTitle>
           </DialogHeader>
@@ -669,7 +669,9 @@ export default function AppointmentsPage() {
                 </SelectTrigger>
                 <SelectContent>
                   {patients.map((p) => (
-                    <SelectItem key={p.id} value={p.id}>{p.name} - {p.phone}</SelectItem>
+                    <SelectItem key={p.id} value={p.id}>
+                      {getCleanPatientName(p.name)} - {getCleanPatientPhone(p.phone)}
+                    </SelectItem>
                   ))}
                 </SelectContent>
               </Select>
@@ -712,7 +714,7 @@ export default function AppointmentsPage() {
             </div>
           </div>
 
-          <DialogFooter>
+          <DialogFooter className="gap-2">
             <Button variant="outline" onClick={() => setIsEditOpen(false)}>إلغاء</Button>
             <Button onClick={handleEditAppointment} disabled={formSubmitting}>
               {formSubmitting && <Loader2 className="w-4 h-4 ml-2 animate-spin" />}
@@ -724,14 +726,14 @@ export default function AppointmentsPage() {
 
       {/* Delete Confirmation Dialog */}
       <Dialog open={isDeleteOpen} onOpenChange={setIsDeleteOpen}>
-        <DialogContent className="max-w-sm">
+        <DialogContent className="max-w-sm" dir="rtl">
           <DialogHeader>
             <DialogTitle>تأكيد الحذف</DialogTitle>
           </DialogHeader>
-          <p className="text-muted-foreground">
-            هل أنت متأكد من حذف موعد <strong>{selectedAppointment?.patients?.name}</strong>؟
+          <p className="text-muted-foreground text-sm">
+            هل أنت متأكد من حذف موعد المريض <strong>{getCleanPatientName(selectedAppointment?.patients?.name)}</strong>؟
           </p>
-          <DialogFooter>
+          <DialogFooter className="gap-2">
             <Button variant="outline" onClick={() => setIsDeleteOpen(false)}>إلغاء</Button>
             <Button variant="destructive" onClick={handleDeleteAppointment} disabled={formSubmitting}>
               {formSubmitting && <Loader2 className="w-4 h-4 ml-2 animate-spin" />}
