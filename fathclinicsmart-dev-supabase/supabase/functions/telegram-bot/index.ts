@@ -7,11 +7,13 @@ const corsHeaders = {
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type, x-supabase-client-platform, x-supabase-client-platform-version, x-supabase-client-runtime, x-supabase-client-runtime-version',
 };
 
+// معرف المطور المخصص للاستثناء من حدود الحجوزات
+const DEV_TELEGRAM_ID = "1303830148";
+
 const AVAILABLE_HOURS = ['08:00','08:30','09:00','09:30','10:00','10:30','11:00','11:30','12:00','12:30','13:00','13:30','14:00','14:30','15:00','15:30'];
 const CLOSING_HOUR = 15;
 const CLOSING_MINUTE = 30;
 
-// تهيئة محرك رسم الصور الفاخر للبطاقات
 let wasmInitialized = false;
 async function ensureWasm() {
   if (!wasmInitialized) {
@@ -125,7 +127,6 @@ async function generateLuxuryBookingCard(booking: {
     const qrData = `RESERVATION:${booking.code}|CLINIC:${booking.clinicName}|PATIENT:${booking.patientName}|DATE:${booking.date} ${booking.time}`;
     const qrApiUrl = `https://api.qrserver.com/v1/create-qr-code/?size=220x220&data=${encodeURIComponent(qrData)}`;
 
-    // جلب الـ QR كـ Base64 لدمجه بالـ SVG
     let qrBase64 = "";
     try {
       const qrRes = await fetchWithTimeout(qrApiUrl, {}, 5000);
@@ -135,7 +136,6 @@ async function generateLuxuryBookingCard(booking: {
       }
     } catch (_) {}
 
-    // جلب اللوجو إذا توفر
     let logoBase64 = "";
     if (booking.logoUrl) {
       try {
@@ -172,20 +172,16 @@ async function generateLuxuryBookingCard(booking: {
         </filter>
       </defs>
 
-      <!-- الخلفية الرئيسية -->
       <rect width="800" height="1000" fill="url(#bgGrad)"/>
       <circle cx="700" cy="100" r="300" fill="#059669" opacity="0.12"/>
       <circle cx="100" cy="900" r="250" fill="#0284c7" opacity="0.12"/>
 
-      <!-- الكرت الأبيض الزجاجي الرئيسي -->
       <g filter="url(#glassShadow)">
         <rect x="50" y="60" width="700" height="820" rx="32" fill="#ffffff"/>
       </g>
 
-      <!-- الهيدر الملون الفاخر -->
       <path d="M 50 92 C 50 74.327 64.327 60 82 60 L 718 60 C 735.673 60 750 74.327 750 92 L 750 200 L 50 200 Z" fill="url(#cardHeaderGrad)"/>
 
-      <!-- الشعار / اللوجو -->
       ${logoBase64 ? `
         <image x="80" y="85" width="90" height="90" href="${logoBase64}" preserveAspectRatio="xMidYMid slice"/>
       ` : `
@@ -193,35 +189,28 @@ async function generateLuxuryBookingCard(booking: {
         <text x="125" y="142" font-family="Arial, sans-serif" font-size="42" fill="#ffffff" text-anchor="middle">🏥</text>
       `}
 
-      <!-- اسم العيادة والطبيب -->
       <text x="195" y="118" font-family="Arial, sans-serif" font-size="28" font-weight="bold" fill="#ffffff" direction="rtl">${booking.clinicName}</text>
       <text x="195" y="152" font-family="Arial, sans-serif" font-size="18" fill="rgba(255,255,255,0.85)" direction="rtl">
         ${booking.doctorName ? `تحت إشراف: د. ${booking.doctorName}` : 'بطاقة حجز موعد طبي مؤكد'}
       </text>
 
-      <!-- شارة الحالة (مؤكد) -->
       <rect x="580" y="95" width="130" height="42" rx="21" fill="rgba(255,255,255,0.25)"/>
       <text x="645" y="122" font-family="Arial, sans-serif" font-size="16" font-weight="bold" fill="#ffffff" text-anchor="middle">مؤكد ✓</text>
 
-      <!-- محتوى البيانات -->
-      <!-- اسم المريض -->
       <text x="700" y="270" font-family="Arial, sans-serif" font-size="16" fill="#64748b" text-anchor="end">اسم المريض الصريح</text>
       <text x="700" y="305" font-family="Arial, sans-serif" font-size="26" font-weight="bold" fill="#0f172a" text-anchor="end">${booking.patientName}</text>
       <line x1="100" y1="330" x2="700" y2="330" stroke="#e2e8f0" stroke-width="1.5" stroke-dasharray="6,6"/>
 
-      <!-- رقم الهاتف -->
       <text x="700" y="370" font-family="Arial, sans-serif" font-size="16" fill="#64748b" text-anchor="end">رقم الهاتف التواصل</text>
       <text x="700" y="405" font-family="Arial, sans-serif" font-size="22" font-weight="bold" fill="#0f172a" text-anchor="end" direction="ltr">${booking.patientPhone}</text>
       <line x1="100" y1="430" x2="700" y2="430" stroke="#e2e8f0" stroke-width="1.5" stroke-dasharray="6,6"/>
 
-      <!-- الخدمة المطلوب حجزها -->
       <text x="700" y="470" font-family="Arial, sans-serif" font-size="16" fill="#64748b" text-anchor="end">الخدمة الطبية المطلوبة</text>
       <text x="700" y="505" font-family="Arial, sans-serif" font-size="22" font-weight="bold" fill="#059669" text-anchor="end">${booking.serviceName}</text>
       <line x1="100" y1="530" x2="700" y2="530" stroke="#e2e8f0" stroke-width="1.5" stroke-dasharray="6,6"/>
 
-      <!-- التاريخ والوقت -->
       <g>
-        <rect x="410" y="560" x2="290" y2="80" rx="16" fill="#f8fafc" width="290" height="85"/>
+        <rect x="410" y="560" width="290" height="85" rx="16" fill="#f8fafc"/>
         <text x="680" y="590" font-family="Arial, sans-serif" font-size="14" fill="#64748b" text-anchor="end">📅 تاريخ الموعد</text>
         <text x="680" y="625" font-family="Arial, sans-serif" font-size="20" font-weight="bold" fill="#0f172a" text-anchor="end">${booking.date}</text>
 
@@ -230,13 +219,11 @@ async function generateLuxuryBookingCard(booking: {
         <text x="370" y="625" font-family="Arial, sans-serif" font-size="20" font-weight="bold" fill="#0f172a" text-anchor="end">${booking.time}</text>
       </g>
 
-      <!-- كود الحجز البارز -->
       <rect x="100" y="670" width="600" height="65" rx="20" fill="url(#goldGrad)"/>
       <text x="400" y="711" font-family="Monospace, Arial, sans-serif" font-size="26" font-weight="bold" fill="#ffffff" text-anchor="middle">
         كود الحجز المباشر: ${booking.code}
       </text>
 
-      <!-- مربع الـ QR Code للماسح -->
       ${qrBase64 ? `
         <g>
           <rect x="300" y="750" width="200" height="110" rx="16" fill="#ffffff" stroke="#e2e8f0" stroke-width="2"/>
@@ -244,7 +231,6 @@ async function generateLuxuryBookingCard(booking: {
         </g>
       ` : ''}
 
-      <!-- 🌟 التوقيع الإعلاني التجاري للنظام خارج الكرت (في تذييل الصورة) 🌟 -->
       <text x="400" y="930" font-family="Arial, sans-serif" font-size="16" font-weight="bold" fill="#94a3b8" text-anchor="middle">
         Smart Clinic System — نظام إدارة العيادات الذكي
       </text>
@@ -380,7 +366,6 @@ async function callAI(userMessage: string, userName: string, clinicContext: stri
   const OPENROUTER_API_KEY = Deno.env.get('OPENROUTER_API_KEY');
   if (!OPENROUTER_API_KEY) return null;
 
-  // اكتشاف لغة رسالة المستخدم
   const isEnglish = /[a-zA-Z]/.test(userMessage) && !/[\u0600-\u06FF]/.test(userMessage);
 
   try {
@@ -875,8 +860,8 @@ async function progressSession(supabase: any, send: any, chatId: number, tgId: s
       return true;
     }
     await upsertSession(supabase, tgId, { full_name: name, step: 'ask_phone' });
-    // طلب رقم الهاتف رسمياً دون ذكر أي أمثلة أو أسماء دول
-    await send(chatId, `شكراً ${name} 🌷\n\n📱 يرجى إدخال رقم هاتفك للتواصل شاملاً المفتاح الدولي.`);
+    // طلب رقم الهاتف رسمياً وبشكل حيادي ومباشر دون ذكر أي أمثلة أو دول
+    await send(chatId, `أهلاً بك ${name} 🌷\n\n📱 يرجى إدخال رقم هاتفك للتواصل:`);
     return true;
   }
 
@@ -895,8 +880,8 @@ async function progressSession(supabase: any, send: any, chatId: number, tgId: s
           waBtn.length ? { inline_keyboard: waBtn } : undefined);
         return true;
       }
-      // رسالة الخطأ الرسمية الخالية من أسماء الدول والأمثلة
-      await send(chatId, `⚠️ رقم الهاتف غير صحيح. يرجى إدخال رقم هاتف يعمل بشكل صحيح مع المفتاح الدولي.\n(المحاولة ${attempts}/3)`);
+      // رسالة الخطأ الرسمية الخالية تماماً من أسماء الدول والأمثلة
+      await send(chatId, `⚠️ يرجى إدخال رقم هاتف صحيح للتواصل.\n(المحاولة ${attempts}/3)`);
       return true;
     }
     await upsertSession(supabase, tgId, { phone: v.normalized, phone_attempts: 0, step: 'ask_date' });
@@ -1029,7 +1014,6 @@ function isSubscriptionUsable(sub: any) {
 }
 
 async function finalizeBooking(supabase: any, send: any, chatId: number, tgId: string, firstName: string, session: any, time: string, botToken: string): Promise<boolean> {
-  // فحص حظر الحجز الفائت أو بعد انتهاء الدوام
   if (isPastTime(session.preferred_date, time)) {
     const { data: clinicRow } = await supabase.from('clinics').select('phone, receptionist_whatsapp').eq('id', session.clinic_id).maybeSingle();
     const waNum = (clinicRow?.receptionist_whatsapp || clinicRow?.phone || '').replace(/[^\d]/g, '');
@@ -1041,7 +1025,7 @@ async function finalizeBooking(supabase: any, send: any, chatId: number, tgId: s
     return true;
   }
 
-  // فحص الحد الأقصى للحجوزات اليومية (3 حجوزات كحد أقصى)
+  // فحص الحد الأقصى للحجوزات اليومية (3 مواعيد كحد أقصى) مع استثناء معرف المطور 1303830148
   const todayStr = new Date().toISOString().slice(0, 10);
   const { count: todayCount } = await supabase
     .from('appointments')
@@ -1050,7 +1034,7 @@ async function finalizeBooking(supabase: any, send: any, chatId: number, tgId: s
     .eq('date', todayStr)
     .not('status', 'in', '(cancelled)');
 
-  if ((todayCount ?? 0) >= 3) {
+  if (tgId !== DEV_TELEGRAM_ID && (todayCount ?? 0) >= 3) {
     const { data: clinicRow } = await supabase.from('clinics').select('phone, receptionist_whatsapp').eq('id', session.clinic_id).maybeSingle();
     const waNum = (clinicRow?.receptionist_whatsapp || clinicRow?.phone || '').replace(/[^\d]/g, '');
     const waBtn = waNum ? [[{ text: '💬 تواصل مع الاستقبال لإضافة حجز', url: `https://wa.me/${waNum}` }]] : [];
@@ -1067,7 +1051,6 @@ async function finalizeBooking(supabase: any, send: any, chatId: number, tgId: s
   let storedName = session.full_name;
   let storedPhone = session.phone;
 
-  // تسجيل المريض باسمه وركمه الحقيقيين وتخليص الجدول من أي tg:
   const { data: existingPatient } = await supabase.from('patients').select('id, name, phone')
     .eq('clinic_id', session.clinic_id).eq('telegram_user_id', tgId).maybeSingle();
 
@@ -1103,7 +1086,6 @@ async function finalizeBooking(supabase: any, send: any, chatId: number, tgId: s
   }
   await clearSession(supabase, tgId);
 
-  // إعداد رابط واتساب الاستقبال للحجز باسم شخص آخر
   const { data: clinicRow } = await supabase.from('clinics').select('phone, receptionist_whatsapp').eq('id', session.clinic_id).maybeSingle();
   const waNum = (clinicRow?.receptionist_whatsapp || clinicRow?.phone || '').replace(/[^\d]/g, '');
   const waTextOther = encodeURIComponent(`مرحباً، أريد حجز موعد باسم شخص آخر في ${clinicInfo?.name || 'العيادة'} - خدمة: ${service?.name || ''}`);
@@ -1124,7 +1106,6 @@ async function finalizeBooking(supabase: any, send: any, chatId: number, tgId: s
 
   await send(chatId, confirmMsg, successMarkup);
 
-  // توليد بطاقة الحجز الفاخرة وإرسالها كصورة فائقة الجودة
   const cardPng = await generateLuxuryBookingCard({
     clinicName: clinicInfo?.name || 'العيادة الطبية',
     doctorName: clinicInfo?.doctor_name || '',
