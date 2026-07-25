@@ -558,14 +558,14 @@ export default function CashierPage() {
             ) : (
               <div className="space-y-4 pt-1">
                 <div className="text-center mb-1"><span className="inline-flex items-center gap-1 text-xs font-bold text-emerald-600 bg-emerald-50 dark:bg-emerald-950/50 px-3 py-1 rounded-full border border-emerald-200"><CheckCircle className="w-3.5 h-3.5" /> طھظ… ط§ظ„ط¯ظپط¹ ظˆط§ظ„ط³ط¯ط§ط¯ ط¨ظ†ط¬ط§ط­</span></div>
-                <div id="receipt-card-container" className="bg-white text-gray-900 rounded-2xl border border-gray-200 shadow-xl relative overflow-hidden" style={{ direction: 'rtl', fontFamily: 'system-ui, -apple-system, sans-serif' }}>
+                <div id="receipt-card-container" className="bg-white text-gray-900 rounded-2xl border border-gray-200 shadow-xl relative overflow-visible" style={{ direction: 'rtl', fontFamily: 'system-ui, -apple-system, sans-serif', minHeight: 'auto', maxWidth: '100%', wordBreak: 'normal', whiteSpace: 'normal' }}>
                   <div style={{ background: "linear-gradient(135deg, #059669 0%, #0d9488 50%, #0891b2 100%)", padding: "20px 24px 18px", color: "white", display: "flex", alignItems: "center", gap: "14px" }}>
                     <div style={{ width: "48px", height: "48px", background: "rgba(255,255,255,0.2)", borderRadius: "12px", display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0, border: "1.5px solid rgba(255,255,255,0.3)" }}>
                       {clinic?.logo_url ? <img src={clinic.logo_url} alt="logo" style={{ width: "36px", height: "36px", borderRadius: "8px", objectFit: "cover" }} /> : <span style={{ fontSize: "22px" }}>ًںڈ¥</span>}
                     </div>
                     <div style={{ flex: 1 }}>
                       <p style={{ fontSize: "9px", opacity: 0.8, marginBottom: "3px", letterSpacing: "1.5px" }}>OFFICIAL PAYMENT RECEIPT</p>
-                      <h2 style={{ fontSize: "17px", fontWeight: 900, margin: 0, lineHeight: 1.2 }}>{clinic?.name || "ط§ظ„ط¹ظٹط§ط¯ط© ط§ظ„ط·ط¨ظٹط© Smart Clinic"}</h2>
+                      <h2 style={{ fontSize: "16px", fontWeight: 900, margin: 0, lineHeight: 1.2, wordBreak: "break-word", whiteSpace: "normal" }}>{clinic?.name || "ط§ظ„ط¹ظٹط§ط¯ط© ط§ظ„ط·ط¨ظٹط© Smart Clinic"}</h2>
                       <p style={{ fontSize: "10px", opacity: 0.85, marginTop: "3px" }}>ط³ظ†ط¯ ط§ط³طھظ„ط§ظ… ظ…ط¨ظ„ط؛ ط±ط³ظ…ظ€ظٹ</p>
                     </div>
                     <div style={{ background: "rgba(255,255,255,0.2)", borderRadius: "10px", padding: "6px 10px", textAlign: "center", border: "1px solid rgba(255,255,255,0.25)" }}>
