@@ -63,8 +63,19 @@ const getCleanPhone = (dbPhone: string | undefined, qrPhone: string): string => 
 };
 
 const getCleanName = (dbName: string | undefined, qrName: string): string => {
-  if (!dbName || dbName === "." || dbName.trim().length < 2 || dbName.startsWith("tg:") || dbName.startsWith("TG:") || dbName.includes("@")) return qrName || "ط؛ظٹط± ظ…ط­ط¯ط¯";
-  return dbName.replace(/^tg:\d+/i, "").replace(/ًں‘¤/g, "").trim();
+  const cleanedDB = dbName ? dbName.replace(/^tg:\d+/i, "").replace(/ًں‘¤/g, "").trim() : "";
+  // Always prefer the real extracted name (from QR or direct entry) when available
+  if (qrName && qrName.trim().length > 1 && qrName !== ".") {
+    // Only fall back to DB if DB looks like a real full Arabic/real name and QR is empty/generic
+    const isDBReal = cleanedDB && cleanedDB.length > 2 && !cleanedDB.startsWith("tg:") && !cleanedDB.startsWith("TG:") && !cleanedDB.includes("@") && !/^[A-Z]{1,}$/.test(cleanedDB) && cleanedDB !== "Point" && cleanedDB !== "User" && cleanedDB !== "Guest";
+    if (!isDBReal) return qrName.trim();
+    // If both exist and DB is real but different from QR, prefer DB only if QR is very short/generic
+    if (cleanedDB !== qrName.trim() && cleanedDB.length > qrName.trim().length) return cleanedDB;
+    return qrName.trim();
+  }
+  // If QR empty, prefer DB if it looks real
+  if (cleanedDB && cleanedDB.length > 2 && !cleanedDB.startsWith("tg:") && !cleanedDB.startsWith("TG:") && !cleanedDB.includes("@")) return cleanedDB;
+  return cleanedDB || qrName || "ط؛ظٹط± ظ…ط­ط¯ط¯";
 };
 
 export default function CashierPage() {
@@ -227,11 +238,12 @@ export default function CashierPage() {
     const extractedPhone = appointment.extracted_patient_phone || "";
     const dbNameRaw = appointment.patients?.name || "";
     const dbPhoneRaw = appointment.patients?.phone || "";
-    let finalName = dbNameRaw;
-    if (!finalName || finalName.trim().length < 2 || finalName.startsWith("tg:") || finalName.startsWith("TG:") || finalName === "." || finalName.includes("@")) {
-      finalName = extractedName || "ط؛ظٹط± ظ…ط­ط¯ط¯";
+    // Force prefer extracted real name over DB Telegram usernames (Point, User, etc.)
+    let finalName = (extractedName && extractedName.trim().length > 1 && extractedName !== ".") ? extractedName.trim() : dbNameRaw;
+    if (finalName && (finalName.startsWith("tg:") || finalName.startsWith("TG:") || finalName === "." || finalName.includes("@") || finalName === "Point" || finalName === "User" || finalName === "Guest" || finalName.trim().length < 2)) {
+      finalName = (extractedName && extractedName.trim().length > 1 && extractedName !== ".") ? extractedName.trim() : (dbNameRaw && dbNameRaw.trim().length > 2 && !dbNameRaw.startsWith("tg:") ? dbNameRaw.trim() : "ط؛ظٹط± ظ…ط­ط¯ط¯");
     }
-    finalName = finalName.replace(/^tg:\d+/i, "").replace(/ًں‘¤/g, "").trim();
+    finalName = finalName ? finalName.replace(/^tg:\d+/i, "").replace(/ًں‘¤/g, "").trim() : "ط؛ظٹط± ظ…ط­ط¯ط¯";
     let finalPhone = dbPhoneRaw;
     if (!finalPhone || finalPhone.trim().length < 5 || finalPhone.startsWith("tg:") || finalPhone.startsWith("TG:") || finalPhone === "." || finalPhone === "ط¨ط¯ظˆظ† ظ‡ط§طھظپ") {
       finalPhone = extractedPhone || "";
