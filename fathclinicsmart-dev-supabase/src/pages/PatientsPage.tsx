@@ -23,11 +23,25 @@ import {
   Clock,
   Plus,
   Pencil,
-  Trash2
+  Trash2,
+  Send
 } from "lucide-react";
 import { format } from "date-fns";
 import { ar } from "date-fns/locale";
 import { Footer } from "@/components/layout/Footer";
+
+// ─── دوال تنظيف بيانات المريض ───
+const getCleanName = (name?: string | null): string => {
+  if (!name || name === "." || name.trim().length < 2) return "مريض غير محدد";
+  return name.replace(/^tg:\d+/i, "").replace(/👤/g, "").replace(/@\w+/g, "").trim() || "مريض غير محدد";
+};
+
+const getCleanPhone = (phone?: string | null): string => {
+  if (!phone || phone.toLowerCase().startsWith("tg:") || phone === "." || phone === "بدون هاتف") {
+    return "حجز عبر تلجرام (بدون رقم)";
+  }
+  return phone.trim();
+};
 
 const PatientsPage = () => {
   const navigate = useNavigate();
@@ -83,7 +97,7 @@ const PatientsPage = () => {
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['patients', clinicId] });
-      toast.success("تم تحديث بيانات المريض");
+      toast.success("تم تحديث بيانات المريض بنجاح");
       handleCloseDialog();
     },
     onError: () => toast.error("فشل في تحديث البيانات")
@@ -120,14 +134,18 @@ const PatientsPage = () => {
   };
 
   const handleOpenEdit = (patient: any) => {
-    setFormData({ name: patient.name, phone: patient.phone });
+    const cleanName = getCleanName(patient.name);
+    const rawPhone = patient.phone;
+    const cleanPhone = rawPhone && !rawPhone.startsWith("tg:") && rawPhone !== "." ? rawPhone : "";
+    
+    setFormData({ name: cleanName !== "مريض غير محدد" ? cleanName : "", phone: cleanPhone });
     setEditingPatient(patient);
     setIsDialogOpen(true);
   };
 
   const handleSubmit = () => {
-    if (!formData.name.trim() || !formData.phone.trim()) {
-      toast.error("يرجى ملء جميع الحقول");
+    if (!formData.name.trim()) {
+      toast.error("يرجى إدخال اسم المريض");
       return;
     }
     if (editingPatient) {
@@ -137,10 +155,11 @@ const PatientsPage = () => {
     }
   };
 
-  const filteredPatients = patients?.filter(patient => 
-    patient.phone.includes(searchQuery) || 
-    patient.name.toLowerCase().includes(searchQuery.toLowerCase())
-  ) || [];
+  const filteredPatients = patients?.filter(patient => {
+    const cleanName = getCleanName(patient.name);
+    const cleanPhone = getCleanPhone(patient.phone);
+    return cleanPhone.includes(searchQuery) || cleanName.toLowerCase().includes(searchQuery.toLowerCase());
+  }) || [];
 
   if (clinicLoading || patientsLoading) {
     return (
@@ -151,7 +170,7 @@ const PatientsPage = () => {
   }
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-background via-background to-primary/5" dir="rtl">
+    <div className="min-h-screen bg-gradient-to-br from-background via-background to-primary/5 flex flex-col" dir="rtl">
       <SubscriptionLock />
       {/* Header */}
       <header className="glass-strong border-b border-border/50 sticky top-0 z-50">
@@ -183,7 +202,7 @@ const PatientsPage = () => {
         </div>
       </header>
 
-      <main className="container mx-auto px-4 py-8">
+      <main className="container mx-auto px-4 py-8 flex-1">
         {/* Search Section */}
         <Card className="glass-strong border-border/50 mb-8">
           <CardHeader>
@@ -196,7 +215,7 @@ const PatientsPage = () => {
             <div className="relative">
               <Search className="absolute right-3 top-1/2 -translate-y-1/2 h-5 w-5 text-muted-foreground" />
               <Input
-                placeholder="ابحث بالاسم أو رقم الهاتف..."
+                placeholder="ابحث باسم المريض أو رقم الهاتف..."
                 value={searchQuery}
                 onChange={(e) => setSearchQuery(e.target.value)}
                 className="pr-10 bg-background/50 border-border/50 focus:border-primary/50"
@@ -210,7 +229,7 @@ const PatientsPage = () => {
           <CardHeader>
             <CardTitle className="flex items-center gap-2 text-lg">
               <UserCircle className="h-5 w-5 text-primary" />
-              قائمة المرضى
+              قائمة المرضى المسجلين
             </CardTitle>
           </CardHeader>
           <CardContent>
@@ -226,7 +245,7 @@ const PatientsPage = () => {
                 <Table>
                   <TableHeader>
                     <TableRow className="border-border/50 hover:bg-transparent">
-                      <TableHead className="text-right font-semibold">الاسم</TableHead>
+                      <TableHead className="text-right font-semibold">اسم المريض</TableHead>
                       <TableHead className="text-right font-semibold">رقم الهاتف</TableHead>
                       <TableHead className="text-right font-semibold">تاريخ التسجيل</TableHead>
                       <TableHead className="text-right font-semibold">عدد الحجوزات</TableHead>
@@ -234,62 +253,79 @@ const PatientsPage = () => {
                     </TableRow>
                   </TableHeader>
                   <TableBody>
-                    {filteredPatients.map((patient) => (
-                      <TableRow 
-                        key={patient.id} 
-                        className="border-border/30 hover:bg-primary/5 transition-colors"
-                      >
-                        <TableCell className="font-medium">
-                          <div className="flex items-center gap-3">
-                            <div className="h-10 w-10 rounded-full bg-gradient-to-br from-primary/20 to-accent/20 flex items-center justify-center">
-                              <UserCircle className="h-5 w-5 text-primary" />
+                    {filteredPatients.map((patient) => {
+                      const cleanName = getCleanName(patient.name);
+                      const cleanPhone = getCleanPhone(patient.phone);
+                      const isTelegramOnly = patient.phone?.startsWith("tg:") || !patient.phone || patient.phone === ".";
+
+                      return (
+                        <TableRow 
+                          key={patient.id} 
+                          className="border-border/30 hover:bg-primary/5 transition-colors"
+                        >
+                          <TableCell className="font-medium">
+                            <div className="flex items-center gap-3">
+                              <div className="h-10 w-10 rounded-full bg-gradient-to-br from-primary/20 to-accent/20 flex items-center justify-center">
+                                <UserCircle className="h-5 w-5 text-primary" />
+                              </div>
+                              <div>
+                                <p className="font-bold text-foreground">{cleanName}</p>
+                                {patient.telegram_user_id && (
+                                  <span className="inline-flex items-center gap-1 text-[10px] text-blue-600 bg-blue-50 dark:bg-blue-950/40 px-1.5 py-0.5 rounded font-mono">
+                                    <Send className="w-2.5 h-2.5" /> مسجل عبر تلجرام
+                                  </span>
+                                )}
+                              </div>
                             </div>
-                            {patient.name}
-                          </div>
-                        </TableCell>
-                        <TableCell>
-                          <div className="flex items-center gap-2 text-muted-foreground">
-                            <Phone className="h-4 w-4" />
-                            <span dir="ltr">{patient.phone}</span>
-                          </div>
-                        </TableCell>
-                        <TableCell>
-                          <div className="flex items-center gap-2 text-muted-foreground">
-                            <Calendar className="h-4 w-4" />
-                            {format(new Date(patient.created_at), 'dd MMMM yyyy', { locale: ar })}
-                          </div>
-                        </TableCell>
-                        <TableCell>
-                          <Badge variant="secondary" className="gap-1">
-                            <Clock className="h-3 w-3" />
-                            {(patient.appointments as any)?.[0]?.count || 0} حجز
-                          </Badge>
-                        </TableCell>
-                        <TableCell>
-                          <div className="flex items-center gap-2">
-                            <Button
-                              variant="ghost"
-                              size="icon"
-                              onClick={() => handleOpenEdit(patient)}
-                              className="h-8 w-8 text-primary hover:bg-primary/10"
-                            >
-                              <Pencil className="h-4 w-4" />
-                            </Button>
-                            <Button
-                              variant="ghost"
-                              size="icon"
-                              onClick={() => {
-                                setPatientToDelete(patient);
-                                setIsDeleteDialogOpen(true);
-                              }}
-                              className="h-8 w-8 text-destructive hover:bg-destructive/10"
-                            >
-                              <Trash2 className="h-4 w-4" />
-                            </Button>
-                          </div>
-                        </TableCell>
-                      </TableRow>
-                    ))}
+                          </TableCell>
+                          <TableCell>
+                            <div className="flex items-center gap-2 text-muted-foreground">
+                              <Phone className="h-4 w-4 text-muted-foreground" />
+                              <span dir={isTelegramOnly ? "rtl" : "ltr"} className={isTelegramOnly ? "text-xs text-amber-600 font-medium" : "font-mono"}>
+                                {cleanPhone}
+                              </span>
+                            </div>
+                          </TableCell>
+                          <TableCell>
+                            <div className="flex items-center gap-2 text-muted-foreground">
+                              <Calendar className="h-4 w-4" />
+                              {patient.created_at ? format(new Date(patient.created_at), 'dd MMMM yyyy', { locale: ar }) : "—"}
+                            </div>
+                          </TableCell>
+                          <TableCell>
+                            <Badge variant="secondary" className="gap-1">
+                              <Clock className="h-3 w-3" />
+                              {(patient.appointments as any)?.[0]?.count || 0} حجز
+                            </Badge>
+                          </TableCell>
+                          <TableCell>
+                            <div className="flex items-center gap-2">
+                              <Button
+                                variant="ghost"
+                                size="icon"
+                                onClick={() => handleOpenEdit(patient)}
+                                className="h-8 w-8 text-primary hover:bg-primary/10"
+                                title="تعديل المريض وتحديث الرقم"
+                              >
+                                <Pencil className="h-4 w-4" />
+                              </Button>
+                              <Button
+                                variant="ghost"
+                                size="icon"
+                                onClick={() => {
+                                  setPatientToDelete(patient);
+                                  setIsDeleteDialogOpen(true);
+                                }}
+                                className="h-8 w-8 text-destructive hover:bg-destructive/10"
+                                title="حذف"
+                              >
+                                <Trash2 className="h-4 w-4" />
+                              </Button>
+                            </div>
+                          </TableCell>
+                        </TableRow>
+                      );
+                    })}
                   </TableBody>
                 </Table>
               </div>
@@ -306,21 +342,21 @@ const PatientsPage = () => {
           </DialogHeader>
           <div className="space-y-4 py-4">
             <div className="space-y-2">
-              <Label htmlFor="name">اسم المريض</Label>
+              <Label htmlFor="name">اسم المريض الصريح</Label>
               <Input
                 id="name"
                 value={formData.name}
                 onChange={(e) => setFormData({ ...formData, name: e.target.value })}
-                placeholder="أدخل اسم المريض"
+                placeholder="أدخل اسم المريض الرباعي"
               />
             </div>
             <div className="space-y-2">
-              <Label htmlFor="phone">رقم الهاتف</Label>
+              <Label htmlFor="phone">رقم الهاتف (الواتساب)</Label>
               <Input
                 id="phone"
                 value={formData.phone}
                 onChange={(e) => setFormData({ ...formData, phone: e.target.value })}
-                placeholder="أدخل رقم الهاتف"
+                placeholder="أدخل رقم الهاتف (مثال: 967715365516)"
                 dir="ltr"
               />
             </div>
@@ -345,7 +381,7 @@ const PatientsPage = () => {
           <AlertDialogHeader>
             <AlertDialogTitle>تأكيد الحذف</AlertDialogTitle>
             <AlertDialogDescription>
-              هل أنت متأكد من حذف المريض "{patientToDelete?.name}"؟ لا يمكن التراجع عن هذا الإجراء.
+              هل أنت متأكد من حذف المريض "{getCleanName(patientToDelete?.name)}"؟ لا يمكن التراجع عن هذا الإجراء.
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter className="gap-2">
