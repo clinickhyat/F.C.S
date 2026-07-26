@@ -118,7 +118,7 @@ export function useClinic() {
           });
         }
 
-        // Merge secrets from vault (owner only; staff won't have access and it's fine)
+        // Merge secrets from vault (owner only)
         if (clinicData && resolvedRole === "owner") {
           try {
             const { data: vaultData } = await supabase.rpc("get_clinic_vault");
@@ -139,7 +139,7 @@ export function useClinic() {
         setClinic(clinicData);
         setRole(resolvedRole);
 
-        // Subscription
+        // Subscription - with automatic expiry check
         if (clinicData) {
           const { data: subData, error: subError } = await supabase
             .from("subscriptions")
@@ -149,14 +149,32 @@ export function useClinic() {
           if (subError) throw subError;
           setSubscription(subData);
 
-          if (subData && subData.status === "trial") {
+          // 🟢 إصلاح الاشتراك التلقائي: التحقق من انتهاء المدة
+          let expired = false;
+          if (subData) {
+            // التحقق من تاريخ الانتهاء
             const trialEnd = new Date(subData.trial_ends_at);
-            setIsTrialExpired(new Date() > trialEnd || !subData.is_active);
-          } else if (subData && (subData.status === "expired" || !subData.is_active)) {
-            setIsTrialExpired(true);
+            const now = new Date();
+            const isPastDate = now > trialEnd;
+            const isInactive = !subData.is_active;
+
+            expired = isPastDate || isInactive || subData.status === "expired";
+
+            // ✅ تحديث قاعدة البيانات تلقائياً إذا انتهى الاشتراك
+            if (expired && subData.is_active === true) {
+              await supabase
+                .from("subscriptions")
+                .update({ is_active: false, status: "expired" })
+                .eq("id", subData.id);
+              // تحديث الحالة المحلية
+              subData.is_active = false;
+              subData.status = "expired";
+            }
           } else {
-            setIsTrialExpired(false);
+            expired = true;
           }
+
+          setIsTrialExpired(expired);
         }
       } catch (e: any) {
         console.error("Error fetching clinic data:", e);
