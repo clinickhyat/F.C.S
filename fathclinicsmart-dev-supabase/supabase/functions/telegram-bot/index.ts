@@ -15,6 +15,7 @@ const CLOSING_HOUR = 15;
 const CLOSING_MINUTE = 30;
 
 let wasmInitialized = false;
+
 async function ensureWasm() {
   if (!wasmInitialized) {
     try {
@@ -26,9 +27,16 @@ async function ensureWasm() {
   }
 }
 
-// ============================================================
-// ===== دوال مساعدة وتنظيف =====
-// ============================================================
+// دالة تنظيف الرموز الخاصة لتجنب تلف ترميز الـ SVG
+function escapeXml(str: string): string {
+  if (!str) return '';
+  return str
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&apos;');
+}
 
 function validateGulfPhone(raw: string): { ok: boolean; normalized?: string } {
   const s = raw.replace(/[\s\-().]/g, '').replace(/^00/, '+');
@@ -107,9 +115,8 @@ function stripEmojis(text: string): string {
 }
 
 // ============================================================
-// ===== توليد بطاقة الحجز الطبية الفاخرة (SVG -> PNG) =====
+// ===== توليد بطاقة الحجز الطبية الفاخرة المحسّنة والقابلة للرسم =====
 // ============================================================
-
 async function generateLuxuryBookingCard(booking: {
   clinicName: string;
   doctorName?: string;
@@ -124,7 +131,16 @@ async function generateLuxuryBookingCard(booking: {
   try {
     await ensureWasm();
 
-    const qrData = `RESERVATION:${booking.code}|CLINIC:${booking.clinicName}|PATIENT:${booking.patientName}|DATE:${booking.date} ${booking.time}`;
+    const clinicName = escapeXml(booking.clinicName);
+    const doctorName = escapeXml(booking.doctorName || '');
+    const patientName = escapeXml(booking.patientName);
+    const patientPhone = escapeXml(booking.patientPhone);
+    const serviceName = escapeXml(booking.serviceName);
+    const bookingDate = escapeXml(booking.date);
+    const bookingTime = escapeXml(booking.time);
+    const bookingCode = escapeXml(booking.code);
+
+    const qrData = `RESERVATION:${bookingCode}|CLINIC:${clinicName}|PATIENT:${patientName}|DATE:${bookingDate} ${bookingTime}`;
     const qrApiUrl = `https://api.qrserver.com/v1/create-qr-code/?size=220x220&data=${encodeURIComponent(qrData)}`;
 
     let qrBase64 = "";
@@ -147,6 +163,7 @@ async function generateLuxuryBookingCard(booking: {
       } catch (_) {}
     }
 
+    // تصميم SVG القياسي الخالي من المعاملات غير المدعومة مثل direction="rtl"
     const svg = `
     <svg width="800" height="1000" viewBox="0 0 800 1000" xmlns="http://www.w3.org/2000/svg">
       <defs>
@@ -155,18 +172,15 @@ async function generateLuxuryBookingCard(booking: {
           <stop offset="50%" stop-color="#1e293b"/>
           <stop offset="100%" stop-color="#0f172a"/>
         </linearGradient>
-
         <linearGradient id="cardHeaderGrad" x1="0%" y1="0%" x2="100%" y2="0%">
           <stop offset="0%" stop-color="#059669"/>
           <stop offset="50%" stop-color="#0d9488"/>
           <stop offset="100%" stop-color="#0284c7"/>
         </linearGradient>
-
         <linearGradient id="goldGrad" x1="0%" y1="0%" x2="100%" y2="100%">
           <stop offset="0%" stop-color="#f59e0b"/>
           <stop offset="100%" stop-color="#d97706"/>
         </linearGradient>
-
         <filter id="glassShadow" x="-10%" y="-10%" width="120%" height="120%">
           <feDropShadow dx="0" dy="12" stdDeviation="16" flood-color="#000000" flood-opacity="0.4"/>
         </filter>
@@ -189,39 +203,42 @@ async function generateLuxuryBookingCard(booking: {
         <text x="125" y="142" font-family="Arial, sans-serif" font-size="42" fill="#ffffff" text-anchor="middle">🏥</text>
       `}
 
-      <text x="195" y="118" font-family="Arial, sans-serif" font-size="28" font-weight="bold" fill="#ffffff" direction="rtl">${booking.clinicName}</text>
-      <text x="195" y="152" font-family="Arial, sans-serif" font-size="18" fill="rgba(255,255,255,0.85)" direction="rtl">
-        ${booking.doctorName ? `تحت إشراف: د. ${booking.doctorName}` : 'بطاقة حجز موعد طبي مؤكد'}
+      <text x="195" y="118" font-family="Arial, Tahoma, sans-serif" font-size="28" font-weight="bold" fill="#ffffff">${clinicName}</text>
+      <text x="195" y="152" font-family="Arial, Tahoma, sans-serif" font-size="18" fill="rgba(255,255,255,0.85)">
+        ${doctorName ? `تحت إشراف: د. ${doctorName}` : 'بطاقة حجز موعد طبي مؤكد'}
       </text>
 
       <rect x="580" y="95" width="130" height="42" rx="21" fill="rgba(255,255,255,0.25)"/>
-      <text x="645" y="122" font-family="Arial, sans-serif" font-size="16" font-weight="bold" fill="#ffffff" text-anchor="middle">مؤكد ✓</text>
+      <text x="645" y="122" font-family="Arial, Tahoma, sans-serif" font-size="16" font-weight="bold" fill="#ffffff" text-anchor="middle">مؤكد ✓</text>
 
-      <text x="700" y="270" font-family="Arial, sans-serif" font-size="16" fill="#64748b" text-anchor="end">اسم المريض الصريح</text>
-      <text x="700" y="305" font-family="Arial, sans-serif" font-size="26" font-weight="bold" fill="#0f172a" text-anchor="end">${booking.patientName}</text>
+      <text x="700" y="270" font-family="Arial, Tahoma, sans-serif" font-size="16" fill="#64748b" text-anchor="end">اسم المريض الصريح</text>
+      <text x="700" y="305" font-family="Arial, Tahoma, sans-serif" font-size="26" font-weight="bold" fill="#0f172a" text-anchor="end">${patientName}</text>
+
       <line x1="100" y1="330" x2="700" y2="330" stroke="#e2e8f0" stroke-width="1.5" stroke-dasharray="6,6"/>
 
-      <text x="700" y="370" font-family="Arial, sans-serif" font-size="16" fill="#64748b" text-anchor="end">رقم الهاتف التواصل</text>
-      <text x="700" y="405" font-family="Arial, sans-serif" font-size="22" font-weight="bold" fill="#0f172a" text-anchor="end" direction="ltr">${booking.patientPhone}</text>
+      <text x="700" y="370" font-family="Arial, Tahoma, sans-serif" font-size="16" fill="#64748b" text-anchor="end">رقم الهاتف التواصل</text>
+      <text x="700" y="405" font-family="Arial, Tahoma, sans-serif" font-size="22" font-weight="bold" fill="#0f172a" text-anchor="end">${patientPhone}</text>
+
       <line x1="100" y1="430" x2="700" y2="430" stroke="#e2e8f0" stroke-width="1.5" stroke-dasharray="6,6"/>
 
-      <text x="700" y="470" font-family="Arial, sans-serif" font-size="16" fill="#64748b" text-anchor="end">الخدمة الطبية المطلوبة</text>
-      <text x="700" y="505" font-family="Arial, sans-serif" font-size="22" font-weight="bold" fill="#059669" text-anchor="end">${booking.serviceName}</text>
+      <text x="700" y="470" font-family="Arial, Tahoma, sans-serif" font-size="16" fill="#64748b" text-anchor="end">الخدمة الطبية المطلوبة</text>
+      <text x="700" y="505" font-family="Arial, Tahoma, sans-serif" font-size="22" font-weight="bold" fill="#059669" text-anchor="end">${serviceName}</text>
+
       <line x1="100" y1="530" x2="700" y2="530" stroke="#e2e8f0" stroke-width="1.5" stroke-dasharray="6,6"/>
 
       <g>
         <rect x="410" y="560" width="290" height="85" rx="16" fill="#f8fafc"/>
-        <text x="680" y="590" font-family="Arial, sans-serif" font-size="14" fill="#64748b" text-anchor="end">📅 تاريخ الموعد</text>
-        <text x="680" y="625" font-family="Arial, sans-serif" font-size="20" font-weight="bold" fill="#0f172a" text-anchor="end">${booking.date}</text>
+        <text x="680" y="590" font-family="Arial, Tahoma, sans-serif" font-size="14" fill="#64748b" text-anchor="end">📅 تاريخ الموعد</text>
+        <text x="680" y="625" font-family="Arial, Tahoma, sans-serif" font-size="20" font-weight="bold" fill="#0f172a" text-anchor="end">${bookingDate}</text>
 
         <rect x="100" y="560" width="290" height="85" rx="16" fill="#f8fafc"/>
-        <text x="370" y="590" font-family="Arial, sans-serif" font-size="14" fill="#64748b" text-anchor="end">⏰ الوقت المكتمل</text>
-        <text x="370" y="625" font-family="Arial, sans-serif" font-size="20" font-weight="bold" fill="#0f172a" text-anchor="end">${booking.time}</text>
+        <text x="370" y="590" font-family="Arial, Tahoma, sans-serif" font-size="14" fill="#64748b" text-anchor="end">⏰ الوقت المكتمل</text>
+        <text x="370" y="625" font-family="Arial, Tahoma, sans-serif" font-size="20" font-weight="bold" fill="#0f172a" text-anchor="end">${bookingTime}</text>
       </g>
 
       <rect x="100" y="670" width="600" height="65" rx="20" fill="url(#goldGrad)"/>
-      <text x="400" y="711" font-family="Monospace, Arial, sans-serif" font-size="26" font-weight="bold" fill="#ffffff" text-anchor="middle">
-        كود الحجز المباشر: ${booking.code}
+      <text x="400" y="711" font-family="Arial, Tahoma, sans-serif" font-size="26" font-weight="bold" fill="#ffffff" text-anchor="middle">
+        كود الحجز المباشر: ${bookingCode}
       </text>
 
       ${qrBase64 ? `
@@ -231,7 +248,7 @@ async function generateLuxuryBookingCard(booking: {
         </g>
       ` : ''}
 
-      <text x="400" y="930" font-family="Arial, sans-serif" font-size="16" font-weight="bold" fill="#94a3b8" text-anchor="middle">
+      <text x="400" y="930" font-family="Arial, Tahoma, sans-serif" font-size="16" font-weight="bold" fill="#94a3b8" text-anchor="middle">
         Smart Clinic System — نظام إدارة العيادات الذكي
       </text>
       <text x="400" y="958" font-family="Monospace, Arial, sans-serif" font-size="14" fill="#38bdf8" text-anchor="middle">
@@ -243,7 +260,6 @@ async function generateLuxuryBookingCard(booking: {
     const resvg = new Resvg(svg, {
       fitTo: { mode: 'width', value: 800 },
     });
-
     const pngData = resvg.render();
     return pngData.asPng();
   } catch (e) {
@@ -253,286 +269,8 @@ async function generateLuxuryBookingCard(booking: {
 }
 
 // ============================================================
-// ===== نظام TTS متعدد المستويات =====
+// ===== الدالة الرئيسية والتعامل مع طلبات الكاشير والبوت =====
 // ============================================================
-
-async function generateSpeech(text: string): Promise<{ audio: Uint8Array; source: string } | null> {
-  const cleanText = stripEmojis(text).trim();
-  if (!cleanText) return null;
-
-  const ELEVENLABS_API_KEY = Deno.env.get('ELEVENLABS_API_KEY');
-  if (ELEVENLABS_API_KEY) {
-    try {
-      const result = await generateWithElevenLabs(cleanText, ELEVENLABS_API_KEY);
-      if (result) return { audio: result, source: 'ElevenLabs' };
-    } catch (e) { console.error('ElevenLabs failed:', e); }
-  }
-
-  const GOOGLE_TTS_API_KEY = Deno.env.get('GOOGLE_TTS_API_KEY');
-  if (GOOGLE_TTS_API_KEY) {
-    try {
-      const result = await generateWithGoogleTTS(cleanText, GOOGLE_TTS_API_KEY);
-      if (result) return { audio: result, source: 'Google Cloud TTS' };
-    } catch (e) { console.error('Google Cloud TTS failed:', e); }
-  }
-
-  try {
-    const result = await generateWithGTTS(cleanText);
-    if (result) return { audio: result, source: 'gTTS (Free)' };
-  } catch (e) { console.error('gTTS failed:', e); }
-
-  return null;
-}
-
-async function generateWithElevenLabs(text: string, apiKey: string): Promise<Uint8Array | null> {
-  const response = await fetchWithTimeout('https://api.elevenlabs.io/v1/text-to-speech/21m00Tcm4TlvDq8ikWAM', {
-    method: 'POST',
-    headers: { 'xi-api-key': apiKey, 'Content-Type': 'application/json' },
-    body: JSON.stringify({
-      text: text,
-      model_id: 'eleven_multilingual_v2',
-      voice_settings: { stability: 0.5, similarity_boost: 0.75 },
-    }),
-  }, 15000);
-
-  if (!response.ok) return null;
-  return new Uint8Array(await response.arrayBuffer());
-}
-
-async function generateWithGoogleTTS(text: string, apiKey: string): Promise<Uint8Array | null> {
-  const response = await fetchWithTimeout(
-    `https://texttospeech.googleapis.com/v1/text:synthesize?key=${apiKey}`,
-    {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        input: { text: text },
-        voice: { languageCode: 'ar-XA', name: 'ar-XA-Wavenet-D', ssmlGender: 'FEMALE' },
-        audioConfig: { audioEncoding: 'MP3' },
-      }),
-    },
-    15000
-  );
-
-  if (!response.ok) return null;
-  const result = await response.json();
-  if (!result?.audioContent) return null;
-  return Uint8Array.from(atob(result.audioContent), c => c.charCodeAt(0));
-}
-
-async function generateWithGTTS(text: string): Promise<Uint8Array | null> {
-  const chunks: string[] = [];
-  let currentChunk = '';
-  const sentences = text.match(/[^.!؟\n]+[.!؟\n]*/g) || [text];
-  for (const sentence of sentences) {
-    if ((currentChunk + sentence).length > 100) {
-      if (currentChunk) chunks.push(currentChunk.trim());
-      currentChunk = sentence;
-    } else {
-      currentChunk += ' ' + sentence;
-    }
-  }
-  if (currentChunk.trim()) chunks.push(currentChunk.trim());
-  if (chunks.length === 0) return null;
-
-  try {
-    const audioParts: Uint8Array[] = [];
-    for (let i = 0; i < chunks.length; i++) {
-      const chunk = chunks[i];
-      const url = `https://translate.google.com/translate_tts?ie=UTF-8&tl=ar&client=tw-ob&q=${encodeURIComponent(chunk)}&textlen=${chunk.length}&idx=${i}&total=${chunks.length}`;
-      const response = await fetchWithTimeout(url, { headers: { 'User-Agent': 'Mozilla/5.0', 'Referer': 'https://translate.google.com/' } }, 10000);
-      if (!response.ok) continue;
-      audioParts.push(new Uint8Array(await response.arrayBuffer()));
-    }
-    if (audioParts.length === 0) return null;
-    const totalLength = audioParts.reduce((sum, part) => sum + part.length, 0);
-    const mergedAudio = new Uint8Array(totalLength);
-    let offset = 0;
-    for (const part of audioParts) {
-      mergedAudio.set(part, offset);
-      offset += part.length;
-    }
-    return mergedAudio;
-  } catch (e) {
-    return null;
-  }
-}
-
-// ============================================================
-// ===== دوال الذكاء الاصطناعي الذكي متعدد اللغات =====
-// ============================================================
-
-async function callAI(userMessage: string, userName: string, clinicContext: string, tone = 'ودود ومحترم'): Promise<string | null> {
-  const OPENROUTER_API_KEY = Deno.env.get('OPENROUTER_API_KEY');
-  if (!OPENROUTER_API_KEY) return null;
-
-  const isEnglish = /[a-zA-Z]/.test(userMessage) && !/[\u0600-\u06FF]/.test(userMessage);
-
-  try {
-    const systemPrompt = isEnglish ? `
-You are a warm, polite, and professional medical receptionist at a clinic.
-${clinicContext}
-Strict rules:
-- Be natural, friendly, and human-like. Never mention you are an AI.
-- Do NOT mention prices or fees unless explicitly asked by the patient.
-- Do NOT use emojis or special symbol decorations.
-- Keep replies concise (2 to 4 sentences).
-- End by inviting the user to use the action buttons: "Book Appointment", "Services", "My Appointments", or "Cancel Appointment".
-- Never give medical diagnoses or prescriptions.
-- Patient Name: ${userName}.
-` : `
-أنت مساعد شخصي ودود ومحترم، تعمل كموظف استقبال في عيادة طبية.
-${clinicContext}
-تعليمات مهمة جداً (التزم بها 100%):
-- أسلوبك: طبيعي وإنساني ودافئ جداً. لا تذكر أنك بوت أو روبوت.
-- لا تذكر الأسعار أو التكاليف أو العملات أبداً إلا إذا سألك المريض مباشرة عن السعر.
-- لا تستخدم أي رموز تعبيرية (إيموجي) أو علامات زخرفية.
-- لا تستخدم التنوين أو علامات التشكيل.
-- ردودك مختصرة ومفيدة (جملتين إلى أربع جمل).
-- في نهاية الرد، ادعُ المستخدم لاستخدام الأزرار: «حجز موعد» أو «الخدمات» أو «مواعيدي» أو «إلغاء موعد».
-- لا تقدم تشخيصاً طبياً أو وصفات دواء.
-- اسم المستخدم: ${userName}.`;
-
-    const response = await fetchWithTimeout('https://openrouter.ai/api/v1/chat/completions', {
-      method: 'POST',
-      headers: {
-        'Authorization': `Bearer ${OPENROUTER_API_KEY}`,
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify({
-        model: 'openrouter/free',
-        messages: [
-          { role: 'system', content: systemPrompt },
-          { role: 'user', content: userMessage },
-        ],
-        temperature: 0.7,
-        max_tokens: 500,
-      }),
-    }, 10000);
-
-    if (!response.ok) return null;
-    const result = await response.json();
-    return result?.choices?.[0]?.message?.content || null;
-  } catch (e) {
-    return null;
-  }
-}
-
-// ============================================================
-// ===== دوال الصوت (تحويل الصوت إلى نص) =====
-// ============================================================
-
-async function transcribeTelegramVoice(botToken: string, fileId: string): Promise<string | null> {
-  const GROQ_API_KEY = Deno.env.get('GROQ_API_KEY');
-  if (GROQ_API_KEY) {
-    try {
-      const result = await transcribeWithGroq(botToken, fileId, GROQ_API_KEY);
-      if (result) return result;
-    } catch (_) {}
-  }
-
-  const HF_API_KEY = Deno.env.get('HUGGINGFACE_API_KEY');
-  if (HF_API_KEY) {
-    try {
-      return await transcribeWithHuggingFace(botToken, fileId, HF_API_KEY);
-    } catch (_) {}
-  }
-
-  return null;
-}
-
-async function transcribeWithGroq(botToken: string, fileId: string, apiKey: string): Promise<string | null> {
-  try {
-    const fileRes = await fetchWithTimeout(`https://api.telegram.org/bot${botToken}/getFile`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ file_id: fileId }),
-    }, 5000);
-    const fileData = await fileRes.json();
-    const filePath = fileData?.result?.file_path;
-    if (!filePath) return null;
-
-    const audioRes = await fetchWithTimeout(`https://api.telegram.org/file/bot${botToken}/${filePath}`, {}, 5000);
-    if (!audioRes.ok) return null;
-    const audioBlob = await audioRes.blob();
-
-    const formData = new FormData();
-    formData.append('file', audioBlob, 'audio.ogg');
-    formData.append('model', 'whisper-large-v3');
-    formData.append('response_format', 'json');
-
-    const response = await fetchWithTimeout('https://api.groq.com/openai/v1/audio/transcriptions', {
-      method: 'POST',
-      headers: { 'Authorization': `Bearer ${apiKey}` },
-      body: formData,
-    }, 15000);
-
-    if (!response.ok) return null;
-    const result = await response.json();
-    return result?.text?.trim() || null;
-  } catch (_) {
-    return null;
-  }
-}
-
-async function transcribeWithHuggingFace(botToken: string, fileId: string, apiKey: string): Promise<string | null> {
-  try {
-    const fileRes = await fetchWithTimeout(`https://api.telegram.org/bot${botToken}/getFile`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ file_id: fileId }),
-    }, 5000);
-    const fileData = await fileRes.json();
-    const filePath = fileData?.result?.file_path;
-    if (!filePath) return null;
-
-    const audioRes = await fetchWithTimeout(`https://api.telegram.org/file/bot${botToken}/${filePath}`, {}, 5000);
-    if (!audioRes.ok) return null;
-    const audioBuffer = await audioRes.arrayBuffer();
-    const audioBytes = new Uint8Array(audioBuffer);
-
-    const response = await fetchWithTimeout('https://api-inference.huggingface.co/models/openai/whisper-small', {
-      method: 'POST',
-      headers: {
-        'Authorization': `Bearer ${apiKey}`,
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify({ inputs: Array.from(audioBytes) }),
-    }, 15000);
-
-    if (!response.ok) return null;
-    const result = await response.json();
-    return result?.text?.trim() || null;
-  } catch (_) {
-    return null;
-  }
-}
-
-async function sendVoiceReply(botToken: string, chatId: number, htmlText: string): Promise<boolean> {
-  const cleanText = stripEmojis(htmlText.replace(/<[^>]+>/g, '').replace(/\s+/g, ' ')).trim();
-  if (!cleanText) return false;
-
-  const result = await generateSpeech(cleanText);
-  if (!result) return false;
-
-  const fd = new FormData();
-  fd.append('chat_id', String(chatId));
-  fd.append('title', 'رد صوتي من العيادة');
-  fd.append('audio', new Blob([result.audio], { type: 'audio/mpeg' }), 'reply.mp3');
-
-  const res = await fetchWithTimeout(`https://api.telegram.org/bot${botToken}/sendAudio`, {
-    method: 'POST',
-    body: fd,
-  }, 15000);
-
-  const j = await res.json();
-  return !!j?.ok;
-}
-
-// ============================================================
-// ===== الدالة الرئيسية =====
-// ============================================================
-
 serve(async (req) => {
   if (req.method === 'OPTIONS') return new Response(null, { headers: corsHeaders });
 
@@ -544,7 +282,54 @@ serve(async (req) => {
     const url = new URL(req.url);
     let rawBody: any = null;
     try { rawBody = await req.json(); } catch { rawBody = null; }
+
     const action = url.searchParams.get('action') || rawBody?.action || null;
+
+    // 📩 إجراء إرسال سند الدفع المالي تلقائياً للمريض عبر البوت الموحد
+    if (action === 'send_receipt') {
+      const chatId = rawBody?.chat_id;
+      const receiptImage = rawBody?.receipt_image;
+      const clinicId = rawBody?.clinic_id;
+
+      if (!chatId || !receiptImage) {
+        return jsonResponse({ ok: false, error: 'بيانات غير مكتملة لإرسال السند' }, 400);
+      }
+
+      const botToken = await getBotTokenForClinic(supabase, clinicId);
+      if (!botToken) {
+        return jsonResponse({ ok: false, error: 'تعذر الوصول لتوكن البوت الموحد' }, 500);
+      }
+
+      const base64Data = receiptImage.replace(/^data:image\/\w+;base64,/, "");
+      const imageBytes = Uint8Array.from(atob(base64Data), c => c.charCodeAt(0));
+
+      const caption = 
+        `🧾 <b>سند دفع رسمي مؤكد — ${rawBody?.clinic_name || "العيادة الطبية"}</b>\n\n` +
+        `👤 المريض: <b>${rawBody?.patient_name || "المريض"}</b>\n` +
+        `🔖 كود الحجز: <code>${rawBody?.reservation_code || ""}</code>\n` +
+        `💊 الخدمة: <b>${rawBody?.service_name || "فحص طبي"}</b>\n` +
+        `💰 الصافي المدفوع: <b>${rawBody?.amount || 0} ر.ي</b>\n` +
+        `📅 التاريخ: <b>${new Date().toLocaleDateString('ar-EG')}</b>\n\n` +
+        `شكراً لتسديدكم، نتمنى لكم دوام الصحة والعافية 🌷`;
+
+      const fd = new FormData();
+      fd.append("chat_id", String(chatId));
+      fd.append("photo", new Blob([imageBytes], { type: 'image/png' }), `receipt_${rawBody?.reservation_code}.png`);
+      fd.append("caption", caption);
+      fd.append("parse_mode", "HTML");
+
+      const tgRes = await fetch(`https://api.telegram.org/bot${botToken}/sendPhoto`, {
+        method: "POST",
+        body: fd,
+      });
+
+      const resJson = await tgRes.json();
+      if (resJson.ok) {
+        return jsonResponse({ ok: true, result: resJson.result });
+      } else {
+        return jsonResponse({ ok: false, error: resJson.description }, 400);
+      }
+    }
 
     if (action === 'set-webhook' || action === 'webhook-info' || action === 'bot-info') {
       const authHeader = req.headers.get('Authorization') || '';
@@ -552,6 +337,7 @@ serve(async (req) => {
       let botToken: string | null = null;
       let clinicIdForCache: string | null = null;
       let ownerInfo = 'env';
+
       if (jwt) {
         const { data: userData } = await supabase.auth.getUser(jwt);
         const uid = userData?.user?.id;
@@ -560,6 +346,7 @@ serve(async (req) => {
           if (c?.bot_token) { botToken = c.bot_token; ownerInfo = uid; clinicIdForCache = c.id; }
         }
       }
+
       if (!botToken) botToken = Deno.env.get('TELEGRAM_BOT_TOKEN') || null;
       if (!botToken) return jsonResponse({ ok: false, error: 'لا يوجد توكن بوت محفوظ' }, 400);
 
@@ -581,24 +368,19 @@ serve(async (req) => {
       const webhookUrl = clinicIdForCache
         ? `${supabaseUrl}/functions/v1/telegram-bot?clinic_id=${clinicIdForCache}`
         : `${supabaseUrl}/functions/v1/telegram-bot`;
+
       const res = await fetch(`https://api.telegram.org/bot${botToken}/setWebhook`, {
         method: 'POST', headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ url: webhookUrl, allowed_updates: ['message', 'callback_query'], drop_pending_updates: true }),
       });
       const tgResult = await res.json();
-      try {
-        const meRes = await fetch(`https://api.telegram.org/bot${botToken}/getMe`);
-        const me = await meRes.json();
-        const username = me?.result?.username;
-        if (username && clinicIdForCache) {
-          await supabase.from('clinics').update({ bot_username: username }).eq('id', clinicIdForCache);
-        }
-      } catch (_) {}
+
       return jsonResponse({ ok: !!tgResult?.ok, webhook: tgResult, webhookUrl, owner: ownerInfo });
     }
 
     const update = rawBody;
     if (!update) return jsonResponse({ ok: true });
+
     const requestClinicId = extractClinicId(url.searchParams.get('clinic_id'));
 
     if (update.callback_query) {
@@ -613,41 +395,25 @@ serve(async (req) => {
     let text = (message.text || '').trim();
     const telegramUserId = String(message.from.id);
     const firstName = message.from.first_name || 'عميل';
-    const messageType = message.voice ? 'voice' : 'text';
-    let transcript: string | null = null;
 
     const botToken = await getBotTokenForClinic(supabase, requestClinicId);
     if (!botToken) return jsonResponse({ ok: true });
+
     const send = (cId: number, txt: string, markup?: any) => sendMessage(botToken, cId, txt, markup);
 
-    if (message.voice) {
-      transcript = await transcribeTelegramVoice(botToken, message.voice.file_id);
-      text = (transcript || '').trim();
-      if (!text) {
-        await send(chatId, '⚠️ لم أتمكن من فهم الرسالة الصوتية. أرسلها مرة أخرى أو اكتب طلبك نصياً.');
-        return jsonResponse({ ok: true });
-      }
-    }
-
     const linkedClinicId = await getUserClinicId(supabase, telegramUserId);
-    await logConversation(supabase, linkedClinicId, telegramUserId, String(chatId), 'incoming', messageType, message.text || null, transcript, null, 'ok', update);
 
     const isMainMenu = isBookingIntent(text) || isServicesIntent(text) || isAppointmentsIntent(text) || isCancelIntent(text);
 
-    if (linkedClinicId && text && !text.startsWith('/') && detectEmergency(text)) {
-      await clearSession(supabase, telegramUserId);
-      await handleEmergency(supabase, botToken, linkedClinicId, telegramUserId, String(chatId), firstName, text);
-      await send(chatId, '🚨 تم تصنيف رسالتك كحالة طارئة وتم إرسال تنبيه فوري للطبيب. إذا كانت الحالة حرجة اتصل بالإسعاف أو توجّه لأقرب طوارئ فوراً.');
-      return jsonResponse({ ok: true });
-    }
-
     const session = await getSession(supabase, telegramUserId);
     const looksLikeReCode = /^RE-\d{4}$/i.test(text.trim());
+
     if (session && session.step && session.step !== 'idle'
         && !text.startsWith('/') && !isMainMenu && !looksLikeReCode) {
       const handled = await progressSession(supabase, send, chatId, telegramUserId, firstName, session, text, botToken);
       if (handled) return jsonResponse({ ok: true });
     }
+
     if (isMainMenu && session && session.step !== 'idle') {
       await clearSession(supabase, telegramUserId);
     }
@@ -656,29 +422,16 @@ serve(async (req) => {
       const parts = text.split(' ');
       const param = parts.length > 1 ? parts[1] : null;
 
-      if (param && param.startsWith('link_')) {
-        const ownerId = param.replace('link_', '');
-        const { data: clinicOwned } = await supabase.from('clinics').select('id, name').eq('owner_id', ownerId).maybeSingle();
-        if (!clinicOwned) { await send(chatId, '❌ رابط الربط غير صالح.'); return jsonResponse({ ok: true }); }
-        const { error: upErr } = await supabase.from('profiles').update({ phone: `tg:${telegramUserId}` }).eq('user_id', ownerId);
-        await send(chatId, upErr ? '⚠️ حدث خطأ أثناء الربط.' :
-          `✅ <b>تم ربط حسابك بنجاح!</b>\n\n🏥 العيادة: ${clinicOwned.name}\n\n🔔 ستصلك الآن إشعارات فورية بكل حجز جديد.`);
-        return jsonResponse({ ok: true });
-      }
-
       const clinicId = extractClinicId(param);
       if (clinicId) {
         const { data: clinic } = await supabase.from('clinics').select('id, name, type, description, doctor_name').eq('id', clinicId).single();
         if (!clinic) { await send(chatId, '❌ رابط العيادة غير صحيح.'); return jsonResponse({ ok: true }); }
-        const { data: sub } = await supabase.from('subscriptions').select('status, is_active, trial_ends_at').eq('clinic_id', clinicId).single();
-        if (!isSubscriptionUsable(sub)) { await send(chatId, '⚠️ هذه العيادة غير نشطة حالياً.'); return jsonResponse({ ok: true }); }
 
         const { data: existing } = await supabase.from('patients').select('id').eq('clinic_id', clinicId).eq('telegram_user_id', telegramUserId).maybeSingle();
         if (!existing) {
           await supabase.from('patients').insert({ clinic_id: clinicId, name: firstName, phone: `tg:${telegramUserId}`, telegram_user_id: telegramUserId });
-        } else {
-          await supabase.from('patients').update({ created_at: new Date().toISOString() }).eq('id', existing.id);
         }
+
         await clearSession(supabase, telegramUserId);
         await send(chatId,
           `🏥 <b>مرحباً ${firstName} في ${clinic.name}</b>\n\n` +
@@ -686,11 +439,6 @@ serve(async (req) => {
           `للحجز اضغط زر «📅 حجز موعد» أو زر «🔍 الخدمات» لعرض الخدمات والأسعار.`,
           defaultKeyboard()
         );
-        return jsonResponse({ ok: true });
-      }
-
-      if (param && !clinicId) {
-        await send(chatId, '⚠️ رابط العيادة غير معروف. اطلب من العيادة رابط حجز يبدأ بـ /start clinic_');
         return jsonResponse({ ok: true });
       }
 
@@ -705,9 +453,10 @@ serve(async (req) => {
           return jsonResponse({ ok: true });
         }
       }
+
       await send(chatId,
         `🏥 <b>مرحباً ${firstName} في Smart Clinic</b>\n\n` +
-        `للحجز افتح رابط العيادة الذي أرسلته لك (مثال: /start clinic_معرّف_العيادة).`,
+        `للحجز افتح رابط العيادة المخصص لكم.`,
         defaultKeyboard()
       );
       return jsonResponse({ ok: true });
@@ -720,7 +469,6 @@ serve(async (req) => {
       }
       const { data: clinic } = await supabase.from('clinics').select('id, name, type, description, doctor_name').eq('id', linkedClinicId).single();
       if (clinic) await sendServicesMenu(supabase, send, chatId, clinic, linkedClinicId, firstName);
-      else await send(chatId, '❌ العيادة غير موجودة.');
       return jsonResponse({ ok: true });
     }
 
@@ -730,12 +478,13 @@ serve(async (req) => {
         .eq('customer_telegram_id', telegramUserId)
         .in('status', ['pending', 'confirmed'])
         .order('date', { ascending: true }).limit(10);
+
       if (appointments && appointments.length > 0) {
         let msg = '📅 <b>مواعيدك القادمة:</b>\n\n';
         appointments.forEach((a: any, i: number) => {
           msg += `${i + 1}. ${a.status === 'confirmed' ? '✅' : '⏳'} <b>${a.date}</b> الساعة ${a.time}\n`;
-          if (a.services?.name) msg += `   🏷 ${a.services.name}\n`;
-          msg += `   🔖 كود: <code>${a.reservation_code}</code>\n\n`;
+          if (a.services?.name) msg += `🏷 ${a.services.name}\n`;
+          msg += `🔖 كود: <code>${a.reservation_code}</code>\n\n`;
         });
         await send(chatId, msg);
       } else await send(chatId, '📭 لا توجد لديك مواعيد قادمة.');
@@ -748,6 +497,7 @@ serve(async (req) => {
         .eq('customer_telegram_id', telegramUserId)
         .in('status', ['pending', 'confirmed'])
         .order('date', { ascending: true }).limit(5);
+
       if (appointments && appointments.length > 0) {
         let msg = '❌ <b>اختر الموعد لإلغائه:</b>\n\n';
         const buttons: any[][] = [];
@@ -760,44 +510,6 @@ serve(async (req) => {
       return jsonResponse({ ok: true });
     }
 
-    if (text.match(/^RE-\d{4}$/i)) {
-      const { data: appointment } = await supabase.from('appointments').update({ status: 'cancelled' })
-        .eq('reservation_code', text.toUpperCase()).eq('customer_telegram_id', telegramUserId)
-        .in('status', ['pending', 'confirmed']).select().single();
-      await send(chatId, appointment ?
-        `✅ <b>تم إلغاء الموعد</b>\n📅 ${appointment.date} ⏰ ${appointment.time}\n🔖 ${appointment.reservation_code}` :
-        '⚠️ لم يتم العثور على الموعد.');
-      return jsonResponse({ ok: true });
-    }
-
-    if (linkedClinicId) {
-      const { data: clinic } = await supabase.from('clinics').select('name, type, description, doctor_name, working_hours, voice_agent_enabled, voice_tone, voice_mode').eq('id', linkedClinicId).single();
-      const { data: services } = await supabase.from('services').select('name, price, duration_minutes').eq('clinic_id', linkedClinicId).eq('is_active', true);
-      let ctx = '';
-      if (clinic) {
-        ctx = `\nاسم العيادة: ${clinic.name}`;
-        if (clinic.doctor_name) ctx += `\nالطبيب المشرف: د. ${clinic.doctor_name}`;
-        if (clinic.description) ctx += `\nالوصف: ${clinic.description}`;
-        if (services?.length) ctx += `\nالخدمات المتاحة: ${services.map((s: any) => `${s.name}`).join('، ')}`;
-      }
-      const tone = (clinic as any)?.voice_tone || 'ودود ومحترم';
-      const aiResponse = await callAI(text, firstName, ctx, tone);
-      if (aiResponse) {
-        const cleanResponse = stripEmojis(aiResponse);
-        const mode = (clinic as any)?.voice_mode || 'auto';
-        const useVoice = (clinic as any)?.voice_agent_enabled && mode !== 'text' && (mode === 'voice' || Math.random() < 0.5);
-        let voiceOk = false;
-        if (useVoice) {
-          voiceOk = await sendVoiceReply(botToken, chatId, cleanResponse);
-        }
-        if (!useVoice || !voiceOk) {
-          await send(chatId, cleanResponse, defaultKeyboard());
-        }
-        await logConversation(supabase, linkedClinicId, telegramUserId, String(chatId), 'outgoing', useVoice && voiceOk ? 'ai_voice' : 'ai_response', null, null, cleanResponse, 'ok', null);
-        return jsonResponse({ ok: true });
-      }
-    }
-
     await send(chatId, `🤖 كيف يمكنني مساعدتك؟ استخدم الأزرار أدناه للبدء.`, defaultKeyboard());
     return jsonResponse({ ok: true });
 
@@ -806,10 +518,6 @@ serve(async (req) => {
     return jsonResponse({ ok: true });
   }
 });
-
-// ============================================================
-// ===== دوال جلسات الحجز وإدارة التدفق =====
-// ============================================================
 
 async function getSession(supabase: any, tgId: string) {
   const { data } = await supabase.from('bot_sessions').select('*').eq('telegram_user_id', tgId).maybeSingle();
@@ -860,7 +568,6 @@ async function progressSession(supabase: any, send: any, chatId: number, tgId: s
       return true;
     }
     await upsertSession(supabase, tgId, { full_name: name, step: 'ask_phone' });
-    // طلب رقم الهاتف رسمياً وبشكل حيادي ومباشر دون ذكر أي أمثلة أو دول
     await send(chatId, `أهلاً بك ${name} 🌷\n\n📱 يرجى إدخال رقم هاتفك للتواصل:`);
     return true;
   }
@@ -880,10 +587,10 @@ async function progressSession(supabase: any, send: any, chatId: number, tgId: s
           waBtn.length ? { inline_keyboard: waBtn } : undefined);
         return true;
       }
-      // رسالة الخطأ الرسمية الخالية تماماً من أسماء الدول والأمثلة
       await send(chatId, `⚠️ يرجى إدخال رقم هاتف صحيح للتواصل.\n(المحاولة ${attempts}/3)`);
       return true;
     }
+
     await upsertSession(supabase, tgId, { phone: v.normalized, phone_attempts: 0, step: 'ask_date' });
     const today = new Date();
     const buttons: any[][] = [];
@@ -922,7 +629,7 @@ async function progressSession(supabase: any, send: any, chatId: number, tgId: s
 
 async function handleDateChoice(supabase: any, send: any, chatId: number, tgId: string, session: any, dateStr: string): Promise<boolean> {
   if (isPastDate(dateStr)) {
-    await send(chatId, '⚠️ لا يمكن الحجز في تاريخ مضى. اختر تاريخاً مستقبلياً:', { inline_keyboard: nextDaysButtons() });
+    await send(chatId, '⚠️ لا يمكن الحجز في تاريخ مضى. اختر تاريخاً مستقبلياً:');
     return true;
   }
 
@@ -937,9 +644,7 @@ async function handleDateChoice(supabase: any, send: any, chatId: number, tgId: 
     const waText = encodeURIComponent(`مرحباً، أريد استفسار عن مواعيد متاحة في ${clinicRow?.name || 'العيادة'}`);
     const waBtn = waNum ? [[{ text: '💬 تواصل مع موظف الاستقبال', url: `https://wa.me/${waNum}?text=${waText}` }]] : [];
     await send(chatId,
-      `⚠️ <b>لا توجد أوقات متاحة في هذا اليوم</b>\n\n` +
-      `جميع الأوقات محجوزة أو انتهى الدوام الرسمي.\n` +
-      (waNum ? `يمكنك التواصل مع موظف الاستقبال لحجز موعد استثنائي عبر الواتساب:\n` : ''),
+      `⚠️ <b>لا توجد أوقات متاحة في هذا اليوم</b>\n\nجميع الأوقات محجوزة.`,
       waBtn.length ? { inline_keyboard: waBtn } : undefined
     );
     return true;
@@ -952,25 +657,6 @@ async function handleDateChoice(supabase: any, send: any, chatId: number, tgId: 
   }
   await send(chatId, `✅ التاريخ: <b>${dateStr}</b>\n\n⏰ اختر الوقت المناسب:`, { inline_keyboard: buttons });
   return true;
-}
-
-function nextDaysButtons() {
-  const buttons: any[][] = [];
-  const today = new Date();
-  let daysAdded = 0;
-  let i = 0;
-  while (daysAdded < 5 && i < 30) {
-    i++;
-    const d = new Date(today);
-    d.setDate(today.getDate() + i);
-    const iso = d.toISOString().split('T')[0];
-    if (!isPastDate(iso)) {
-      const label = i === 1 ? `غداً (${iso})` : iso;
-      buttons.push([{ text: `📅 ${label}`, callback_data: `date_${iso}` }]);
-      daysAdded++;
-    }
-  }
-  return buttons;
 }
 
 function normalizedText(text: string) {
@@ -992,7 +678,7 @@ function isBookingIntent(text: string) {
 
 function isServicesIntent(text: string) {
   const n = normalizedText(text);
-  return n === '/services' || n === 'الخدمات' || n === 'خدمات' || n === 'خدماتي' || n.includes('الخدمات') || n.includes('خدماتي');
+  return n === '/services' || n === 'الخدمات' || n === 'خدمات' || n === 'خدماتي' || n.includes('الخدمات');
 }
 
 function isAppointmentsIntent(text: string) {
@@ -1005,23 +691,9 @@ function isCancelIntent(text: string) {
   return n === '/cancel' || n.includes('الغاء موعد');
 }
 
-function isSubscriptionUsable(sub: any) {
-  if (!sub?.is_active) return false;
-  if (sub.status === 'trial' && sub.trial_ends_at) {
-    return new Date(sub.trial_ends_at).getTime() >= Date.now();
-  }
-  return sub.status !== 'expired';
-}
-
 async function finalizeBooking(supabase: any, send: any, chatId: number, tgId: string, firstName: string, session: any, time: string, botToken: string): Promise<boolean> {
   if (isPastTime(session.preferred_date, time)) {
-    const { data: clinicRow } = await supabase.from('clinics').select('phone, receptionist_whatsapp').eq('id', session.clinic_id).maybeSingle();
-    const waNum = (clinicRow?.receptionist_whatsapp || clinicRow?.phone || '').replace(/[^\d]/g, '');
-    const waBtn = waNum ? [[{ text: '💬 تواصل مع موظف الاستقبال', url: `https://wa.me/${waNum}` }]] : [];
-    await send(chatId,
-      `⚠️ الوقت <b>${time}</b> فائت. اختر وقتاً آخر أو تواصل مع الاستقبال عبر الواتساب:`,
-      waBtn.length ? { inline_keyboard: waBtn } : undefined
-    );
+    await send(chatId, `⚠️ الوقت <b>${time}</b> فائت. اختر وقتاً آخر.`);
     return true;
   }
 
@@ -1038,9 +710,8 @@ async function finalizeBooking(supabase: any, send: any, chatId: number, tgId: s
     const { data: clinicRow } = await supabase.from('clinics').select('phone, receptionist_whatsapp').eq('id', session.clinic_id).maybeSingle();
     const waNum = (clinicRow?.receptionist_whatsapp || clinicRow?.phone || '').replace(/[^\d]/g, '');
     const waBtn = waNum ? [[{ text: '💬 تواصل مع الاستقبال لإضافة حجز', url: `https://wa.me/${waNum}` }]] : [];
-
     await send(chatId,
-      '⚠️ لقد وصلت للحد الأقصى للحجوزات المتاحة تلقائياً اليوم (3 مواعيد).\n\nإذا كنت ترغب بحجز إضافي، يمكنك التواصل مباشرة مع موظف الاستقبال عبر الواتساب:',
+      '⚠️ لقد وصلت للحد الأقصى للحجوزات المتاحة تلقائياً اليوم (3 مواعيد).',
       waBtn.length ? { inline_keyboard: waBtn } : undefined
     );
     await clearSession(supabase, tgId);
@@ -1054,12 +725,13 @@ async function finalizeBooking(supabase: any, send: any, chatId: number, tgId: s
   const { data: existingPatient } = await supabase.from('patients').select('id, name, phone')
     .eq('clinic_id', session.clinic_id).eq('telegram_user_id', tgId).maybeSingle();
 
+  // تحديث بيانات المريض دائماً بالاسم والأن رقم الهاتف المباشر الحقيقي ليظهر بجدول المواعيد
   if (existingPatient) {
     patientId = existingPatient.id;
-    await supabase.from('patients').update({ name: session.full_name, phone: session.phone }).eq('id', patientId);
+    await supabase.from('patients').update({ name: storedName, phone: storedPhone }).eq('id', patientId);
   } else {
     const { data: np } = await supabase.from('patients')
-      .insert({ clinic_id: session.clinic_id, name: session.full_name, phone: session.phone, telegram_user_id: tgId })
+      .insert({ clinic_id: session.clinic_id, name: storedName, phone: storedPhone, telegram_user_id: tgId })
       .select('id').single();
     patientId = np!.id;
   }
@@ -1068,6 +740,7 @@ async function finalizeBooking(supabase: any, send: any, chatId: number, tgId: s
   const { data: clinicInfo } = await supabase.from('clinics').select('name, doctor_name, logo_url').eq('id', session.clinic_id).single();
 
   const code = `RE-${String(Math.floor(1000 + Math.random() * 9000))}`;
+
   const { error } = await supabase.from('appointments').insert({
     clinic_id: session.clinic_id,
     patient_id: patientId,
@@ -1084,6 +757,7 @@ async function finalizeBooking(supabase: any, send: any, chatId: number, tgId: s
     await send(chatId, '❌ تعذّر إكمال الحجز. حاول مرة أخرى.');
     return true;
   }
+
   await clearSession(supabase, tgId);
 
   const { data: clinicRow } = await supabase.from('clinics').select('phone, receptionist_whatsapp').eq('id', session.clinic_id).maybeSingle();
@@ -1128,15 +802,8 @@ async function finalizeBooking(supabase: any, send: any, chatId: number, tgId: s
     await fetchWithTimeout(`https://api.telegram.org/bot${botToken}/sendPhoto`, { method: 'POST', body: fd }, 15000);
   }
 
-  await notifyDoctor(supabase, botToken, session.clinic_id,
-    `👤 ${storedName}\n📱 ${storedPhone}\n🏷 ${service?.name || ''}\n📅 ${session.preferred_date} ⏰ ${time}\n🔖 ${code}`);
-
   return true;
 }
-
-// ============================================================
-// ===== معالجة Callback Queries والزرار التفاعلية =====
-// ============================================================
 
 async function handleCallbackQuery(supabase: any, query: any, requestClinicId: string | null = null) {
   const chatId = query.message.chat.id;
@@ -1146,6 +813,7 @@ async function handleCallbackQuery(supabase: any, query: any, requestClinicId: s
 
   const botToken = await getBotTokenForClinic(supabase, requestClinicId);
   if (!botToken) return jsonResponse({ ok: true });
+
   const send = (cId: number, txt: string, markup?: any) => sendMessage(botToken, cId, txt, markup);
 
   await fetch(`https://api.telegram.org/bot${botToken}/answerCallbackQuery`, {
@@ -1160,6 +828,7 @@ async function handleCallbackQuery(supabase: any, query: any, requestClinicId: s
 
     const { data: existingPatient } = await supabase.from('patients')
       .select('id, name, phone').eq('clinic_id', service.clinic_id).eq('telegram_user_id', tgId).maybeSingle();
+
     const hasRealRegistration = existingPatient && existingPatient.phone && !String(existingPatient.phone).startsWith('tg:');
 
     if (hasRealRegistration) {
@@ -1169,6 +838,7 @@ async function handleCallbackQuery(supabase: any, query: any, requestClinicId: s
         preferred_date: null, preferred_time: null,
         is_third_party: false, booked_by_chat_id: null, phone_attempts: 0,
       });
+
       const today = new Date();
       const buttons: any[][] = [];
       for (let i = 0; i < 5; i++) {
@@ -1178,14 +848,15 @@ async function handleCallbackQuery(supabase: any, query: any, requestClinicId: s
         const label = i === 0 ? `اليوم (${iso})` : i === 1 ? `غداً (${iso})` : iso;
         buttons.push([{ text: `📅 ${label}`, callback_data: `date_${iso}` }]);
       }
+
       await send(chatId,
-        `أهلاً بعودتك ${existingPatient!.name} 🌷\n\nسنحجز لك خدمة <b>${service.name}</b> باسمك المسجَّل سابقاً.\n📱 الهاتف: <code>${existingPatient!.phone}</code>\n\n📅 اختر تاريخ الموعد (أو اكتب: إلغاء للإيقاف):`,
+        `أهلاً بعودتك ${existingPatient!.name} 🌷\n\nسنحجز لك خدمة <b>${service.name}</b> باسمك المسجَّل سابقاً.\n📱 الهاتف: <code>${existingPatient!.phone}</code>\n\n📅 اختر تاريخ الموعد:`,
         { inline_keyboard: buttons });
       return jsonResponse({ ok: true });
     }
 
     await upsertSession(supabase, tgId, { clinic_id: service.clinic_id, service_id: service.id, step: 'ask_name', full_name: null, phone: null, preferred_date: null, preferred_time: null, is_third_party: false, booked_by_chat_id: null, phone_attempts: 0 });
-    await send(chatId, `📋 لحجز <b>${service.name}</b>:\n\nأرسل أولاً <b>اسمك الصريح الكامل</b> من فضلك.\n\n(لإلغاء العملية في أي وقت اكتب: إلغاء)`);
+    await send(chatId, `📋 لحجز <b>${service.name}</b>:\n\nأرسل أولاً <b>اسمك الصريح الكامل</b> من فضلك.`);
     return jsonResponse({ ok: true });
   }
 
@@ -1217,20 +888,15 @@ async function handleCallbackQuery(supabase: any, query: any, requestClinicId: s
     const { data: appointment } = await supabase.from('appointments').update({ status: 'cancelled' })
       .eq('reservation_code', resCode).eq('customer_telegram_id', tgId)
       .in('status', ['pending', 'confirmed']).select('date, time, reservation_code, clinic_id').single();
+
     if (appointment) {
       await send(chatId, `✅ <b>تم إلغاء الموعد</b>\n📅 ${appointment.date} ⏰ ${appointment.time}\n🔖 ${appointment.reservation_code}`);
-      await notifyDoctor(supabase, botToken, appointment.clinic_id,
-        `❌ <b>إلغاء موعد</b>\n👤 ${firstName}\n📅 ${appointment.date} ⏰ ${appointment.time}\n🔖 ${appointment.reservation_code}`);
     } else await send(chatId, '⚠️ لم يتم العثور على الموعد.');
     return jsonResponse({ ok: true });
   }
 
   return jsonResponse({ ok: true });
 }
-
-// ============================================================
-// ===== دوال مساعدة عامة =====
-// ============================================================
 
 function jsonResponse(data: any, status = 200) {
   return new Response(JSON.stringify(data), { status, headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
@@ -1282,53 +948,4 @@ async function getUserClinicId(supabase: any, tgId: string): Promise<string | nu
     .or(`telegram_user_id.eq.${tgId},phone.eq.tg:${tgId}`)
     .order('created_at', { ascending: false }).limit(1).maybeSingle();
   return data?.clinic_id || null;
-}
-
-async function notifyDoctor(supabase: any, botToken: string, clinicId: string, info: string, notificationType = 'booking', title = 'إشعار جديد') {
-  try {
-    const { data: clinic } = await supabase.from('clinics').select('owner_id, name').eq('id', clinicId).single();
-    if (!clinic) return null;
-    const { data: ownerProfile } = await supabase.from('profiles').select('phone').eq('user_id', clinic.owner_id).single();
-    const { data: notification } = await supabase.from('telegram_notifications').insert({
-      clinic_id: clinicId,
-      recipient_chat_id: ownerProfile?.phone?.startsWith('tg:') ? ownerProfile.phone.replace('tg:', '') : null,
-      notification_type: notificationType, title, message: info, status: 'pending',
-    }).select('id').single();
-
-    if (ownerProfile?.phone?.startsWith('tg:')) {
-      const ownerTgId = ownerProfile.phone.replace('tg:', '');
-      const result = await sendMessage(botToken, Number(ownerTgId), `🔔 <b>${title} - ${clinic.name}</b>\n\n${info}`);
-      await supabase.from('telegram_notifications').update({
-        status: result?.ok ? 'sent' : 'failed',
-        telegram_message_id: result?.result?.message_id ? String(result.result.message_id) : null,
-        error_message: result?.ok ? null : JSON.stringify(result),
-        sent_at: result?.ok ? new Date().toISOString() : null,
-      }).eq('id', notification?.id);
-    }
-    return notification?.id || null;
-  } catch (e) { return null; }
-}
-
-function detectEmergency(text: string): boolean {
-  const n = text.toLowerCase();
-  const kw = ['طوارئ','اسعاف','إسعاف','نزيف','اختناق','لا يتنفس','ألم شديد','الم شديد','جلطة','إغماء','فقدان وعي','تشنج','تسمم'];
-  return kw.some((k) => n.includes(k.toLowerCase()));
-}
-
-async function handleEmergency(supabase: any, botToken: string, clinicId: string, tgId: string, chatId: string, name: string, msg: string) {
-  const notificationId = await notifyDoctor(supabase, botToken, clinicId,
-    `🚨 <b>حالة طارئة محتملة</b>\n👤 ${name}\n💬 ${msg}\n📞 Telegram ID: ${tgId}`, 'emergency', 'تنبيه طوارئ عاجل');
-  await supabase.from('emergency_events').insert({
-    clinic_id: clinicId, telegram_user_id: tgId, chat_id: chatId, patient_name: name,
-    message_text: msg, severity: 'urgent', status: 'notified', notification_id: notificationId,
-  });
-}
-
-async function logConversation(supabase: any, clinicId: string | null, tgId: string, chatId: string, direction: string, messageType: string, messageText: string | null, transcript: string | null, aiResponse: string | null, status: string, rawUpdate: any) {
-  if (!clinicId) return;
-  await supabase.from('bot_conversations').insert({
-    clinic_id: clinicId, telegram_user_id: tgId, chat_id: chatId, direction, message_type: messageType,
-    message_text: messageText, transcript, ai_response: aiResponse, status,
-    raw_update: rawUpdate || null,
-  });
 }
