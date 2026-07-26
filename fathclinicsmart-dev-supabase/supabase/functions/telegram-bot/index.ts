@@ -147,6 +147,7 @@ async function generateLuxuryBookingCard(booking: {
       } catch (_) {}
     }
 
+    // ✅ إصلاح SVG: إزالة direction="rtl" واستخدام text-anchor بدلاً من ذلك
     const svg = `
     <svg width="800" height="1000" viewBox="0 0 800 1000" xmlns="http://www.w3.org/2000/svg">
       <defs>
@@ -189,14 +190,15 @@ async function generateLuxuryBookingCard(booking: {
         <text x="125" y="142" font-family="Arial, sans-serif" font-size="42" fill="#ffffff" text-anchor="middle">🏥</text>
       `}
 
-      <text x="195" y="118" font-family="Arial, sans-serif" font-size="28" font-weight="bold" fill="#ffffff" direction="rtl">${booking.clinicName}</text>
-      <text x="195" y="152" font-family="Arial, sans-serif" font-size="18" fill="rgba(255,255,255,0.85)" direction="rtl">
+      <text x="195" y="118" font-family="Arial, sans-serif" font-size="28" font-weight="bold" fill="#ffffff" text-anchor="start">${booking.clinicName}</text>
+      <text x="195" y="152" font-family="Arial, sans-serif" font-size="18" fill="rgba(255,255,255,0.85)" text-anchor="start">
         ${booking.doctorName ? `تحت إشراف: د. ${booking.doctorName}` : 'بطاقة حجز موعد طبي مؤكد'}
       </text>
 
       <rect x="580" y="95" width="130" height="42" rx="21" fill="rgba(255,255,255,0.25)"/>
       <text x="645" y="122" font-family="Arial, sans-serif" font-size="16" font-weight="bold" fill="#ffffff" text-anchor="middle">مؤكد ✓</text>
 
+      <!-- 🔹 جميع النصوص التالية تعتمد على text-anchor="end" لتوافق RTL بدون direction="rtl" -->
       <text x="700" y="270" font-family="Arial, sans-serif" font-size="16" fill="#64748b" text-anchor="end">اسم المريض الصريح</text>
       <text x="700" y="305" font-family="Arial, sans-serif" font-size="26" font-weight="bold" fill="#0f172a" text-anchor="end">${booking.patientName}</text>
       <line x1="100" y1="330" x2="700" y2="330" stroke="#e2e8f0" stroke-width="1.5" stroke-dasharray="6,6"/>
@@ -546,6 +548,58 @@ serve(async (req) => {
     try { rawBody = await req.json(); } catch { rawBody = null; }
     const action = url.searchParams.get('action') || rawBody?.action || null;
 
+    // ─── معالجة إرسال السند من الكاشير ───
+    if (action === 'send_receipt') {
+      const { clinic_id, chat_id, receipt_image, reservation_code, patient_name, service_name, amount, clinic_name } = rawBody;
+      
+      if (!chat_id || !receipt_image) {
+        return jsonResponse({ ok: false, error: 'بيانات غير مكتملة' }, 400);
+      }
+
+      try {
+        // تحويل base64 إلى صورة
+        const base64Data = receipt_image.replace(/^data:image\/\w+;base64,/, '');
+        const imageBuffer = Uint8Array.from(atob(base64Data), c => c.charCodeAt(0));
+        
+        const botToken = await getBotTokenForClinic(supabase, clinic_id);
+        if (!botToken) {
+          return jsonResponse({ ok: false, error: 'البوت غير مهيأ' }, 400);
+        }
+
+        const fd = new FormData();
+        fd.append('chat_id', String(chat_id));
+        fd.append('photo', new Blob([imageBuffer], { type: 'image/png' }), `receipt_${reservation_code}.png`);
+        fd.append('caption', 
+          `🧾 <b>سند دفع رسمي</b>\n` +
+          `━━━━━━━━━━━━━━━\n` +
+          `🏥 ${clinic_name || 'العيادة الطبية'}\n` +
+          `👤 المريض: ${patient_name || 'غير محدد'}\n` +
+          `💊 الخدمة: ${service_name || 'فحص طبي'}\n` +
+          `💰 المبلغ: ${amount || 0} ر.ي\n` +
+          `🔖 كود الحجز: ${reservation_code || '—'}\n` +
+          `━━━━━━━━━━━━━━━\n` +
+          `✅ تم الدفع بنجاح\n` +
+          `📅 ${new Date().toLocaleDateString('ar-SA')}`
+        );
+        fd.append('parse_mode', 'HTML');
+
+        const res = await fetchWithTimeout(`https://api.telegram.org/bot${botToken}/sendPhoto`, {
+          method: 'POST',
+          body: fd,
+        }, 15000);
+
+        const result = await res.json();
+        if (result?.ok) {
+          return jsonResponse({ ok: true, result });
+        } else {
+          return jsonResponse({ ok: false, error: result?.description }, 400);
+        }
+      } catch (error) {
+        console.error('send_receipt error:', error);
+        return jsonResponse({ ok: false, error: String(error) }, 500);
+      }
+    }
+
     if (action === 'set-webhook' || action === 'webhook-info' || action === 'bot-info') {
       const authHeader = req.headers.get('Authorization') || '';
       const jwt = authHeader.replace('Bearer ', '');
@@ -860,7 +914,6 @@ async function progressSession(supabase: any, send: any, chatId: number, tgId: s
       return true;
     }
     await upsertSession(supabase, tgId, { full_name: name, step: 'ask_phone' });
-    // طلب رقم الهاتف رسمياً وبشكل حيادي ومباشر دون ذكر أي أمثلة أو دول
     await send(chatId, `أهلاً بك ${name} 🌷\n\n📱 يرجى إدخال رقم هاتفك للتواصل:`);
     return true;
   }
@@ -880,7 +933,6 @@ async function progressSession(supabase: any, send: any, chatId: number, tgId: s
           waBtn.length ? { inline_keyboard: waBtn } : undefined);
         return true;
       }
-      // رسالة الخطأ الرسمية الخالية تماماً من أسماء الدول والأمثلة
       await send(chatId, `⚠️ يرجى إدخال رقم هاتف صحيح للتواصل.\n(المحاولة ${attempts}/3)`);
       return true;
     }
@@ -1090,6 +1142,7 @@ async function finalizeBooking(supabase: any, send: any, chatId: number, tgId: s
   const waNum = (clinicRow?.receptionist_whatsapp || clinicRow?.phone || '').replace(/[^\d]/g, '');
   const waTextOther = encodeURIComponent(`مرحباً، أريد حجز موعد باسم شخص آخر في ${clinicInfo?.name || 'العيادة'} - خدمة: ${service?.name || ''}`);
 
+  // ✅ زر "حجز باسم شخص آخر" مع رابط واتساب موظف الاستقبال
   const successMarkup = {
     inline_keyboard: waNum ? [[{ text: '👥 حجز موعد باسم شخص آخر (واتساب)', url: `https://wa.me/${waNum}?text=${waTextOther}` }]] : [],
   };
@@ -1135,7 +1188,7 @@ async function finalizeBooking(supabase: any, send: any, chatId: number, tgId: s
 }
 
 // ============================================================
-// ===== معالجة Callback Queries والزرار التفاعلية =====
+// ===== معالجة Callback Queries (الأزرار التفاعلية) =====
 // ============================================================
 
 async function handleCallbackQuery(supabase: any, query: any, requestClinicId: string | null = null) {
@@ -1152,6 +1205,46 @@ async function handleCallbackQuery(supabase: any, query: any, requestClinicId: s
     method: 'POST', headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ callback_query_id: query.id }),
   });
+
+  // ✅ إصلاح: زر "سأحضر" (تأكيد الحضور)
+  if (data.startsWith('confirm_')) {
+    const resCode = data.replace('confirm_', '');
+    const { data: appointment, error } = await supabase
+      .from('appointments')
+      .update({ 
+        status: 'confirmed', 
+        confirmed_at: new Date().toISOString(),
+        reminder_sent: true // إيقاف التذكيرات بعد التأكيد
+      })
+      .eq('reservation_code', resCode)
+      .eq('customer_telegram_id', tgId)
+      .in('status', ['pending', 'confirmed'])
+      .select('date, time, reservation_code, clinic_id, patient_id')
+      .single();
+
+    if (appointment) {
+      await send(chatId, 
+        `✅ <b>تم تأكيد حضورك بنجاح!</b>\n\n` +
+        `📅 ${appointment.date} ⏰ ${String(appointment.time).slice(0,5)}\n` +
+        `🔖 ${appointment.reservation_code}\n\n` +
+        `بانتظارك في موعدك 🌷`
+      );
+      
+      // إشعار للعيادة
+      const { data: clinic } = await supabase
+        .from('clinics')
+        .select('name')
+        .eq('id', appointment.clinic_id)
+        .single();
+      
+      await notifyDoctor(supabase, botToken, appointment.clinic_id,
+        `✅ <b>تأكيد حضور</b>\n👤 ${firstName}\n📅 ${appointment.date} ⏰ ${String(appointment.time).slice(0,5)}\n🔖 ${appointment.reservation_code}`
+      );
+    } else {
+      await send(chatId, '⚠️ لم يتم العثور على الموعد أو تم إلغاؤه مسبقاً.');
+    }
+    return jsonResponse({ ok: true });
+  }
 
   if (data.startsWith('book:') || data.startsWith('book_')) {
     const serviceId = data.startsWith('book:') ? data.replace('book:', '') : data.split('_')[2];
@@ -1261,10 +1354,23 @@ async function getBotTokenFromDB(supabase: any): Promise<string | null> {
 }
 
 async function getBotTokenForClinic(supabase: any, clinicId: string | null): Promise<string | null> {
+  // ✅ إعطاء أولوية للتوكن الموحد للأدمن من global_settings
+  const { data: globalToken } = await supabase
+    .from('global_settings')
+    .select('telegram_bot_token')
+    .limit(1)
+    .maybeSingle();
+  
+  if (globalToken?.telegram_bot_token) {
+    return globalToken.telegram_bot_token;
+  }
+
+  // إذا لم يوجد، نبحث عن توكن العيادة القديم (للتوافق الخلفي)
   if (clinicId) {
     const { data } = await supabase.from('clinics').select('bot_token').eq('id', clinicId).maybeSingle();
     if (data?.bot_token) return data.bot_token;
   }
+  
   return Deno.env.get('TELEGRAM_BOT_TOKEN') || await getBotTokenFromDB(supabase);
 }
 
