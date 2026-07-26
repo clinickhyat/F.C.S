@@ -11,7 +11,7 @@ import { Footer } from "@/components/layout/Footer";
 import { toast } from "@/hooks/use-toast";
 import {
   Banknote, CheckCircle, LogOut, Search, ShieldCheck, Stethoscope, Users,
-  Camera, X, Loader2, AlertCircle, Image as ImageIcon, Upload, RefreshCw, Printer, Download, Clock, Plus, UserPlus, DollarSign, TrendingUp, Receipt, MessageCircle, MinusCircle, ArrowDownCircle, ArrowUpCircle, Sparkles, Send
+  Camera, X, Loader2, AlertCircle, Image as ImageIcon, Upload, RefreshCw, Printer, Download, Clock, Plus, UserPlus, DollarSign, TrendingUp, Receipt, MessageCircle, MinusCircle, ArrowDownCircle, ArrowUpCircle, Sparkles, Send, Wallet
 } from "lucide-react";
 import { BarChart, Bar, PieChart, Pie, Cell, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid, Legend } from "recharts";
 import { Html5Qrcode } from "html5-qrcode";
@@ -60,10 +60,14 @@ const parseQRText = (text: string) => {
   if (codeMatch) code = codeMatch[0];
 
   const nameMatch = text.match(/المريض:\s*([^\n\r]+)/);
-  if (nameMatch) name = nameMatch[1].replace(/👤/g, "").replace(/@\w+/g, "").trim();
+  if (nameMatch) {
+    name = nameMatch[1].replace(/👤/g, "").replace(/@\w+/g, "").trim();
+  }
 
   const phoneMatch = text.match(/الهاتف:\s*([^\n\r]+)/);
-  if (phoneMatch) phone = phoneMatch[1].replace(/📱/g, "").trim();
+  if (phoneMatch) {
+    phone = phoneMatch[1].replace(/📱/g, "").trim();
+  }
 
   const serviceMatch = text.match(/الخدمة:\s*([^\n\r]+)/);
   if (serviceMatch) service = serviceMatch[1].replace(/🏷️/g, "").trim();
@@ -78,7 +82,9 @@ const parseQRText = (text: string) => {
 };
 
 const cleanPhoneForWhatsApp = (phone?: string): string => {
-  if (!phone || phone.startsWith("tg:") || phone.startsWith("TG:") || phone === "بدون هاتف" || phone === ".") return "";
+  if (!phone || phone.startsWith("tg:") || phone.startsWith("TG:") || phone === "بدون هاتف" || phone === ".") {
+    return "";
+  }
   const digits = phone.replace(/\D/g, "");
   if (!digits) return "";
   let waPhone = digits;
@@ -104,7 +110,9 @@ const extractCleanInfo = (a: Appointment) => {
     const phoneMatch = a.notes.match(/\(([^)]+)\)/) || a.notes.match(/(?:الهاتف:\s*|📱\s*)([+\d\s-]+)/);
     if (phoneMatch && phoneMatch[1] && isGenericPhone) {
       const extractedP = phoneMatch[1].trim();
-      if (!extractedP.startsWith("tg:")) phone = extractedP;
+      if (!extractedP.startsWith("tg:")) {
+        phone = extractedP;
+      }
     }
   }
 
@@ -117,12 +125,6 @@ const extractCleanInfo = (a: Appointment) => {
   }
 
   return { cleanName, cleanPhone };
-};
-
-// ===== دالة جلب توكن البوت الموحد =====
-const getTelegramBotToken = async (): Promise<string | null> => {
-  const { data } = await supabase.from('global_settings').select('telegram_bot_token').limit(1).maybeSingle();
-  return data?.telegram_bot_token || null;
 };
 
 export default function CashierPage() {
@@ -421,7 +423,6 @@ export default function CashierPage() {
     setShowReceipt(appointment.payment_status === "paid");
   };
 
-  // ===== دالة الدفع (تحديث الحالة إلى مدفوع) =====
   const handlePayNow = async () => {
     if (!selectedAppointment || !clinic) return;
     setProcessingPayment(true);
@@ -438,7 +439,7 @@ export default function CashierPage() {
       await supabase.from("patients").update(updateData).eq("id", patientId);
     }
 
-    // 🔴 تحديث الحالة إلى "مدفوع" و "confirmed" و "paid_amount" و "discount_amount"
+    // 🔴 تحديث الموعد إلى مدفوع وحالة مؤكدة (جاهز للدخول)
     const { error } = await supabase
       .from("appointments")
       .update({ 
@@ -459,11 +460,9 @@ export default function CashierPage() {
 
     toast({ title: "✅ تم تسجيل الدفع بنجاح", description: "تم تحديث الخزينة وإصدار سند الاستلام" });
     
-    // تحديث الحالة المحلية
     setSelectedAppointment({ 
       ...selectedAppointment, 
       payment_status: "paid",
-      status: "confirmed",
       paid_amount: paidVal,
       discount_amount: discountVal,
       extracted_patient_name: editPatientName.trim() || selectedAppointment.extracted_patient_name,
@@ -478,7 +477,7 @@ export default function CashierPage() {
 
     setShowReceipt(true);
     setProcessingPayment(false);
-    fetchAppointments(); // تحديث القائمة في الصندوق والاستقبال عبر Realtime
+    fetchAppointments(); // تحديث القائمة فوراً
   };
 
   const addWalkIn = async () => {
@@ -533,7 +532,7 @@ export default function CashierPage() {
     setExpenseModalOpen(false);
   };
 
-  // ===== توليد صورة السند =====
+  // 🔴 دالة توليد السند (لـ html2canvas)
   const generateReceiptCanvas = async (): Promise<HTMLCanvasElement> => {
     const element = document.getElementById("receipt-card-container");
     if (!element) throw new Error("عنصر السند غير متوفر");
@@ -630,7 +629,7 @@ export default function CashierPage() {
     }
   };
 
-  // ===== إرسال السند عبر البوت الموحد (الإصدار النهائي) =====
+  // 🔴 إرسال السند عبر تيليجرام (مجاني عبر API)
   const sendViaTelegram = async () => {
     if (!selectedAppointment) return;
 
@@ -649,18 +648,24 @@ export default function CashierPage() {
     try {
       const canvas = await generateReceiptCanvas();
       const receiptImageBase64 = canvas.toDataURL("image/png");
-      const { cleanName } = extractCleanInfo(selectedAppointment);
-      const finalAmt = (selectedAppointment.paid_amount || selectedAppointment.services?.price || 0) - (selectedAppointment.discount_amount || 0);
 
-      // 🔴 الحصول على توكن البوت الموحد من global_settings
-      const botToken = await getTelegramBotToken();
+      // جلب التوكن من الإعدادات العامة (بوت الأدمن الموحد)
+      const { data: settings } = await supabase
+        .from('global_settings')
+        .select('telegram_bot_token')
+        .limit(1)
+        .maybeSingle();
+
+      const botToken = settings?.telegram_bot_token || null;
       if (!botToken) {
-        toast({ title: "❌ البوت غير مهيأ", description: "تأكد من توكن البوت في إعدادات الأدمن", variant: "destructive" });
-        setSendingTelegram(false);
+        toast({ title: "❌ البوت غير مهيأ", description: "تأكد من توكن البوت في الإعدادات", variant: "destructive" });
         return;
       }
 
-      // تحويل الصورة وإرسالها مباشرة عبر Telegram API
+      const { cleanName } = extractCleanInfo(selectedAppointment);
+      const finalAmt = (selectedAppointment.paid_amount || selectedAppointment.services?.price || 0) - (selectedAppointment.discount_amount || 0);
+
+      // تحويل base64 إلى صورة
       const base64Data = receiptImageBase64.replace(/^data:image\/\w+;base64,/, '');
       const imageBuffer = Uint8Array.from(atob(base64Data), c => c.charCodeAt(0));
 
@@ -1242,7 +1247,6 @@ export default function CashierPage() {
   );
 }
 
-// ===== مكون الإحصائيات =====
 function CashierStats({ appointments, expenses }: { appointments: Appointment[]; expenses: Expense[] }) {
   const paid = appointments.filter((a) => a.payment_status === "paid");
   
