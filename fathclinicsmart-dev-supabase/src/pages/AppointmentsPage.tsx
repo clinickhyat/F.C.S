@@ -48,17 +48,40 @@ interface Patient {
   telegram_user_id?: string;
 }
 
-// ─── دوال تنظيف الأسماء والأرقام من شوائب تليجرام ───
-export const getCleanPatientName = (name?: string | null): string => {
-  if (!name || name === "." || name.trim().length < 2) return "مريض غير محدد";
-  return name.replace(/^tg:\d+/i, "").replace(/👤/g, "").replace(/@\w+/g, "").trim() || "مريض غير محدد";
-};
+// ─── دالة استخراج وتصفية الاسم والرقم الحقيقيين من الملاحظات أو البيانات ───
+export const extractPatientInfo = (apt: Appointment) => {
+  let name = apt.patients?.name || "";
+  let phone = apt.patients?.phone || "";
 
-export const getCleanPatientPhone = (phone?: string | null): string => {
-  if (!phone || phone.toLowerCase().startsWith("tg:") || phone === "." || phone === "بدون هاتف") {
-    return "حجز عبر تلجرام (بدون رقم)";
+  const isGenericName = !name || name === "." || name.trim().toLowerCase() === "point" || name.startsWith("tg:") || name.includes("غير محدد");
+  const isGenericPhone = !phone || phone.trim().toLowerCase().startsWith("tg:") || phone === "." || phone === "بدون هاتف";
+
+  // استخراج الاسم والرقم الصريحين إذا كانا مدونين بالملاحظات القادمة من تلجرام
+  if ((isGenericName || isGenericPhone) && apt.notes) {
+    const nameMatch = apt.notes.match(/المريض:\s*([^(–\n\r]+)/);
+    if (nameMatch && nameMatch[1] && isGenericName) {
+      name = nameMatch[1].replace(/👤/g, "").replace(/@\w+/g, "").trim();
+    }
+
+    const phoneMatch = apt.notes.match(/\(([^)]+)\)/) || apt.notes.match(/(?:الهاتف:\s*|📱\s*)([+\d\s-]+)/);
+    if (phoneMatch && phoneMatch[1] && isGenericPhone) {
+      const extractedP = phoneMatch[1].trim();
+      if (!extractedP.startsWith("tg:")) {
+        phone = extractedP;
+      }
+    }
   }
-  return phone.trim();
+
+  // تنظيف وإعادة صياغة المخرجات النهائية
+  let cleanName = name.replace(/^tg:\d+/i, "").replace(/👤/g, "").replace(/@\w+/g, "").trim();
+  if (!cleanName || cleanName === "." || cleanName.length < 2) cleanName = "مريض غير محدد";
+
+  let cleanPhone = phone.trim();
+  if (!cleanPhone || cleanPhone.toLowerCase().startsWith("tg:") || cleanPhone === "." || cleanPhone === "بدون هاتف") {
+    cleanPhone = "حجز عبر تلجرام (بدون رقم)";
+  }
+
+  return { cleanName, cleanPhone };
 };
 
 export default function AppointmentsPage() {
@@ -125,7 +148,7 @@ export default function AppointmentsPage() {
       .order("date", { ascending: false })
       .order("time", { ascending: true });
 
-    if (!error) setAppointments(data || []);
+    if (!error) setAppointments((data || []) as Appointment[]);
     setLoading(false);
   };
 
@@ -291,8 +314,7 @@ export default function AppointmentsPage() {
   };
 
   const filteredAppointments = appointments.filter((apt) => {
-    const cleanName = getCleanPatientName(apt.patients?.name);
-    const cleanPhone = getCleanPatientPhone(apt.patients?.phone);
+    const { cleanName, cleanPhone } = extractPatientInfo(apt);
 
     const matchesSearch =
       cleanName.toLowerCase().includes(searchQuery.toLowerCase()) ||
@@ -356,7 +378,7 @@ export default function AppointmentsPage() {
                 <h1 className="text-xl font-bold text-foreground">{clinic?.name || "عيادتي"}</h1>
                 <p className="text-xs text-muted-foreground flex items-center gap-1">
                   <CalendarDays className="w-3 h-3 text-primary" />
-                  إدارة المواعيد
+                  إدارة المواعيد الطبية
                 </p>
               </div>
             </div>
@@ -417,7 +439,7 @@ export default function AppointmentsPage() {
             </div>
 
             <Button onClick={() => { resetForm(); setIsAddOpen(true); }} className="shadow-lg w-full lg:w-auto">
-              <Plus className="w-4 h-4" />
+              <Plus className="w-4 h-4 ml-1" />
               إضافة موعد
             </Button>
           </div>
@@ -431,8 +453,8 @@ export default function AppointmentsPage() {
                 <CalendarDays className="w-5 h-5 text-primary" />
               </div>
               <div>
-                <h2 className="text-xl font-bold text-foreground">المواعيد</h2>
-                <p className="text-xs text-muted-foreground">{filteredAppointments.length} موعد</p>
+                <h2 className="text-xl font-bold text-foreground">قائمة المواعيد</h2>
+                <p className="text-xs text-muted-foreground">{filteredAppointments.length} موعد مسجل</p>
               </div>
             </div>
             
@@ -494,8 +516,7 @@ export default function AppointmentsPage() {
                   ) : (
                     filteredAppointments.map((apt, index) => {
                       const status = statusConfig[apt.status] || statusConfig.pending;
-                      const cleanName = getCleanPatientName(apt.patients?.name);
-                      const cleanPhone = getCleanPatientPhone(apt.patients?.phone);
+                      const { cleanName, cleanPhone } = extractPatientInfo(apt);
 
                       return (
                         <tr 
@@ -512,7 +533,7 @@ export default function AppointmentsPage() {
                             <div>
                               <p className="font-semibold text-foreground">{cleanName}</p>
                               <p className="text-xs text-muted-foreground flex items-center gap-1 mt-0.5">
-                                <Phone className="w-3 h-3" />
+                                <Phone className="w-3 h-3 text-primary/70" />
                                 <span dir="ltr">{cleanPhone}</span>
                               </p>
                             </div>
@@ -586,7 +607,7 @@ export default function AppointmentsPage() {
                   <SelectContent>
                     {patients.map((p) => (
                       <SelectItem key={p.id} value={p.id}>
-                        {getCleanPatientName(p.name)} - {getCleanPatientPhone(p.phone)}
+                        {p.name} - {p.phone}
                       </SelectItem>
                     ))}
                   </SelectContent>
@@ -670,7 +691,7 @@ export default function AppointmentsPage() {
                 <SelectContent>
                   {patients.map((p) => (
                     <SelectItem key={p.id} value={p.id}>
-                      {getCleanPatientName(p.name)} - {getCleanPatientPhone(p.phone)}
+                      {p.name} - {p.phone}
                     </SelectItem>
                   ))}
                 </SelectContent>
@@ -731,7 +752,7 @@ export default function AppointmentsPage() {
             <DialogTitle>تأكيد الحذف</DialogTitle>
           </DialogHeader>
           <p className="text-muted-foreground text-sm">
-            هل أنت متأكد من حذف موعد المريض <strong>{getCleanPatientName(selectedAppointment?.patients?.name)}</strong>؟
+            هل أنت متأكد من حذف موعد المريض <strong>{selectedAppointment ? extractPatientInfo(selectedAppointment).cleanName : ""}</strong>؟
           </p>
           <DialogFooter className="gap-2">
             <Button variant="outline" onClick={() => setIsDeleteOpen(false)}>إلغاء</Button>
