@@ -11,7 +11,7 @@ import { Footer } from "@/components/layout/Footer";
 import { toast } from "@/hooks/use-toast";
 import {
   Banknote, CheckCircle, LogOut, Search, ShieldCheck, Stethoscope, Users,
-  Camera, X, Loader2, AlertCircle, Image as ImageIcon, Upload, RefreshCw, Printer, Download, Clock, Plus, UserPlus, DollarSign, TrendingUp, Receipt, MessageCircle, MinusCircle, ArrowDownCircle, ArrowUpCircle, Sparkles, Send, Wallet
+  Camera, X, Loader2, AlertCircle, Image as ImageIcon, Upload, RefreshCw, Printer, Download, Clock, Plus, UserPlus, DollarSign, TrendingUp, Receipt, MessageCircle, MinusCircle, ArrowUpCircle, ArrowDownCircle, Sparkles, Send
 } from "lucide-react";
 import { BarChart, Bar, PieChart, Pie, Cell, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid, Legend } from "recharts";
 import { Html5Qrcode } from "html5-qrcode";
@@ -48,30 +48,43 @@ type Expense = {
 const QR_CAMERA_ELEMENT_ID = "qr-camera-container-cashier";
 const QR_FILE_ELEMENT_ID = "qr-hidden-file-reader-cashier";
 
-// ─── دوال مساعدة ───
 const parseQRText = (text: string) => {
   let code = "";
   let name = "";
   let phone = "";
   let service = "";
+  let date = "";
+  let time = "";
 
   const codeMatch = text.match(/RE-[A-Za-z0-9]+/i) || text.match(/WI-[A-Za-z0-9]+/i);
   if (codeMatch) code = codeMatch[0];
 
   const nameMatch = text.match(/المريض:\s*([^\n\r]+)/);
-  if (nameMatch) name = nameMatch[1].replace(/👤/g, "").replace(/@\w+/g, "").trim();
+  if (nameMatch) {
+    name = nameMatch[1].replace(/👤/g, "").replace(/@\w+/g, "").trim();
+  }
 
   const phoneMatch = text.match(/الهاتف:\s*([^\n\r]+)/);
-  if (phoneMatch) phone = phoneMatch[1].replace(/📱/g, "").trim();
+  if (phoneMatch) {
+    phone = phoneMatch[1].replace(/📱/g, "").trim();
+  }
 
   const serviceMatch = text.match(/الخدمة:\s*([^\n\r]+)/);
   if (serviceMatch) service = serviceMatch[1].replace(/🏷️/g, "").trim();
 
-  return { code, name, phone, service };
+  const dateMatch = text.match(/التاريخ:\s*([^\n\r]+)/);
+  if (dateMatch) date = dateMatch[1].replace(/📅/g, "").trim();
+
+  const timeMatch = text.match(/الوقت:\s*([^\n\r]+)/);
+  if (timeMatch) time = timeMatch[1].replace(/⏰/g, "").trim();
+
+  return { code, name, phone, service, date, time };
 };
 
 const cleanPhoneForWhatsApp = (phone?: string): string => {
-  if (!phone || phone.startsWith("tg:") || phone === "بدون هاتف" || phone === ".") return "";
+  if (!phone || phone.startsWith("tg:") || phone.startsWith("TG:") || phone === "بدون هاتف" || phone === ".") {
+    return "";
+  }
   const digits = phone.replace(/\D/g, "");
   if (!digits) return "";
   let waPhone = digits;
@@ -85,7 +98,7 @@ const extractCleanInfo = (a: Appointment) => {
   let name = a.patients?.name || a.extracted_patient_name || "";
   let phone = a.patients?.phone || a.extracted_patient_phone || "";
 
-  const isGenericName = !name || name === "." || name.trim().toLowerCase() === "point" || name.startsWith("tg:");
+  const isGenericName = !name || name === "." || name.trim().toLowerCase() === "point" || name.startsWith("tg:") || name.includes("غير محدد");
   const isGenericPhone = !phone || phone.trim().toLowerCase().startsWith("tg:") || phone === "." || phone === "بدون هاتف";
 
   if ((isGenericName || isGenericPhone) && a.notes) {
@@ -93,14 +106,17 @@ const extractCleanInfo = (a: Appointment) => {
     if (nameMatch && nameMatch[1] && isGenericName) {
       name = nameMatch[1].replace(/👤/g, "").replace(/@\w+/g, "").trim();
     }
+
     const phoneMatch = a.notes.match(/\(([^)]+)\)/) || a.notes.match(/(?:الهاتف:\s*|📱\s*)([+\d\s-]+)/);
     if (phoneMatch && phoneMatch[1] && isGenericPhone) {
       const extractedP = phoneMatch[1].trim();
-      if (!extractedP.startsWith("tg:")) phone = extractedP;
+      if (!extractedP.startsWith("tg:")) {
+        phone = extractedP;
+      }
     }
   }
 
-  let cleanName = name.replace(/^tg:\d+/i, "").replace(/👤/g, "").trim();
+  let cleanName = name.replace(/^tg:\d+/i, "").replace(/👤/g, "").replace(/@\w+/g, "").trim();
   if (!cleanName || cleanName === "." || cleanName.length < 2) cleanName = "مريض غير محدد";
 
   let cleanPhone = phone.trim();
@@ -111,7 +127,6 @@ const extractCleanInfo = (a: Appointment) => {
   return { cleanName, cleanPhone };
 };
 
-// ─── المكون الرئيسي ───
 export default function CashierPage() {
   const navigate = useNavigate();
   const { user, signOut, loading: authLoading } = useAuth();
@@ -121,12 +136,12 @@ export default function CashierPage() {
   const [appointments, setAppointments] = useState<Appointment[]>([]);
   const [expenses, setExpenses] = useState<Expense[]>([]);
   const [search, setSearch] = useState("");
-
+  
   const [walkInOpen, setWalkInOpen] = useState(false);
   const [expenseModalOpen, setExpenseModalOpen] = useState(false);
   const [patientNameInput, setPatientNameInput] = useState("");
   const [patientPhoneInput, setPatientPhoneInput] = useState("");
-
+  
   const [expenseTitle, setExpenseTitle] = useState("");
   const [expenseAmount, setExpenseAmount] = useState("");
   const [expenseCategory, setExpenseCategory] = useState("نثريات");
@@ -150,7 +165,7 @@ export default function CashierPage() {
   const [scannerStatus, setScannerStatus] = useState<"idle" | "loading" | "active" | "error">("idle");
   const [cameraError, setCameraError] = useState<string | null>(null);
   const [uploadingImage, setUploadingImage] = useState(false);
-
+  
   const scannerRef = useRef<Html5Qrcode | null>(null);
   const fileInputRef = useRef<HTMLInputElement | null>(null);
   const appointmentsRef = useRef<Appointment[]>([]);
@@ -208,7 +223,7 @@ export default function CashierPage() {
     if (msg.includes("NotAllowedError") || msg.includes("Permission")) return "🔒 لم يتم منح إذن الكاميرا.";
     if (msg.includes("NotFoundError") || msg.includes("DevicesNotFoundError")) return "📷 لا توجد كاميرا متصلة.";
     if (msg.includes("NotReadableError") || msg.includes("TrackStartError")) return "⚠️ الكاميرا مستخدمة من تطبيق آخر.";
-    return "❌ فشل تشغيل الكاميرا. حاول مرة أخرى أو ارفع صورة الموعد.";
+    return `❌ فشل تشغيل الكاميرا. حاول مرة أخرى أو ارفع صورة الموعد.`;
   };
 
   const markArrived = async (appointmentId: string) => {
@@ -249,6 +264,7 @@ export default function CashierPage() {
 
     if (found) {
       const { cleanName, cleanPhone } = extractCleanInfo(found);
+
       const enriched: Appointment = {
         ...found,
         extracted_patient_name: cleanName,
@@ -268,7 +284,7 @@ export default function CashierPage() {
       }
 
       setSelectedAppointment(enriched);
-      setEditPatientName(cleanName !== "مريض غير محدد" ? cleanName : "");
+      setEditPatientName(cleanName);
       setEditPatientPhone(cleanPhone === "حجز عبر تلجرام (بدون رقم)" ? "" : cleanPhone);
 
       const defaultPrice = enriched.services?.price || 0;
@@ -281,6 +297,7 @@ export default function CashierPage() {
       } else {
         toast({ title: "✅ جاهز للدفع", description: cleanName });
       }
+
       setScannerOpen(false);
       stopScanner();
     } else {
@@ -315,16 +332,16 @@ export default function CashierPage() {
         const scanner = new Html5Qrcode(QR_CAMERA_ELEMENT_ID, { verbose: false });
         scannerRef.current = scanner;
         await scanner.start(
-          { facingMode },
+          { facingMode }, 
           { fps: 10, qrbox: (w, h) => ({ width: Math.floor(Math.min(w, h) * 0.7), height: Math.floor(Math.min(w, h) * 0.7) }), aspectRatio: 1.0 },
           (text) => { stopScanner().then(() => handleScannedCode(text)); },
           () => {}
         );
         setScannerStatus("active");
         return true;
-      } catch (e) {
-        if (scannerRef.current) { try { scannerRef.current.clear(); } catch(_){} scannerRef.current = null; }
-        throw e;
+      } catch (e) { 
+        if (scannerRef.current) { try { scannerRef.current.clear(); } catch(_){} scannerRef.current = null; } 
+        throw e; 
       }
     };
 
@@ -344,9 +361,9 @@ export default function CashierPage() {
         if (!ctx) return reject("فشل Canvas");
         let w = img.width, h = img.height;
         const maxDim = 1000;
-        if (w > maxDim || h > maxDim) {
-          if (w > h) { h = Math.round((h * maxDim) / w); w = maxDim; }
-          else { w = Math.round((w * maxDim) / h); h = maxDim; }
+        if (w > maxDim || h > maxDim) { 
+          if (w > h) { h = Math.round((h * maxDim) / w); w = maxDim; } 
+          else { w = Math.round((w * maxDim) / h); h = maxDim; } 
         }
         canvas.width = w; canvas.height = h;
         ctx.drawImage(img, 0, 0, w, h);
@@ -366,8 +383,8 @@ export default function CashierPage() {
     try {
       const fileScanner = new Html5Qrcode(QR_FILE_ELEMENT_ID, { verbose: false });
       let decodedText = "";
-      try {
-        decodedText = await fileScanner.scanFile(file, false);
+      try { 
+        decodedText = await fileScanner.scanFile(file, false); 
       } catch (_) {
         const resized = await processImageForQR(file);
         decodedText = await fileScanner.scanFile(resized, false);
@@ -387,40 +404,25 @@ export default function CashierPage() {
     else toast({ title: "رمز غير صحيح", description: "تحقق من رمز الصندوق في الإعدادات", variant: "destructive" });
   };
 
-  // ─── جلب توكن البوت من الإعدادات العامة ───
-  const getTelegramBotToken = async (): Promise<string | null> => {
-    try {
-      const { data } = await supabase.from("global_settings").select("telegram_bot_token").limit(1).maybeSingle();
-      if (data?.telegram_bot_token) return data.telegram_bot_token;
-      return null;
-    } catch (_) { return null; }
-  };
-
-  // ─── دالة توليد السند (Canvas) ───
-  const generateReceiptCanvas = async (): Promise<HTMLCanvasElement> => {
-    const element = document.getElementById("receipt-card-container");
-    if (!element) throw new Error("عنصر السند غير متوفر");
-    return await html2canvas(element, { scale: 3, useCORS: true, backgroundColor: "#ffffff" });
-  };
-
-  // ─── فتح نافذة الدفع ───
   const openPaymentModal = (appointment: Appointment) => {
     const { cleanName, cleanPhone } = extractCleanInfo(appointment);
+
     const appEnriched = {
       ...appointment,
       extracted_patient_name: cleanName,
       extracted_patient_phone: cleanPhone,
     };
+
     setSelectedAppointment(appEnriched);
     setEditPatientName(cleanName !== "مريض غير محدد" ? cleanName : "");
     setEditPatientPhone(cleanPhone === "حجز عبر تلجرام (بدون رقم)" ? "" : cleanPhone);
+
     const defaultPrice = appointment.services?.price || 0;
     setPaidAmountInput(appointment.paid_amount != null ? String(appointment.paid_amount) : String(defaultPrice));
     setDiscountInput(appointment.discount_amount != null ? String(appointment.discount_amount) : "0");
     setShowReceipt(appointment.payment_status === "paid");
   };
 
-  // ─── تأكيد الدفع ───
   const handlePayNow = async () => {
     if (!selectedAppointment || !clinic) return;
     setProcessingPayment(true);
@@ -428,26 +430,23 @@ export default function CashierPage() {
     const paidVal = parseFloat(paidAmountInput) || 0;
     const discountVal = parseFloat(discountInput) || 0;
 
-    // تحديث بيانات المريض
     const patientId = selectedAppointment.patients?.id || selectedAppointment.patient_id;
     if (patientId && (editPatientName.trim() || editPatientPhone.trim())) {
       const updateData: any = {};
       if (editPatientName.trim()) updateData.name = editPatientName.trim();
       if (editPatientPhone.trim() && !editPatientPhone.startsWith("tg:")) updateData.phone = editPatientPhone.trim();
-      if (Object.keys(updateData).length > 0) {
-        await supabase.from("patients").update(updateData).eq("id", patientId);
-      }
+
+      await supabase.from("patients").update(updateData).eq("id", patientId);
     }
 
-    // تحديث الموعد إلى مدفوع
     const { error } = await supabase
       .from("appointments")
-      .update({
-        payment_status: "paid",
-        status: "confirmed",
+      .update({ 
+        payment_status: "paid", 
+        status: "confirmed", 
         department: "صندوق",
         paid_amount: paidVal,
-        discount_amount: discountVal,
+        discount_amount: discountVal
       })
       .eq("id", selectedAppointment.id)
       .eq("clinic_id", clinic.id);
@@ -459,9 +458,9 @@ export default function CashierPage() {
     }
 
     toast({ title: "✅ تم تسجيل الدفع بنجاح", description: "تم تحديث الخزينة وإصدار سند الاستلام" });
-
-    const updatedAppt = {
-      ...selectedAppointment,
+    
+    setSelectedAppointment({ 
+      ...selectedAppointment, 
       payment_status: "paid",
       paid_amount: paidVal,
       discount_amount: discountVal,
@@ -471,21 +470,15 @@ export default function CashierPage() {
         id: patientId || "",
         name: editPatientName.trim() || selectedAppointment.patients?.name || "",
         phone: editPatientPhone.trim() || selectedAppointment.patients?.phone || "",
-        telegram_user_id: selectedAppointment.customer_telegram_id || selectedAppointment.patients?.telegram_user_id,
-      },
-    };
+        telegram_user_id: selectedAppointment.customer_telegram_id || selectedAppointment.patients?.telegram_user_id
+      }
+    });
 
-    setSelectedAppointment(updatedAppt);
     setShowReceipt(true);
     setProcessingPayment(false);
-
-    // تحديث القائمة
-    await fetchAppointments();
-
-    // تحديث حالة الموعد في صفحة الاستقبال عبر Realtime (تلقائي)
+    fetchAppointments();
   };
 
-  // ─── إضافة مريض مباشر ───
   const addWalkIn = async () => {
     if (!clinic || !patientNameInput.trim()) return;
     const { data: patient, error: patientError } = await supabase
@@ -513,26 +506,24 @@ export default function CashierPage() {
     if (error) toast({ title: "خطأ", description: "فشل إضافة مريض مباشر", variant: "destructive" });
     else {
       toast({ title: "تمت الإضافة", description: `تم تسجيل المريض المباشر ${code}` });
-      setWalkInOpen(false);
-      setPatientNameInput("");
-      setPatientPhoneInput("");
-      fetchAppointments();
+      setWalkInOpen(false); setPatientNameInput(""); setPatientPhoneInput(""); fetchAppointments();
     }
   };
 
-  // ─── إضافة مصروف ───
   const handleAddExpense = () => {
     if (!expenseTitle.trim() || !expenseAmount || parseFloat(expenseAmount) <= 0) {
       toast({ title: "بيانات غير مكتملة", description: "يرجى إدخال اسم المصروف والمبلغ بشكل صحيح", variant: "destructive" });
       return;
     }
+
     const newExpense: Expense = {
       id: `exp-${Date.now()}`,
       title: expenseTitle.trim(),
       amount: parseFloat(expenseAmount),
       category: expenseCategory,
-      time: format(new Date(), "HH:mm"),
+      time: format(new Date(), "HH:mm")
     };
+
     setExpenses(prev => [newExpense, ...prev]);
     toast({ title: "✅ تم تسجيل المصروف", description: `تم قيد (${expenseTitle}) بمبلغ ${expenseAmount} ر.ي` });
     setExpenseTitle("");
@@ -540,7 +531,13 @@ export default function CashierPage() {
     setExpenseModalOpen(false);
   };
 
-  // ─── تنزيل السند ───
+  // ─── توليد صورة السند ───
+  const generateReceiptCanvas = async (): Promise<HTMLCanvasElement> => {
+    const element = document.getElementById("receipt-card-container");
+    if (!element) throw new Error("عنصر السند غير متوفر");
+    return await html2canvas(element, { scale: 3, useCORS: true, backgroundColor: "#ffffff" });
+  };
+
   const downloadReceipt = async () => {
     try {
       const canvas = await generateReceiptCanvas();
@@ -554,7 +551,6 @@ export default function CashierPage() {
     }
   };
 
-  // ─── طباعة السند ───
   const printReceipt = async () => {
     try {
       const canvas = await generateReceiptCanvas();
@@ -562,10 +558,12 @@ export default function CashierPage() {
       const win = window.open("", "_blank");
       if (win) {
         win.document.write(`
-          <html><head><title>طباعة سند الدفع</title></head>
-          <body style="margin:0;display:flex;align-items:center;justify-content:center;min-height:100vh;background:#f4f4f5;">
-            <img src="${imgData}" style="max-width:100%;height:auto;" onload="window.print();window.close();" />
-          </body></html>
+          <html>
+            <head><title>طباعة سند الدفع</title></head>
+            <body style="margin:0; display:flex; align-items:center; justify-content:center; min-height:100vh; background:#f4f4f5;">
+              <img src="${imgData}" style="max-width:100%; height:auto;" onload="window.print();window.close();" />
+            </body>
+          </html>
         `);
         win.document.close();
       }
@@ -574,19 +572,27 @@ export default function CashierPage() {
     }
   };
 
-  // ─── إرسال السند عبر واتساب ───
   const sendViaWhatsApp = async () => {
     if (!selectedAppointment) return;
+
     const rawPhone = editPatientPhone || selectedAppointment.extracted_patient_phone || selectedAppointment.patients?.phone || "";
     const waPhone = cleanPhoneForWhatsApp(rawPhone);
+
     if (!waPhone) {
-      toast({ title: "❌ لا يوجد رقم هاتف صحيح", description: "يرجى كتابة رقم هاتف المريض الصريح", variant: "destructive" });
+      toast({
+        title: "❌ لا يوجد رقم هاتف صحيح",
+        description: "يرجى كتابة رقم هاتف المريض الصريح في الخانة أولاً ثم النقر على الواتساب.",
+        variant: "destructive",
+        duration: 5000,
+      });
       return;
     }
+
     setSendingReceipt(true);
     try {
       const canvas = await generateReceiptCanvas();
       const imgData = canvas.toDataURL("image/png");
+      
       const link = document.createElement("a");
       link.href = imgData;
       link.download = `سند_${selectedAppointment.reservation_code}.png`;
@@ -594,6 +600,7 @@ export default function CashierPage() {
 
       const patientName = editPatientName || selectedAppointment.extracted_patient_name || selectedAppointment.patients?.name || "المريض";
       const finalAmt = (selectedAppointment.paid_amount || selectedAppointment.services?.price || 0) - (selectedAppointment.discount_amount || 0);
+
       const msg = encodeURIComponent(
         `🧾 سند دفع رسمي - ${clinic?.name || "العيادة الطبية"}\n` +
         `━━━━━━━━━━━━━━━\n` +
@@ -603,20 +610,33 @@ export default function CashierPage() {
         `💰 المبلغ الصافي: ${finalAmt} ر.ي\n` +
         `📅 التاريخ: ${format(new Date(), "yyyy/MM/dd - hh:mm a")}\n` +
         `━━━━━━━━━━━━━━━\n` +
-        `✅ تم حفظ صورة السند بجهازك.`
+        `✅ تم حفظ صورة السند المالي بجهازك، قم بإرفاقها بالدردشة.`
       );
-      setTimeout(() => { window.open(`https://wa.me/${waPhone}?text=${msg}`, "_blank"); }, 800);
-      toast({ title: "✅ تم حفظ صورة السند وفتح محادثة الواتساب", description: `الرقم: ${waPhone}` });
-    } catch (_) {
-      toast({ title: "خطأ في معالجة صورة السند", variant: "destructive" });
-    } finally { setSendingReceipt(false); }
+
+      setTimeout(() => {
+        window.open(`https://wa.me/${waPhone}?text=${msg}`, "_blank");
+      }, 800);
+
+      toast({ 
+        title: "✅ تم حفظ صورة السند وفتح محادثة الواتساب", 
+        description: `الرقم: ${waPhone}` 
+      });
+    } catch {
+      toast({ title: "خطأ في معالجة صورة السند للواتساب", variant: "destructive" });
+    } finally {
+      setSendingReceipt(false);
+    }
   };
 
-  // ─── إرسال السند عبر تيليجرام (المباشر) ───
+  // ─── إرسال السند إلى تيليجرام (بطريقة مشابهة لبطاقة الحجز) ───
+  const getTelegramBotToken = async (): Promise<string | null> => {
+    const { data } = await supabase.from('global_settings').select('telegram_bot_token').limit(1).maybeSingle();
+    return data?.telegram_bot_token || null;
+  };
+
   const sendViaTelegram = async () => {
     if (!selectedAppointment) return;
 
-    // استخدام معرف المريض من تيليجرام
     const tgUserId = selectedAppointment.customer_telegram_id || selectedAppointment.patients?.telegram_user_id;
 
     if (!tgUserId) {
@@ -630,45 +650,33 @@ export default function CashierPage() {
 
     setSendingTelegram(true);
     try {
-      // جلب توكن البوت من الإعدادات العامة
+      // 1. توليد صورة السند
+      const canvas = await generateReceiptCanvas();
+      const imageDataUrl = canvas.toDataURL("image/png");
+      
+      // 2. تحويل إلى Blob (بنفس طريقة بطاقة الحجز)
+      const base64Data = imageDataUrl.replace(/^data:image\/\w+;base64,/, '');
+      const imageBuffer = Uint8Array.from(atob(base64Data), c => c.charCodeAt(0));
+      const imageBlob = new Blob([imageBuffer], { type: 'image/png' });
+
+      // 3. جلب توكن البوت الموحد
       const botToken = await getTelegramBotToken();
       if (!botToken) {
-        toast({
-          title: "❌ البوت غير مهيأ",
-          description: "يرجى إدخال توكن البوت في صفحة الأدمن (الإعدادات العامة).",
-          variant: "destructive"
-        });
-        setSendingTelegram(false);
+        toast({ title: "❌ البوت غير مهيأ", description: "تأكد من توكن البوت في الإعدادات", variant: "destructive" });
         return;
       }
 
-      // توليد صورة السند
-      const canvas = await generateReceiptCanvas();
-      const receiptImageBase64 = canvas.toDataURL("image/png");
-
-      // تحويل base64 إلى Blob
-      const base64Data = receiptImageBase64.replace(/^data:image\/\w+;base64,/, '');
-      const binaryString = atob(base64Data);
-      const bytes = new Uint8Array(binaryString.length);
-      for (let i = 0; i < binaryString.length; i++) {
-        bytes[i] = binaryString.charCodeAt(i);
-      }
-      const imageBlob = new Blob([bytes], { type: 'image/png' });
-
-      const { cleanName } = extractCleanInfo(selectedAppointment);
-      const finalAmt = (selectedAppointment.paid_amount || selectedAppointment.services?.price || 0) - (selectedAppointment.discount_amount || 0);
-
-      // إنشاء FormData وإرسال الصورة مباشرة إلى Telegram Bot API
+      // 4. إرسال الصورة عبر sendPhoto (نفس طريقة بطاقة الحجز)
       const fd = new FormData();
       fd.append('chat_id', String(tgUserId));
       fd.append('photo', imageBlob, `receipt_${selectedAppointment.reservation_code}.png`);
-      fd.append('caption',
+      fd.append('caption', 
         `🧾 <b>سند دفع رسمي</b>\n` +
         `━━━━━━━━━━━━━━━\n` +
         `🏥 ${clinic?.name || 'العيادة الطبية'}\n` +
-        `👤 المريض: ${editPatientName || cleanName}\n` +
+        `👤 المريض: ${editPatientName || selectedAppointment.extracted_patient_name || selectedAppointment.patients?.name || 'غير محدد'}\n` +
         `💊 الخدمة: ${selectedAppointment.services?.name || 'فحص طبي'}\n` +
-        `💰 المبلغ الصافي: ${finalAmt} ر.ي\n` +
+        `💰 المبلغ: ${(selectedAppointment.paid_amount || selectedAppointment.services?.price || 0) - (selectedAppointment.discount_amount || 0)} ر.ي\n` +
         `🔖 كود الحجز: ${selectedAppointment.reservation_code}\n` +
         `━━━━━━━━━━━━━━━\n` +
         `✅ تم الدفع بنجاح\n` +
@@ -685,20 +693,11 @@ export default function CashierPage() {
       if (result.ok) {
         toast({ title: "✈️ تم إرسال السند بنجاح للمريض عبر تلجرام!" });
       } else {
-        console.error("Telegram send error:", result);
-        toast({
-          title: "❌ فشل الإرسال عبر تلجرام",
-          description: result.description || "خطأ غير معروف",
-          variant: "destructive"
-        });
+        toast({ title: "❌ فشل الإرسال عبر تلجرام", description: result.description, variant: "destructive" });
       }
     } catch (err: any) {
-      console.error("Error sending receipt via Telegram:", err);
-      toast({
-        title: "❌ خطأ في الاتصال بالبوت",
-        description: err.message || "تعذر التواصل مع سيرفر تليجرام",
-        variant: "destructive"
-      });
+      console.error("Telegram send error:", err);
+      toast({ title: "❌ خطأ في الاتصال بالبوت", description: err.message, variant: "destructive" });
     } finally {
       setSendingTelegram(false);
     }
@@ -726,13 +725,9 @@ export default function CashierPage() {
     return true;
   }), [appointments, search, statusFilter]);
 
-  // ─── Guards ───
-  if (authLoading || clinicLoading) {
-    return <div className="min-h-screen bg-mesh flex items-center justify-center text-muted-foreground">جاري التحميل...</div>;
-  }
-  if (clinicError) {
-    return <div className="min-h-screen bg-mesh flex items-center justify-center text-destructive font-bold">{clinicError}</div>;
-  }
+  if (authLoading || clinicLoading) return <div className="min-h-screen bg-mesh flex items-center justify-center text-muted-foreground">جاري التحميل...</div>;
+  if (clinicError) return <div className="min-h-screen bg-mesh flex items-center justify-center text-destructive font-bold">{clinicError}</div>;
+
   if (isTrialExpired && role !== "owner") {
     return (
       <div className="min-h-screen bg-mesh flex items-center justify-center p-4">
@@ -746,13 +741,12 @@ export default function CashierPage() {
     );
   }
 
-  // ─── Render ───
   return (
     <div className="min-h-screen bg-mesh flex flex-col" dir="rtl">
       <div id={QR_FILE_ELEMENT_ID} className="hidden" />
       <input type="file" ref={fileInputRef} accept="image/*" className="hidden" onChange={handleFileUpload} />
 
-      {/* مودال الماسح */}
+      {/* مودال الماسح الضوئي */}
       {scannerOpen && (
         <div className="fixed inset-0 z-50 bg-black/90 backdrop-blur-lg flex items-center justify-center p-4">
           <div className="bg-white dark:bg-gray-900 rounded-3xl max-w-sm w-full shadow-2xl overflow-hidden border border-border">
@@ -795,14 +789,14 @@ export default function CashierPage() {
             </div>
 
             <div className="px-5 pb-3">
-              <Button
-                variant="outline"
+              <Button 
+                variant="outline" 
                 className="w-full gap-2 border-dashed border-primary/50 text-primary text-xs h-10"
                 onClick={() => fileInputRef.current?.click()}
                 disabled={uploadingImage}
               >
                 <ImageIcon className="w-4 h-4" />
-                اختيار صورة من المعرض
+                اختيار صورة من المعرض (لقطة شاشة)
               </Button>
             </div>
 
@@ -859,7 +853,7 @@ export default function CashierPage() {
             <option value="arrived">حاضر</option>
             <option value="waiting">لم يصل</option>
           </select>
-
+          
           <div className="flex gap-2">
             <Button onClick={() => setWalkInOpen(true)} className="bg-primary"><Plus className="w-4 h-4 ml-1" />مريض مباشر</Button>
             <Button variant="outline" className="text-red-600 border-red-200 hover:bg-red-50" onClick={() => setExpenseModalOpen(true)}>
@@ -917,7 +911,7 @@ export default function CashierPage() {
                 <div className="flex gap-2 items-center justify-end">
                   {isPaid ? (
                     <Button variant="outline" className="text-emerald-600 border-emerald-500/30 bg-emerald-50/50" onClick={() => openPaymentModal(a)}>
-                      <CheckCircle className="w-4 h-4 ml-1" />عرض السند
+                      <CheckCircle className="w-4 h-4 ml-1" />عرض السند الفاخر
                     </Button>
                   ) : (
                     <Button className="bg-emerald-600 hover:bg-emerald-700" onClick={() => openPaymentModal(a)}>
@@ -932,11 +926,10 @@ export default function CashierPage() {
         </div>
       </main>
 
-      {/* مودال الدفع والسند */}
       {selectedAppointment && (
         <div className="fixed inset-0 z-50 bg-black/80 backdrop-blur-md flex items-center justify-center p-4 overflow-y-auto">
           <div className="bg-background rounded-3xl max-w-md w-full shadow-2xl p-6 relative border border-border my-8">
-            <button
+            <button 
               onClick={() => { setSelectedAppointment(null); setShowReceipt(false); }}
               className="absolute top-4 right-4 z-10 p-2 rounded-full bg-muted hover:bg-muted/80 text-foreground transition"
             >
@@ -956,15 +949,27 @@ export default function CashierPage() {
                 <div className="card-modern p-4 bg-muted/40 space-y-3 text-sm">
                   <div>
                     <label className="text-xs font-semibold text-muted-foreground block mb-1">اسم المريض الصريح</label>
-                    <Input value={editPatientName} onChange={(e) => setEditPatientName(e.target.value)} placeholder="أدخل اسم المريض الرباعي" className="font-bold text-sm bg-background" />
+                    <Input 
+                      value={editPatientName} 
+                      onChange={(e) => setEditPatientName(e.target.value)} 
+                      placeholder="أدخل اسم المريض الرباعي"
+                      className="font-bold text-sm bg-background"
+                    />
                   </div>
 
                   <div>
                     <label className="text-xs font-semibold text-muted-foreground block mb-1">رقم الهاتف (الواتساب)</label>
                     <div className="space-y-1">
-                      <Input value={editPatientPhone} onChange={(e) => setEditPatientPhone(e.target.value)} placeholder="مثال: 771234567" className="font-bold text-sm bg-background dir-ltr text-right" />
+                      <Input 
+                        value={editPatientPhone} 
+                        onChange={(e) => setEditPatientPhone(e.target.value)} 
+                        placeholder="مثال: 771234567"
+                        className="font-bold text-sm bg-background dir-ltr text-right"
+                      />
                       {(editPatientPhone.startsWith("tg:") || !editPatientPhone || editPatientPhone === "حجز عبر تلجرام (بدون رقم)") && (
-                        <p className="text-[11px] text-amber-600 font-medium">⚠️ يرجى أدخال رقم هاتف المريض الحقيقي هنا للتواصل عبر الواتساب.</p>
+                        <p className="text-[11px] text-amber-600 font-medium">
+                          ⚠️ يرجى أدخال رقم هاتف المريض الحقيقي هنا للتواصل عبر الواتساب.
+                        </p>
                       )}
                     </div>
                   </div>
@@ -981,11 +986,21 @@ export default function CashierPage() {
                   <div className="grid grid-cols-2 gap-3 pt-2">
                     <div>
                       <label className="text-xs font-semibold text-muted-foreground block mb-1">المبلغ المستلم (ر.ي)</label>
-                      <Input type="number" value={paidAmountInput} onChange={(e) => setPaidAmountInput(e.target.value)} className="font-bold text-lg" />
+                      <Input 
+                        type="number" 
+                        value={paidAmountInput} 
+                        onChange={(e) => setPaidAmountInput(e.target.value)} 
+                        className="font-bold text-lg"
+                      />
                     </div>
                     <div>
                       <label className="text-xs font-semibold text-muted-foreground block mb-1">الخصم (ر.ي)</label>
-                      <Input type="number" value={discountInput} onChange={(e) => setDiscountInput(e.target.value)} className="font-bold text-lg text-red-500" />
+                      <Input 
+                        type="number" 
+                        value={discountInput} 
+                        onChange={(e) => setDiscountInput(e.target.value)} 
+                        className="font-bold text-lg text-red-500"
+                      />
                     </div>
                   </div>
 
@@ -1013,9 +1028,9 @@ export default function CashierPage() {
                 </div>
 
                 {/* السند الإلكتروني الفاخر */}
-                <div
-                  id="receipt-card-container"
-                  className="bg-white text-gray-900 rounded-2xl border border-gray-200 shadow-xl relative overflow-hidden"
+                <div 
+                  id="receipt-card-container" 
+                  className="bg-white text-gray-900 rounded-2xl border border-gray-200 shadow-xl relative overflow-hidden" 
                   style={{ direction: 'rtl', fontFamily: 'system-ui, -apple-system, sans-serif' }}
                 >
                   <div style={{
@@ -1044,9 +1059,9 @@ export default function CashierPage() {
                     <div style={{ flex: 1 }}>
                       <p style={{ fontSize: "9px", opacity: 0.8, marginBottom: "3px", letterSpacing: "1.5px" }}>OFFICIAL PAYMENT RECEIPT</p>
                       <h2 style={{ fontSize: "17px", fontWeight: 900, margin: 0, lineHeight: 1.2 }}>
-                        {clinic?.name || "العيادة الطبية"}
+                        {clinic?.name || "العيادة الطبية Smart Clinic"}
                       </h2>
-                      <p style={{ fontSize: "10px", opacity: 0.85, marginTop: "3px" }}>سند استلام رسمي</p>
+                      <p style={{ fontSize: "10px", opacity: 0.85, marginTop: "3px" }}>سند استلام مبلغ رسمـي</p>
                     </div>
 
                     <div style={{
@@ -1101,13 +1116,13 @@ export default function CashierPage() {
 
                     <div className="mt-4 pt-3 border-t border-gray-100 flex items-center justify-between">
                       <div>
-                        <p className="text-[10px] font-bold text-gray-700">رمز إثبات صحة السند:</p>
+                        <p className="text-[10px] font-bold text-gray-700">رمز إثبات صحة السند المالي:</p>
                         <p className="text-[9px] font-mono text-gray-400 mt-0.5">{getUniquePaymentToken(selectedAppointment)}</p>
                       </div>
                       <div className="bg-white p-1 rounded-lg border border-gray-200 shrink-0">
-                        <img
-                          src={`https://api.qrserver.com/v1/create-qr-code/?size=120x100&data=${encodeURIComponent(getUniquePaymentToken(selectedAppointment))}`}
-                          alt="Payment Verification QR"
+                        <img 
+                          src={`https://api.qrserver.com/v1/create-qr-code/?size=120x100&data=${encodeURIComponent(getUniquePaymentToken(selectedAppointment))}`} 
+                          alt="Payment Verification QR" 
                           className="w-12 h-12"
                           crossOrigin="anonymous"
                         />
@@ -1115,29 +1130,43 @@ export default function CashierPage() {
                     </div>
 
                     <div className="mt-3 text-center text-[9px] text-gray-400 border-t border-gray-100 pt-2">
-                      معتمد إلكترونياً — جميع الحقوق محفوظة
+                      معتمد إلكترونياً عبر صندوق الخزينة — جميع الحقوق محفوظة
                     </div>
                   </div>
                 </div>
 
-                {/* أزرار السند */}
+                {/* أزرار المشاركة المتقدمة */}
                 <div className="grid grid-cols-2 gap-2 pt-2">
                   <Button variant="outline" size="sm" className="text-xs gap-1" onClick={downloadReceipt}>
-                    <Download className="w-3.5 h-3.5" /> تنزيل
+                    <Download className="w-3.5 h-3.5" />
+                    تنزيل
                   </Button>
                   <Button variant="outline" size="sm" className="text-xs gap-1" onClick={printReceipt}>
-                    <Printer className="w-3.5 h-3.5" /> طباعة
+                    <Printer className="w-3.5 h-3.5" />
+                    طباعة
                   </Button>
-                  <Button size="sm" className="text-xs gap-1 bg-[#25D366] hover:bg-[#20ba5a] text-white font-bold" onClick={sendViaWhatsApp} disabled={sendingReceipt}>
+                  <Button 
+                    size="sm" 
+                    className="text-xs gap-1 bg-[#25D366] hover:bg-[#20ba5a] text-white font-bold" 
+                    onClick={sendViaWhatsApp}
+                    disabled={sendingReceipt}
+                  >
                     {sendingReceipt ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <MessageCircle className="w-3.5 h-3.5" />}
                     إرسال للواتساب
                   </Button>
-
-                  {/* زر إرسال السند عبر تيليجرام */}
-                  <Button size="sm" className="text-xs gap-1 bg-[#0088cc] hover:bg-[#0077b5] text-white font-bold" onClick={sendViaTelegram} disabled={sendingTelegram}>
-                    {sendingTelegram ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Send className="w-3.5 h-3.5" />}
-                    إرسال لتلجرام ✈️
-                  </Button>
+                  
+                  {/* زر إرسال السند عبر البوت الموحد لتليجرام (نفس طريقة بطاقة الحجز) */}
+                  {(selectedAppointment.customer_telegram_id || selectedAppointment.patients?.telegram_user_id) && (
+                    <Button 
+                      size="sm" 
+                      className="text-xs gap-1 bg-[#0088cc] hover:bg-[#0077b5] text-white font-bold" 
+                      onClick={sendViaTelegram}
+                      disabled={sendingTelegram}
+                    >
+                      {sendingTelegram ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Send className="w-3.5 h-3.5" />}
+                      إرسال لتلجرام ✈️
+                    </Button>
+                  )}
                 </div>
 
                 <div className="mt-3 pt-3 border-t border-border/40">
@@ -1147,7 +1176,9 @@ export default function CashierPage() {
                         <Sparkles className="w-4 h-4 animate-pulse" />
                       </div>
                       <div>
-                        <p className="text-[11px] font-black text-slate-800 dark:text-slate-200 leading-tight">Smart Clinic System</p>
+                        <p className="text-[11px] font-black text-slate-800 dark:text-slate-200 leading-tight">
+                          Smart Clinic System
+                        </p>
                         <a href="mailto:alkhyatalkhyat79@gmail.com" className="text-[10px] text-primary hover:underline font-mono leading-tight block">
                           alkhyatalkhyat79@gmail.com
                         </a>
@@ -1183,11 +1214,11 @@ export default function CashierPage() {
       {/* مودال مصروف جديد */}
       <Dialog open={expenseModalOpen} onOpenChange={setExpenseModalOpen}>
         <DialogContent dir="rtl" className="max-w-md">
-          <DialogHeader><DialogTitle className="text-red-600 flex items-center gap-1"><MinusCircle className="w-5 h-5" /> تسجيل مصروف جديد</DialogTitle></DialogHeader>
+          <DialogHeader><DialogTitle className="text-red-600 flex items-center gap-1"><MinusCircle className="w-5 h-5" /> تسجـيل مصروف جديد</DialogTitle></DialogHeader>
           <div className="space-y-3 pt-2">
             <div>
               <label className="text-xs font-semibold text-muted-foreground block mb-1">البيان / سبب المصروف</label>
-              <Input value={expenseTitle} onChange={(e) => setExpenseTitle(e.target.value)} placeholder="مثلاً: شراء أدوات طبية" />
+              <Input value={expenseTitle} onChange={(e) => setExpenseTitle(e.target.value)} placeholder="مثلاً: شراء أدوات طبية / إيجار / كهرباء" />
             </div>
             <div className="grid grid-cols-2 gap-2">
               <div>
@@ -1205,9 +1236,7 @@ export default function CashierPage() {
                 </select>
               </div>
             </div>
-            <Button onClick={handleAddExpense} className="w-full bg-red-600 hover:bg-red-700 text-white font-bold">
-              <MinusCircle className="w-4 h-4 ml-1" />قيد المصروف في الخزينة
-            </Button>
+            <Button onClick={handleAddExpense} className="w-full bg-red-600 hover:bg-red-700 text-white font-bold"><MinusCircle className="w-4 h-4 ml-1" />قيد المصروف في الخزينة</Button>
           </div>
         </DialogContent>
       </Dialog>
@@ -1217,16 +1246,16 @@ export default function CashierPage() {
   );
 }
 
-// ─── مكون الإحصائيات المالية ───
 function CashierStats({ appointments, expenses }: { appointments: Appointment[]; expenses: Expense[] }) {
   const paid = appointments.filter((a) => a.payment_status === "paid");
-
-  const amountFor = (a: Appointment) => (typeof a.paid_amount === "number" ? a.paid_amount : (a.services?.price || 0));
+  
+  const amountFor = (a: Appointment) =>
+    typeof a.paid_amount === "number" ? a.paid_amount : (a.services?.price || 0);
 
   const totalRevenue = paid.reduce((s, a) => s + amountFor(a), 0);
   const totalDiscount = paid.reduce((s, a) => s + (a.discount_amount || 0), 0);
   const totalExpenses = expenses.reduce((s, e) => s + e.amount, 0);
-
+  
   const netInDrawer = (totalRevenue - totalDiscount) - totalExpenses;
   const avgTicket = paid.length ? Math.round((totalRevenue - totalDiscount) / paid.length) : 0;
 
@@ -1266,7 +1295,7 @@ function CashierStats({ appointments, expenses }: { appointments: Appointment[];
     { label: "إجمالي المقبوضات", value: `${totalRevenue.toLocaleString()} ر.ي`, icon: ArrowUpCircle, tint: "from-emerald-500/20 to-emerald-500/5", iconClass: "text-emerald-500" },
     { label: "إجمالي الخصومات", value: `${totalDiscount.toLocaleString()} ر.ي`, icon: Receipt, tint: "from-amber-500/20 to-amber-500/5", iconClass: "text-amber-500" },
     { label: "إجمالي المصروفات", value: `${totalExpenses.toLocaleString()} ر.ي`, icon: ArrowDownCircle, tint: "from-red-500/20 to-red-500/5", iconClass: "text-red-500" },
-    { label: "صافي الصندوق", value: `${netInDrawer.toLocaleString()} ر.ي`, icon: Wallet, tint: "from-primary/20 to-primary/5", iconClass: "text-primary" },
+    { label: "صافي الصندوق (الخزينة)", value: `${netInDrawer.toLocaleString()} ر.ي`, icon: Wallet, tint: "from-primary/20 to-primary/5", iconClass: "text-primary" },
     { label: "متوسط الفاتورة", value: `${avgTicket.toLocaleString()} ر.ي`, icon: TrendingUp, tint: "from-violet-500/20 to-violet-500/5", iconClass: "text-violet-500" },
   ];
 
