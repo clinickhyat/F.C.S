@@ -16,6 +16,7 @@ import {
 import { BarChart, Bar, PieChart, Pie, Cell, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid, Legend } from "recharts";
 import { Html5Qrcode } from "html5-qrcode";
 
+// ─── تعريف الأنواع ───
 type Appointment = {
   id: string;
   date: string;
@@ -25,8 +26,44 @@ type Appointment = {
   arrived_at: string | null;
   entered_at?: string | null;
   payment_status: string;
+  notes?: string | null;
   patients: { name: string; phone: string } | null;
   services: { name: string; price: number | null } | null;
+};
+
+// ─── دالة استخراج الاسم والرقم الصحيحين (مأخوذة من كود الكاشير) ───
+const extractCleanInfo = (apt: Appointment) => {
+  let name = apt.patients?.name || "";
+  let phone = apt.patients?.phone || "";
+
+  const isGenericName = !name || name === "." || name.trim().toLowerCase() === "point" || name.startsWith("tg:") || name.includes("غير محدد");
+  const isGenericPhone = !phone || phone.trim().toLowerCase().startsWith("tg:") || phone === "." || phone === "بدون هاتف";
+
+  // استخراج من الملاحظات إذا كانت البيانات عامة
+  if ((isGenericName || isGenericPhone) && apt.notes) {
+    const nameMatch = apt.notes.match(/المريض:\s*([^(–\n\r]+)/);
+    if (nameMatch && nameMatch[1] && isGenericName) {
+      name = nameMatch[1].replace(/👤/g, "").replace(/@\w+/g, "").trim();
+    }
+
+    const phoneMatch = apt.notes.match(/\(([^)]+)\)/) || apt.notes.match(/(?:الهاتف:\s*|📱\s*)([+\d\s-]+)/);
+    if (phoneMatch && phoneMatch[1] && isGenericPhone) {
+      const extractedP = phoneMatch[1].trim();
+      if (!extractedP.startsWith("tg:")) {
+        phone = extractedP;
+      }
+    }
+  }
+
+  let cleanName = name.replace(/^tg:\d+/i, "").replace(/👤/g, "").replace(/@\w+/g, "").trim();
+  if (!cleanName || cleanName === "." || cleanName.length < 2) cleanName = "مريض غير محدد";
+
+  let cleanPhone = phone.trim();
+  if (!cleanPhone || cleanPhone.toLowerCase().startsWith("tg:") || cleanPhone === "." || cleanPhone === "بدون هاتف") {
+    cleanPhone = "حجز عبر تلجرام (بدون رقم)";
+  }
+
+  return { cleanName, cleanPhone };
 };
 
 // ─── معرفات عناصر الماسح ───
@@ -71,12 +108,12 @@ export default function ReceptionPage() {
     if (role === "cashier") navigate("/cashier", { replace: true });
   }, [role, clinicLoading, navigate]);
 
-  // ─── جلب المواعيد ───
+  // ─── جلب المواعيد (مع الملاحظات) ───
   const fetchAppointments = useCallback(async () => {
     if (!clinic || !unlocked) return;
     const { data, error } = await supabase
       .from("appointments")
-      .select("id,date,time,status,reservation_code,arrived_at,payment_status,entered_at,patients(name,phone),services(name,price)")
+      .select("id,date,time,status,reservation_code,arrived_at,payment_status,entered_at,notes,patients(name,phone),services(name,price)")
       .eq("clinic_id", clinic.id)
       .eq("date", today)
       .order("time", { ascending: true });
@@ -146,8 +183,6 @@ export default function ReceptionPage() {
   // ─── معالجة واستخراج الكود الممسوح ذكياً ───
   const handleScannedCode = useCallback(async (decodedText: string) => {
     const rawText = decodedText.trim();
-    
-    // 1. استخراج كود الحجز من النصوص المركبة (مثل لقطات الشاشات للتيلجرام والواتساب)
     let extractedCode = rawText;
     const match = rawText.match(/RE-[A-Za-z0-9]+/i) || rawText.match(/RE-\d+/i);
     if (match) {
@@ -156,7 +191,6 @@ export default function ReceptionPage() {
 
     const currentAppointments = appointmentsRef.current;
 
-    // 2. البحث في المواعيد المحملة محلياً
     let found = currentAppointments.find(a =>
       a.id === rawText ||
       a.reservation_code.toLowerCase() === rawText.toLowerCase() ||
@@ -164,18 +198,16 @@ export default function ReceptionPage() {
       rawText.toLowerCase().includes(a.reservation_code.toLowerCase())
     );
 
-    // 3. إذا لم يوجد في القائمة المحلية، نبحث مباشرة في Supabase (ربما التاريخ مختلف)
     if (!found && clinic) {
       const { data } = await supabase
         .from("appointments")
-        .select("id,date,time,status,reservation_code,arrived_at,payment_status,entered_at,patients(name,phone),services(name,price)")
+        .select("id,date,time,status,reservation_code,arrived_at,payment_status,entered_at,notes,patients(name,phone),services(name,price)")
         .eq("clinic_id", clinic.id)
         .or(`reservation_code.ilike.${extractedCode},reservation_code.ilike.${rawText},id.eq.${rawText}`)
         .maybeSingle();
 
       if (data) {
         found = data as Appointment;
-        // إذا كان الموعد في تاريخ آخر، نغير الفلتر التلقائي إلى ذلك التاريخ ليظهر
         if (found.date !== dateFilter) {
           setDateFilter(found.date);
         }
@@ -402,12 +434,13 @@ export default function ReceptionPage() {
     }
   };
 
-  // ─── فلترة المواعيد ───
+  // ─── فلترة المواعيد مع استخدام extractCleanInfo ───
   const filtered = useMemo(() => appointments.filter((a) => {
+    const { cleanName, cleanPhone } = extractCleanInfo(a);
     const matchesSearch =
       a.reservation_code.toLowerCase().includes(search.toLowerCase()) ||
-      a.patients?.name?.toLowerCase().includes(search.toLowerCase()) ||
-      a.patients?.phone?.includes(search);
+      cleanName.toLowerCase().includes(search.toLowerCase()) ||
+      cleanPhone.includes(search);
     if (!matchesSearch) return false;
     if (statusFilter === "all") return true;
     if (statusFilter === "active") return !["cancelled", "completed"].includes(a.status);
@@ -418,6 +451,7 @@ export default function ReceptionPage() {
     return a.status === statusFilter;
   }), [appointments, search, statusFilter]);
 
+  // ─── Guards ───
   if (authLoading || clinicLoading) {
     return <div className="min-h-screen bg-mesh flex items-center justify-center text-muted-foreground">جاري التحميل...</div>;
   }
@@ -441,6 +475,7 @@ export default function ReceptionPage() {
     );
   }
 
+  // ─── Render ───
   return (
     <div className="min-h-screen bg-mesh flex flex-col">
       <div id={QR_FILE_ELEMENT_ID} className="hidden" />
@@ -580,9 +615,11 @@ export default function ReceptionPage() {
 
         <div className="grid gap-3">
           {filtered.map((a) => {
+            const { cleanName, cleanPhone } = extractCleanInfo(a);
             const confirmedNotArrived = a.status === "confirmed" && !a.arrived_at;
             const arrivedUnpaid = !!a.arrived_at && a.payment_status !== "paid";
             const paidWaitingEntry = !!a.arrived_at && a.payment_status === "paid";
+
             return (
               <div key={a.id} className="card-modern p-4 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
                 <div className="space-y-1">
@@ -593,8 +630,8 @@ export default function ReceptionPage() {
                     {arrivedUnpaid && <span className="px-2 py-0.5 rounded-lg text-xs bg-blue-500/15 text-blue-600 font-bold">حاضر — بانتظار الدفع</span>}
                     {paidWaitingEntry && <span className="px-2 py-0.5 rounded-lg text-xs bg-emerald-500/15 text-emerald-600 font-bold">مدفوع — جاهز للدخول</span>}
                   </div>
-                  <h2 className="font-bold text-foreground">{a.patients?.name || "مريض"}</h2>
-                  <p className="text-sm text-muted-foreground">{a.patients?.phone || "بدون هاتف"} — {a.services?.name || "بدون خدمة"}</p>
+                  <h2 className="font-bold text-foreground">{cleanName}</h2>
+                  <p className="text-sm text-muted-foreground">{cleanPhone} — {a.services?.name || "بدون خدمة"}</p>
                 </div>
                 <div className="flex gap-2 flex-wrap justify-end">
                   {!a.arrived_at && (
