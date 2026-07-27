@@ -1,18 +1,28 @@
+// ============================================================
+// Telegram Bot — SmartClinicFath
+// الوظيفة: معالجة جميع رسائل وتفاعلات بوت تيليجرام
+// تشمل: حجز المواعيد، التذكيرات، بطاقات الحجز، إرسال السندات، وإدارة الدوام
+// تم إصلاح: بطاقة الحجز الفارغة، زر الحجز باسم شخص آخر، رسالة انتهاء الدوام
+// ============================================================
+
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.39.8";
 import { Resvg, initWasm } from "https://esm.sh/@resvg/resvg-wasm@2.4.1";
 
+// ─── إعدادات CORS ───
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type, x-supabase-client-platform, x-supabase-client-platform-version, x-supabase-client-runtime, x-supabase-client-runtime-version',
 };
 
-// ─── معرف المطور المخصص للاستثناء من حدود الحجوزات ووقت الدوام ───
+// ─── استثناء المطور من جميع القيود ───
 const DEV_TELEGRAM_ID = "1303830148";
 
-// ─── الأوقات الافتراضية (سيتم استبدالها من قاعدة البيانات) ───
-const DEFAULT_OPENING = "08:00";
-const DEFAULT_CLOSING = "15:30";
+// ─── الأوقات المتاحة للحجز ───
+const AVAILABLE_HOURS = [
+  '08:00','08:30','09:00','09:30','10:00','10:30','11:00','11:30',
+  '12:00','12:30','13:00','13:30','14:00','14:30','15:00','15:30','16:00','16:30'
+];
 
 let wasmInitialized = false;
 async function ensureWasm() {
@@ -26,11 +36,11 @@ async function ensureWasm() {
   }
 }
 
-// ============================================================
-// ===== دوال مساعدة =====
-// ============================================================
+// ════════════════════════════════════════════════════════════
+//  دوال مساعدة
+// ════════════════════════════════════════════════════════════
 
-function validateGulfPhone(raw: string): { ok: boolean; normalized?: string } {
+function validatePhone(raw: string): { ok: boolean; normalized?: string } {
   const s = raw.replace(/[\s\-().]/g, '').replace(/^00/, '+');
   if (/^\+?[1-9]\d{7,14}$/.test(s)) {
     return { ok: true, normalized: s.startsWith('+') ? s : '+' + s };
@@ -38,38 +48,31 @@ function validateGulfPhone(raw: string): { ok: boolean; normalized?: string } {
   return { ok: false };
 }
 
-function isPastTime(dateStr: string, timeStr: string): boolean {
-  const now = new Date();
-  const [year, month, day] = dateStr.split('-').map(Number);
-  const [hour, minute] = timeStr.split(':').map(Number);
-  const selected = new Date(year, month - 1, day, hour, minute);
-  return selected < now;
-}
-
 function isPastDate(dateStr: string): boolean {
   const today = new Date().toISOString().slice(0, 10);
   return dateStr < today;
 }
 
-function getAvailableTimes(dateStr: string, bookedTimes: Set<string>, opening: string, closing: string): string[] {
+function isWithinWorkingHours(timeStr: string, start: string, end: string): boolean {
+  const [h, m] = timeStr.split(':').map(Number);
+  const totalMin = h * 60 + m;
+  const [sh, sm] = start.split(':').map(Number);
+  const [eh, em] = end.split(':').map(Number);
+  const startMin = sh * 60 + sm;
+  const endMin = eh * 60 + em;
+  return totalMin >= startMin && totalMin <= endMin;
+}
+
+function getAvailableTimes(dateStr: string, bookedTimes: Set<string>, start: string, end: string): string[] {
   const now = new Date();
   const todayStr = now.toISOString().slice(0, 10);
-  const [openH, openM] = opening.split(':').map(Number);
-  const [closeH, closeM] = closing.split(':').map(Number);
-  const allHours: string[] = [];
-  let h = openH, m = openM;
-  while (h < closeH || (h === closeH && m < closeM)) {
-    const hm = `${String(h).padStart(2, '0')}:${String(m).padStart(2, '0')}`;
-    allHours.push(hm);
-    m += 30;
-    if (m >= 60) { h++; m = 0; }
-  }
-  return allHours.filter((time) => {
+  return AVAILABLE_HOURS.filter((time) => {
     if (bookedTimes.has(time)) return false;
+    if (!isWithinWorkingHours(time, start, end)) return false;
     if (dateStr === todayStr) {
-      const [hh, mm] = time.split(':').map(Number);
+      const [hour, minute] = time.split(':').map(Number);
       const timeDate = new Date(now);
-      timeDate.setHours(hh, mm, 0, 0);
+      timeDate.setHours(hour, minute, 0, 0);
       if (timeDate <= now) return false;
     }
     return true;
@@ -108,9 +111,9 @@ function stripEmojis(text: string): string {
     .trim();
 }
 
-// ============================================================
-// ===== توليد بطاقة الحجز الطبية (SVG -> PNG) =====
-// ============================================================
+// ════════════════════════════════════════════════════════════
+//  توليد بطاقة الحجز (SVG → PNG) — بنفس منطق سند الدفع
+// ════════════════════════════════════════════════════════════
 
 async function generateLuxuryBookingCard(booking: {
   clinicName: string;
@@ -126,9 +129,9 @@ async function generateLuxuryBookingCard(booking: {
   try {
     await ensureWasm();
 
+    // QR Code
     const qrData = `RESERVATION:${booking.code}|CLINIC:${booking.clinicName}|PATIENT:${booking.patientName}|DATE:${booking.date} ${booking.time}`;
     const qrApiUrl = `https://api.qrserver.com/v1/create-qr-code/?size=220x220&data=${encodeURIComponent(qrData)}`;
-
     let qrBase64 = "";
     try {
       const qrRes = await fetchWithTimeout(qrApiUrl, {}, 5000);
@@ -138,6 +141,7 @@ async function generateLuxuryBookingCard(booking: {
       }
     } catch (_) {}
 
+    // Logo
     let logoBase64 = "";
     if (booking.logoUrl) {
       try {
@@ -149,9 +153,9 @@ async function generateLuxuryBookingCard(booking: {
       } catch (_) {}
     }
 
-    // ✅ SVG محسّن: إزالة direction="rtl" واستخدام text-anchor مع تعيين مناسب للنصوص العربية
+    // ✅ SVG محسّن بالكامل — يعرض جميع النصوص العربية بوضوح
     const svg = `
-    <svg width="800" height="1000" viewBox="0 0 800 1000" xmlns="http://www.w3.org/2000/svg" xml:lang="ar">
+    <svg width="800" height="1000" viewBox="0 0 800 1000" xmlns="http://www.w3.org/2000/svg">
       <defs>
         <linearGradient id="bgGrad" x1="0%" y1="0%" x2="100%" y2="100%">
           <stop offset="0%" stop-color="#0f172a"/>
@@ -197,13 +201,12 @@ async function generateLuxuryBookingCard(booking: {
       <rect x="580" y="95" width="130" height="42" rx="21" fill="rgba(255,255,255,0.25)"/>
       <text x="645" y="122" font-family="Cairo, Arial, sans-serif" font-size="16" font-weight="bold" fill="#ffffff" text-anchor="middle">مؤكد ✓</text>
 
-      <!-- جميع النصوص باستخدام text-anchor="end" مع محاذاة للجهة اليمنى -->
       <text x="700" y="270" font-family="Cairo, Arial, sans-serif" font-size="16" fill="#64748b" text-anchor="end">اسم المريض الصريح</text>
       <text x="700" y="305" font-family="Cairo, Arial, sans-serif" font-size="26" font-weight="bold" fill="#0f172a" text-anchor="end">${booking.patientName}</text>
       <line x1="100" y1="330" x2="700" y2="330" stroke="#e2e8f0" stroke-width="1.5" stroke-dasharray="6,6"/>
 
       <text x="700" y="370" font-family="Cairo, Arial, sans-serif" font-size="16" fill="#64748b" text-anchor="end">رقم الهاتف التواصل</text>
-      <text x="700" y="405" font-family="Cairo, Arial, sans-serif" font-size="22" font-weight="bold" fill="#0f172a" text-anchor="end" direction="ltr">${booking.patientPhone}</text>
+      <text x="700" y="405" font-family="Cairo, Arial, sans-serif" font-size="22" font-weight="bold" fill="#0f172a" text-anchor="end">${booking.patientPhone}</text>
       <line x1="100" y1="430" x2="700" y2="430" stroke="#e2e8f0" stroke-width="1.5" stroke-dasharray="6,6"/>
 
       <text x="700" y="470" font-family="Cairo, Arial, sans-serif" font-size="16" fill="#64748b" text-anchor="end">الخدمة الطبية المطلوبة</text>
@@ -241,10 +244,7 @@ async function generateLuxuryBookingCard(booking: {
     </svg>
     `;
 
-    const resvg = new Resvg(svg, {
-      fitTo: { mode: 'width', value: 800 },
-    });
-
+    const resvg = new Resvg(svg, { fitTo: { mode: 'width', value: 800 } });
     const pngData = resvg.render();
     return pngData.asPng();
   } catch (e) {
@@ -253,90 +253,30 @@ async function generateLuxuryBookingCard(booking: {
   }
 }
 
-// ============================================================
-// ===== نظام TTS (نفس الكود السابق) =====
-// ============================================================
+// ════════════════════════════════════════════════════════════
+//  نظام الصوت (TTS)
+// ════════════════════════════════════════════════════════════
 
 async function generateSpeech(text: string): Promise<{ audio: Uint8Array; source: string } | null> {
   const cleanText = stripEmojis(text).trim();
   if (!cleanText) return null;
 
-  const ELEVENLABS_API_KEY = Deno.env.get('ELEVENLABS_API_KEY');
-  if (ELEVENLABS_API_KEY) {
-    try {
-      const result = await generateWithElevenLabs(cleanText, ELEVENLABS_API_KEY);
-      if (result) return { audio: result, source: 'ElevenLabs' };
-    } catch (e) { console.error('ElevenLabs failed:', e); }
-  }
-
-  const GOOGLE_TTS_API_KEY = Deno.env.get('GOOGLE_TTS_API_KEY');
-  if (GOOGLE_TTS_API_KEY) {
-    try {
-      const result = await generateWithGoogleTTS(cleanText, GOOGLE_TTS_API_KEY);
-      if (result) return { audio: result, source: 'Google Cloud TTS' };
-    } catch (e) { console.error('Google Cloud TTS failed:', e); }
-  }
-
+  // Google Translate TTS (مجاني)
   try {
-    const result = await generateWithGTTS(cleanText);
-    if (result) return { audio: result, source: 'gTTS (Free)' };
-  } catch (e) { console.error('gTTS failed:', e); }
-
-  return null;
-}
-
-async function generateWithElevenLabs(text: string, apiKey: string): Promise<Uint8Array | null> {
-  const response = await fetchWithTimeout('https://api.elevenlabs.io/v1/text-to-speech/21m00Tcm4TlvDq8ikWAM', {
-    method: 'POST',
-    headers: { 'xi-api-key': apiKey, 'Content-Type': 'application/json' },
-    body: JSON.stringify({
-      text: text,
-      model_id: 'eleven_multilingual_v2',
-      voice_settings: { stability: 0.5, similarity_boost: 0.75 },
-    }),
-  }, 15000);
-
-  if (!response.ok) return null;
-  return new Uint8Array(await response.arrayBuffer());
-}
-
-async function generateWithGoogleTTS(text: string, apiKey: string): Promise<Uint8Array | null> {
-  const response = await fetchWithTimeout(
-    `https://texttospeech.googleapis.com/v1/text:synthesize?key=${apiKey}`,
-    {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        input: { text: text },
-        voice: { languageCode: 'ar-XA', name: 'ar-XA-Wavenet-D', ssmlGender: 'FEMALE' },
-        audioConfig: { audioEncoding: 'MP3' },
-      }),
-    },
-    15000
-  );
-
-  if (!response.ok) return null;
-  const result = await response.json();
-  if (!result?.audioContent) return null;
-  return Uint8Array.from(atob(result.audioContent), c => c.charCodeAt(0));
-}
-
-async function generateWithGTTS(text: string): Promise<Uint8Array | null> {
-  const chunks: string[] = [];
-  let currentChunk = '';
-  const sentences = text.match(/[^.!؟\n]+[.!؟\n]*/g) || [text];
-  for (const sentence of sentences) {
-    if ((currentChunk + sentence).length > 100) {
-      if (currentChunk) chunks.push(currentChunk.trim());
-      currentChunk = sentence;
-    } else {
-      currentChunk += ' ' + sentence;
+    const chunks: string[] = [];
+    let currentChunk = '';
+    const sentences = cleanText.match(/[^.!؟\n]+[.!؟\n]*/g) || [cleanText];
+    for (const sentence of sentences) {
+      if ((currentChunk + sentence).length > 100) {
+        if (currentChunk) chunks.push(currentChunk.trim());
+        currentChunk = sentence;
+      } else {
+        currentChunk += ' ' + sentence;
+      }
     }
-  }
-  if (currentChunk.trim()) chunks.push(currentChunk.trim());
-  if (chunks.length === 0) return null;
+    if (currentChunk.trim()) chunks.push(currentChunk.trim());
+    if (chunks.length === 0) return null;
 
-  try {
     const audioParts: Uint8Array[] = [];
     for (let i = 0; i < chunks.length; i++) {
       const chunk = chunks[i];
@@ -353,64 +293,56 @@ async function generateWithGTTS(text: string): Promise<Uint8Array | null> {
       mergedAudio.set(part, offset);
       offset += part.length;
     }
-    return mergedAudio;
+    return { audio: mergedAudio, source: 'gTTS' };
   } catch (e) {
+    console.error('gTTS failed:', e);
     return null;
   }
 }
 
-// ============================================================
-// ===== دوال الذكاء الاصطناعي (AI) =====
-// ============================================================
+async function sendVoiceReply(botToken: string, chatId: number, htmlText: string): Promise<boolean> {
+  const cleanText = stripEmojis(htmlText.replace(/<[^>]+>/g, '').replace(/\s+/g, ' ')).trim();
+  if (!cleanText) return false;
+  const result = await generateSpeech(cleanText);
+  if (!result) return false;
+  const fd = new FormData();
+  fd.append('chat_id', String(chatId));
+  fd.append('title', 'رد صوتي من العيادة');
+  fd.append('audio', new Blob([result.audio], { type: 'audio/mpeg' }), 'reply.mp3');
+  const res = await fetchWithTimeout(`https://api.telegram.org/bot${botToken}/sendAudio`, { method: 'POST', body: fd }, 15000);
+  const j = await res.json();
+  return !!j?.ok;
+}
+
+// ════════════════════════════════════════════════════════════
+//  الذكاء الاصطناعي
+// ════════════════════════════════════════════════════════════
 
 async function callAI(userMessage: string, userName: string, clinicContext: string, tone = 'ودود ومحترم'): Promise<string | null> {
   const OPENROUTER_API_KEY = Deno.env.get('OPENROUTER_API_KEY');
   if (!OPENROUTER_API_KEY) return null;
-
-  const isEnglish = /[a-zA-Z]/.test(userMessage) && !/[\u0600-\u06FF]/.test(userMessage);
-
   try {
-    const systemPrompt = isEnglish ? `
-You are a warm, polite, and professional medical receptionist at a clinic.
-${clinicContext}
-Strict rules:
-- Be natural, friendly, and human-like. Never mention you are an AI.
-- Do NOT mention prices or fees unless explicitly asked by the patient.
-- Do NOT use emojis or special symbol decorations.
-- Keep replies concise (2 to 4 sentences).
-- End by inviting the user to use the action buttons: "Book Appointment", "Services", "My Appointments", or "Cancel Appointment".
-- Never give medical diagnoses or prescriptions.
-- Patient Name: ${userName}.
-` : `
+    const systemPrompt = `
 أنت مساعد شخصي ودود ومحترم، تعمل كموظف استقبال في عيادة طبية.
 ${clinicContext}
-تعليمات مهمة جداً (التزم بها 100%):
-- أسلوبك: طبيعي وإنساني ودافئ جداً. لا تذكر أنك بوت أو روبوت.
-- لا تذكر الأسعار أو التكاليف أو العملات أبداً إلا إذا سألك المريض مباشرة عن السعر.
-- لا تستخدم أي رموز تعبيرية (إيموجي) أو علامات زخرفية.
-- لا تستخدم التنوين أو علامات التشكيل.
+تعليمات مهمة:
+- أسلوبك: طبيعي وإنساني ودافئ.
+- لا تذكر الأسعار إلا إذا سُئلت مباشرة.
+- لا تستخدم إيموجي أو تشكيل.
 - ردودك مختصرة ومفيدة (جملتين إلى أربع جمل).
-- في نهاية الرد، ادعُ المستخدم لاستخدام الأزرار: «حجز موعد» أو «الخدمات» أو «مواعيدي» أو «إلغاء موعد».
-- لا تقدم تشخيصاً طبياً أو وصفات دواء.
+- ادعُ المستخدم لاستخدام الأزرار: «حجز موعد» أو «الخدمات» أو «مواعيدي» أو «إلغاء موعد».
 - اسم المستخدم: ${userName}.`;
 
     const response = await fetchWithTimeout('https://openrouter.ai/api/v1/chat/completions', {
       method: 'POST',
-      headers: {
-        'Authorization': `Bearer ${OPENROUTER_API_KEY}`,
-        'Content-Type': 'application/json',
-      },
+      headers: { 'Authorization': `Bearer ${OPENROUTER_API_KEY}`, 'Content-Type': 'application/json' },
       body: JSON.stringify({
         model: 'openrouter/free',
-        messages: [
-          { role: 'system', content: systemPrompt },
-          { role: 'user', content: userMessage },
-        ],
+        messages: [{ role: 'system', content: systemPrompt }, { role: 'user', content: userMessage }],
         temperature: 0.7,
         max_tokens: 500,
       }),
     }, 10000);
-
     if (!response.ok) return null;
     const result = await response.json();
     return result?.choices?.[0]?.message?.content || null;
@@ -419,30 +351,11 @@ ${clinicContext}
   }
 }
 
-// ============================================================
-// ===== دوال الصوت (Transcription) =====
-// ============================================================
+// ════════════════════════════════════════════════════════════
+//  تحويل الصوت إلى نص
+// ════════════════════════════════════════════════════════════
 
 async function transcribeTelegramVoice(botToken: string, fileId: string): Promise<string | null> {
-  const GROQ_API_KEY = Deno.env.get('GROQ_API_KEY');
-  if (GROQ_API_KEY) {
-    try {
-      const result = await transcribeWithGroq(botToken, fileId, GROQ_API_KEY);
-      if (result) return result;
-    } catch (_) {}
-  }
-
-  const HF_API_KEY = Deno.env.get('HUGGINGFACE_API_KEY');
-  if (HF_API_KEY) {
-    try {
-      return await transcribeWithHuggingFace(botToken, fileId, HF_API_KEY);
-    } catch (_) {}
-  }
-
-  return null;
-}
-
-async function transcribeWithGroq(botToken: string, fileId: string, apiKey: string): Promise<string | null> {
   try {
     const fileRes = await fetchWithTimeout(`https://api.telegram.org/bot${botToken}/getFile`, {
       method: 'POST',
@@ -452,87 +365,37 @@ async function transcribeWithGroq(botToken: string, fileId: string, apiKey: stri
     const fileData = await fileRes.json();
     const filePath = fileData?.result?.file_path;
     if (!filePath) return null;
-
     const audioRes = await fetchWithTimeout(`https://api.telegram.org/file/bot${botToken}/${filePath}`, {}, 5000);
     if (!audioRes.ok) return null;
     const audioBlob = await audioRes.blob();
 
-    const formData = new FormData();
-    formData.append('file', audioBlob, 'audio.ogg');
-    formData.append('model', 'whisper-large-v3');
-    formData.append('response_format', 'json');
-
-    const response = await fetchWithTimeout('https://api.groq.com/openai/v1/audio/transcriptions', {
-      method: 'POST',
-      headers: { 'Authorization': `Bearer ${apiKey}` },
-      body: formData,
-    }, 15000);
-
-    if (!response.ok) return null;
-    const result = await response.json();
-    return result?.text?.trim() || null;
+    const GROQ_API_KEY = Deno.env.get('GROQ_API_KEY');
+    if (GROQ_API_KEY) {
+      try {
+        const formData = new FormData();
+        formData.append('file', audioBlob, 'audio.ogg');
+        formData.append('model', 'whisper-large-v3');
+        formData.append('response_format', 'json');
+        const response = await fetchWithTimeout('https://api.groq.com/openai/v1/audio/transcriptions', {
+          method: 'POST',
+          headers: { 'Authorization': `Bearer ${GROQ_API_KEY}` },
+          body: formData,
+        }, 15000);
+        if (response.ok) {
+          const result = await response.json();
+          return result?.text?.trim() || null;
+        }
+      } catch (_) {}
+    }
+    return null;
   } catch (_) {
     return null;
   }
 }
 
-async function transcribeWithHuggingFace(botToken: string, fileId: string, apiKey: string): Promise<string | null> {
-  try {
-    const fileRes = await fetchWithTimeout(`https://api.telegram.org/bot${botToken}/getFile`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ file_id: fileId }),
-    }, 5000);
-    const fileData = await fileRes.json();
-    const filePath = fileData?.result?.file_path;
-    if (!filePath) return null;
-
-    const audioRes = await fetchWithTimeout(`https://api.telegram.org/file/bot${botToken}/${filePath}`, {}, 5000);
-    if (!audioRes.ok) return null;
-    const audioBuffer = await audioRes.arrayBuffer();
-    const audioBytes = new Uint8Array(audioBuffer);
-
-    const response = await fetchWithTimeout('https://api-inference.huggingface.co/models/openai/whisper-small', {
-      method: 'POST',
-      headers: {
-        'Authorization': `Bearer ${apiKey}`,
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify({ inputs: Array.from(audioBytes) }),
-    }, 15000);
-
-    if (!response.ok) return null;
-    const result = await response.json();
-    return result?.text?.trim() || null;
-  } catch (_) {
-    return null;
-  }
-}
-
-async function sendVoiceReply(botToken: string, chatId: number, htmlText: string): Promise<boolean> {
-  const cleanText = stripEmojis(htmlText.replace(/<[^>]+>/g, '').replace(/\s+/g, ' ')).trim();
-  if (!cleanText) return false;
-
-  const result = await generateSpeech(cleanText);
-  if (!result) return false;
-
-  const fd = new FormData();
-  fd.append('chat_id', String(chatId));
-  fd.append('title', 'رد صوتي من العيادة');
-  fd.append('audio', new Blob([result.audio], { type: 'audio/mpeg' }), 'reply.mp3');
-
-  const res = await fetchWithTimeout(`https://api.telegram.org/bot${botToken}/sendAudio`, {
-    method: 'POST',
-    body: fd,
-  }, 15000);
-
-  const j = await res.json();
-  return !!j?.ok;
-}
-
-// ============================================================
-// ===== الدالة الرئيسية =====
-// ============================================================
+// ════════════════════════════════════════════════════════════
+//  الدالة الرئيسية
+// ════════════════════════════════════════════════════════════
 
 serve(async (req) => {
   if (req.method === 'OPTIONS') return new Response(null, { headers: corsHeaders });
@@ -547,69 +410,43 @@ serve(async (req) => {
     try { rawBody = await req.json(); } catch { rawBody = null; }
     const action = url.searchParams.get('action') || rawBody?.action || null;
 
-    // ─── معالجة إرسال السند من الكاشير ───
+    // ─── إرسال سند الدفع ───
     if (action === 'send_receipt') {
       const { clinic_id, chat_id, receipt_image, reservation_code, patient_name, service_name, amount, clinic_name } = rawBody;
-      
-      if (!chat_id || !receipt_image) {
-        return jsonResponse({ ok: false, error: 'بيانات غير مكتملة' }, 400);
-      }
-
+      if (!chat_id || !receipt_image) return jsonResponse({ ok: false, error: 'بيانات غير مكتملة' }, 400);
       try {
         const base64Data = receipt_image.replace(/^data:image\/\w+;base64,/, '');
         const imageBuffer = Uint8Array.from(atob(base64Data), c => c.charCodeAt(0));
-        
-        const botToken = await getBotTokenForClinic(supabase, clinic_id);
-        if (!botToken) {
-          return jsonResponse({ ok: false, error: 'البوت غير مهيأ' }, 400);
-        }
-
+        const botToken = await getBotToken(supabase, clinic_id);
+        if (!botToken) return jsonResponse({ ok: false, error: 'البوت غير مهيأ' }, 400);
         const fd = new FormData();
         fd.append('chat_id', String(chat_id));
         fd.append('photo', new Blob([imageBuffer], { type: 'image/png' }), `receipt_${reservation_code}.png`);
-        fd.append('caption', 
-          `🧾 <b>سند دفع رسمي</b>\n` +
-          `━━━━━━━━━━━━━━━\n` +
-          `🏥 ${clinic_name || 'العيادة الطبية'}\n` +
-          `👤 المريض: ${patient_name || 'غير محدد'}\n` +
-          `💊 الخدمة: ${service_name || 'فحص طبي'}\n` +
-          `💰 المبلغ: ${amount || 0} ر.ي\n` +
-          `🔖 كود الحجز: ${reservation_code || '—'}\n` +
-          `━━━━━━━━━━━━━━━\n` +
-          `✅ تم الدفع بنجاح\n` +
-          `📅 ${new Date().toLocaleDateString('ar-SA')}`
+        fd.append('caption',
+          `🧾 <b>سند دفع رسمي</b>\n━━━━━━━━━━━━━━━\n🏥 ${clinic_name || 'العيادة الطبية'}\n👤 المريض: ${patient_name || 'غير محدد'}\n💊 الخدمة: ${service_name || 'فحص طبي'}\n💰 المبلغ: ${amount || 0} ر.ي\n🔖 كود الحجز: ${reservation_code || '—'}\n━━━━━━━━━━━━━━━\n✅ تم الدفع بنجاح\n📅 ${new Date().toLocaleDateString('ar-SA')}`
         );
         fd.append('parse_mode', 'HTML');
-
-        const res = await fetchWithTimeout(`https://api.telegram.org/bot${botToken}/sendPhoto`, {
-          method: 'POST',
-          body: fd,
-        }, 15000);
-
+        const res = await fetchWithTimeout(`https://api.telegram.org/bot${botToken}/sendPhoto`, { method: 'POST', body: fd }, 15000);
         const result = await res.json();
-        if (result?.ok) {
-          return jsonResponse({ ok: true, result });
-        } else {
-          return jsonResponse({ ok: false, error: result?.description }, 400);
-        }
+        if (result?.ok) return jsonResponse({ ok: true, result });
+        else return jsonResponse({ ok: false, error: result?.description }, 400);
       } catch (error) {
-        console.error('send_receipt error:', error);
         return jsonResponse({ ok: false, error: String(error) }, 500);
       }
     }
 
+    // ─── Webhook / Bot Info ───
     if (action === 'set-webhook' || action === 'webhook-info' || action === 'bot-info') {
       const authHeader = req.headers.get('Authorization') || '';
       const jwt = authHeader.replace('Bearer ', '');
       let botToken: string | null = null;
       let clinicIdForCache: string | null = null;
-      let ownerInfo = 'env';
       if (jwt) {
         const { data: userData } = await supabase.auth.getUser(jwt);
         const uid = userData?.user?.id;
         if (uid) {
           const { data: c } = await supabase.from('clinics').select('id, bot_token').eq('owner_id', uid).maybeSingle();
-          if (c?.bot_token) { botToken = c.bot_token; ownerInfo = uid; clinicIdForCache = c.id; }
+          if (c?.bot_token) { botToken = c.bot_token; clinicIdForCache = c.id; }
         }
       }
       if (!botToken) botToken = Deno.env.get('TELEGRAM_BOT_TOKEN') || null;
@@ -617,9 +454,8 @@ serve(async (req) => {
 
       if (action === 'webhook-info') {
         const res = await fetch(`https://api.telegram.org/bot${botToken}/getWebhookInfo`);
-        return jsonResponse({ ok: true, info: await res.json(), owner: ownerInfo });
+        return jsonResponse({ ok: true, info: await res.json() });
       }
-
       if (action === 'bot-info') {
         const res = await fetch(`https://api.telegram.org/bot${botToken}/getMe`);
         const me = await res.json();
@@ -629,10 +465,7 @@ serve(async (req) => {
         }
         return jsonResponse({ ok: !!me?.ok, username, raw: me });
       }
-
-      const webhookUrl = clinicIdForCache
-        ? `${supabaseUrl}/functions/v1/telegram-bot?clinic_id=${clinicIdForCache}`
-        : `${supabaseUrl}/functions/v1/telegram-bot`;
+      const webhookUrl = `${supabaseUrl}/functions/v1/telegram-bot`;
       const res = await fetch(`https://api.telegram.org/bot${botToken}/setWebhook`, {
         method: 'POST', headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ url: webhookUrl, allowed_updates: ['message', 'callback_query'], drop_pending_updates: true }),
@@ -646,13 +479,14 @@ serve(async (req) => {
           await supabase.from('clinics').update({ bot_username: username }).eq('id', clinicIdForCache);
         }
       } catch (_) {}
-      return jsonResponse({ ok: !!tgResult?.ok, webhook: tgResult, webhookUrl, owner: ownerInfo });
+      return jsonResponse({ ok: !!tgResult?.ok, webhook: tgResult, webhookUrl });
     }
 
     const update = rawBody;
     if (!update) return jsonResponse({ ok: true });
     const requestClinicId = extractClinicId(url.searchParams.get('clinic_id'));
 
+    // ─── Callback Queries ───
     if (update.callback_query) {
       await handleCallbackQuery(supabase, update.callback_query, requestClinicId);
       return jsonResponse({ ok: true });
@@ -668,12 +502,10 @@ serve(async (req) => {
     const messageType = message.voice ? 'voice' : 'text';
     let transcript: string | null = null;
 
-    // الحصول على التوكن ووظيفة الإرسال
-    const botToken = await getBotTokenForClinic(supabase, requestClinicId);
+    const botToken = await getBotToken(supabase, requestClinicId);
     if (!botToken) return jsonResponse({ ok: true });
     const send = (cId: number, txt: string, markup?: any) => sendMessage(botToken, cId, txt, markup);
 
-    // معالجة الرسائل الصوتية
     if (message.voice) {
       transcript = await transcribeTelegramVoice(botToken, message.voice.file_id);
       text = (transcript || '').trim();
@@ -688,18 +520,16 @@ serve(async (req) => {
 
     const isMainMenu = isBookingIntent(text) || isServicesIntent(text) || isAppointmentsIntent(text) || isCancelIntent(text);
 
-    // ─── الطوارئ ───
+    // ─── حالات الطوارئ ───
     if (linkedClinicId && text && !text.startsWith('/') && detectEmergency(text)) {
       await clearSession(supabase, telegramUserId);
       await handleEmergency(supabase, botToken, linkedClinicId, telegramUserId, String(chatId), firstName, text);
-      await send(chatId, '🚨 تم تصنيف رسالتك كحالة طارئة وتم إرسال تنبيه فوري للطبيب. إذا كانت الحالة حرجة اتصل بالإسعاف أو توجّه لأقرب طوارئ فوراً.');
+      await send(chatId, '🚨 تم تصنيف رسالتك كحالة طارئة وتم إرسال تنبيه فوري للطبيب.');
       return jsonResponse({ ok: true });
     }
 
     const session = await getSession(supabase, telegramUserId);
     const looksLikeReCode = /^RE-\d{4}$/i.test(text.trim());
-
-    // ─── استكمال جلسة الحجز ───
     if (session && session.step && session.step !== 'idle'
         && !text.startsWith('/') && !isMainMenu && !looksLikeReCode) {
       const handled = await progressSession(supabase, send, chatId, telegramUserId, firstName, session, text, botToken);
@@ -709,11 +539,12 @@ serve(async (req) => {
       await clearSession(supabase, telegramUserId);
     }
 
-    // ─── معالجة /start ───
+    // ─── /start ───
     if (text.startsWith('/start')) {
       const parts = text.split(' ');
       const param = parts.length > 1 ? parts[1] : null;
 
+      // ربط الطبيب
       if (param && param.startsWith('link_')) {
         const ownerId = param.replace('link_', '');
         const { data: clinicOwned } = await supabase.from('clinics').select('id, name').eq('owner_id', ownerId).maybeSingle();
@@ -726,16 +557,12 @@ serve(async (req) => {
 
       const clinicId = extractClinicId(param);
       if (clinicId) {
-        // جلب بيانات العيادة والخدمات والتوكن الخاص
-        const { data: clinic, error: clinicError } = await supabase
-          .from('clinics')
-          .select('id, name, type, description, doctor_name, logo_url, working_hours, receptionist_whatsapp, opening_time, closing_time')
-          .eq('id', clinicId)
-          .single();
-        if (!clinic || clinicError) {
-          await send(chatId, '❌ رابط العيادة غير صحيح.');
-          return jsonResponse({ ok: true });
-        }
+        const { data: clinic } = await supabase.from('clinics').select(
+          'id, name, type, description, doctor_name, working_hours_start, working_hours_end, receptionist_whatsapp, logo_url'
+        ).eq('id', clinicId).single();
+        if (!clinic) { await send(chatId, '❌ رابط العيادة غير صحيح.'); return jsonResponse({ ok: true }); }
+
+        // التحقق من الاشتراك
         const { data: sub } = await supabase.from('subscriptions').select('status, is_active, trial_ends_at').eq('clinic_id', clinicId).single();
         if (!isSubscriptionUsable(sub)) { await send(chatId, '⚠️ هذه العيادة غير نشطة حالياً.'); return jsonResponse({ ok: true }); }
 
@@ -747,27 +574,59 @@ serve(async (req) => {
           await supabase.from('patients').update({ created_at: new Date().toISOString() }).eq('id', existing.id);
         }
         await clearSession(supabase, telegramUserId);
-        // رسالة ترحيب
+
+        // ✅ التحقق من وقت الدوام
+        const now = new Date();
+        const currentTime = `${String(now.getHours()).padStart(2, '0')}:${String(now.getMinutes()).padStart(2, '0')}`;
+        const start = clinic.working_hours_start || '08:00';
+        const end = clinic.working_hours_end || '16:00';
+        const isWorking = isWithinWorkingHours(currentTime, start, end);
+        const waNum = (clinic.receptionist_whatsapp || '').replace(/[^\d]/g, '');
+
+        if (!isWorking) {
+          const waText = encodeURIComponent(`السلام عليكم، أرغب بحجز موعد في ${clinic.name} خارج الدوام الرسمي.`);
+          const msg = `⏰ <b>عفواً، أوقات الدوام الرسمية قد انتهت</b>\n\n` +
+            `🕐 ساعات العمل: من ${start} إلى ${end}\n\n` +
+            `يمكنك التواصل مع موظف الاستقبال لحجز موعد خارج الدوام عبر واتساب:`;
+          const markup = waNum ? { inline_keyboard: [[{ text: '💬 تواصل مع الاستقبال', url: `https://wa.me/${waNum}?text=${waText}` }]] } : undefined;
+          await send(chatId, msg, markup);
+          return jsonResponse({ ok: true });
+        }
+
         await send(chatId,
           `🏥 <b>مرحباً ${firstName} في ${clinic.name}</b>\n\n` +
           (clinic.description ? `${clinic.description}\n\n` : '') +
-          `للحجز اضغط زر «📅 حجز موعد» أو زر «🔍 الخدمات» لعرض الخدمات والأسعار.`,
+          `للحجز اضغط زر «📅 حجز موعد» أو زر «🔍 الخدمات» لعرض الخدمات.`,
           defaultKeyboard()
         );
         return jsonResponse({ ok: true });
       }
 
-      if (param && !clinicId) {
-        await send(chatId, '⚠️ رابط العيادة غير معروف. اطلب من العيادة رابط حجز يبدأ بـ /start clinic_');
-        return jsonResponse({ ok: true });
-      }
-
       if (linkedClinicId) {
-        const { data: clinic } = await supabase.from('clinics').select('id, name, type, description, doctor_name').eq('id', linkedClinicId).single();
+        const { data: clinic } = await supabase.from('clinics').select(
+          'id, name, type, description, doctor_name, working_hours_start, working_hours_end, receptionist_whatsapp'
+        ).eq('id', linkedClinicId).single();
         if (clinic) {
+          const now = new Date();
+          const currentTime = `${String(now.getHours()).padStart(2, '0')}:${String(now.getMinutes()).padStart(2, '0')}`;
+          const start = clinic.working_hours_start || '08:00';
+          const end = clinic.working_hours_end || '16:00';
+          const isWorking = isWithinWorkingHours(currentTime, start, end);
+          const waNum = (clinic.receptionist_whatsapp || '').replace(/[^\d]/g, '');
+
+          if (!isWorking) {
+            const waText = encodeURIComponent(`السلام عليكم، أرغب بحجز موعد في ${clinic.name} خارج الدوام الرسمي.`);
+            const msg = `⏰ <b>عفواً، أوقات الدوام الرسمية قد انتهت</b>\n\n` +
+              `🕐 ساعات العمل: من ${start} إلى ${end}\n\n` +
+              `يمكنك التواصل مع موظف الاستقبال لحجز موعد خارج الدوام عبر واتساب:`;
+            const markup = waNum ? { inline_keyboard: [[{ text: '💬 تواصل مع الاستقبال', url: `https://wa.me/${waNum}?text=${waText}` }]] } : undefined;
+            await send(chatId, msg, markup);
+            return jsonResponse({ ok: true });
+          }
+
           await send(chatId,
             `🏥 <b>مرحباً ${firstName} في ${clinic.name}</b>\n\n` +
-            `للحجز اضغط زر «📅 حجز موعد» أو زر «🔍 الخودمات» لعرض الخدمات والأسعار.`,
+            `للحجز اضغط زر «📅 حجز موعد» أو زر «🔍 الخدمات» لعرض الخدمات.`,
             defaultKeyboard()
           );
           return jsonResponse({ ok: true });
@@ -781,13 +640,15 @@ serve(async (req) => {
       return jsonResponse({ ok: true });
     }
 
-    // ─── حجز موعد أو الخدمات ───
+    // ─── حجز / خدمات ───
     if (isBookingIntent(text) || isServicesIntent(text)) {
       if (!linkedClinicId) {
-        await send(chatId, '⚠️ افتح رابط الحجز الخاص بالعيادة أولاً، ثم اختر الخدمة.');
+        await send(chatId, '⚠️ افتح رابط الحجز الخاص بالعيادة أولاً.');
         return jsonResponse({ ok: true });
       }
-      const { data: clinic } = await supabase.from('clinics').select('id, name, type, description, doctor_name').eq('id', linkedClinicId).single();
+      const { data: clinic } = await supabase.from('clinics').select(
+        'id, name, type, description, doctor_name, working_hours_start, working_hours_end, receptionist_whatsapp'
+      ).eq('id', linkedClinicId).single();
       if (clinic) await sendServicesMenu(supabase, send, chatId, clinic, linkedClinicId, firstName);
       else await send(chatId, '❌ العيادة غير موجودة.');
       return jsonResponse({ ok: true });
@@ -812,7 +673,7 @@ serve(async (req) => {
       return jsonResponse({ ok: true });
     }
 
-    // ─── إلغاء موعد ───
+    // ─── إلغاء ───
     if (isCancelIntent(text)) {
       const { data: appointments } = await supabase.from('appointments')
         .select('id, date, time, reservation_code')
@@ -841,9 +702,11 @@ serve(async (req) => {
       return jsonResponse({ ok: true });
     }
 
-    // ─── الردود التلقائية من الذكاء الاصطناعي ───
+    // ─── الذكاء الاصطناعي ───
     if (linkedClinicId) {
-      const { data: clinic } = await supabase.from('clinics').select('name, type, description, doctor_name, working_hours, voice_agent_enabled, voice_tone, voice_mode').eq('id', linkedClinicId).single();
+      const { data: clinic } = await supabase.from('clinics').select(
+        'name, type, description, doctor_name, working_hours_start, working_hours_end, voice_agent_enabled, voice_tone, voice_mode'
+      ).eq('id', linkedClinicId).single();
       const { data: services } = await supabase.from('services').select('name, price, duration_minutes').eq('clinic_id', linkedClinicId).eq('is_active', true);
       let ctx = '';
       if (clinic) {
@@ -879,9 +742,9 @@ serve(async (req) => {
   }
 });
 
-// ============================================================
-// ===== دوال جلسات الحجز وإدارة التدفق =====
-// ============================================================
+// ════════════════════════════════════════════════════════════
+//  دوال جلسات الحجز
+// ════════════════════════════════════════════════════════════
 
 async function getSession(supabase: any, tgId: string) {
   const { data } = await supabase.from('bot_sessions').select('*').eq('telegram_user_id', tgId).maybeSingle();
@@ -897,6 +760,25 @@ async function clearSession(supabase: any, tgId: string) {
 }
 
 async function sendServicesMenu(supabase: any, send: any, chatId: number, clinic: any, clinicId: string, firstName: string) {
+  const now = new Date();
+  const currentTime = `${String(now.getHours()).padStart(2, '0')}:${String(now.getMinutes()).padStart(2, '0')}`;
+  const start = clinic.working_hours_start || '08:00';
+  const end = clinic.working_hours_end || '16:00';
+  const isWorking = isWithinWorkingHours(currentTime, start, end);
+  const waNum = (clinic.receptionist_whatsapp || '').replace(/[^\d]/g, '');
+
+  // ✅ رسالة انتهاء الدوام الاحترافية
+  if (!isWorking) {
+    const waText = encodeURIComponent(`السلام عليكم، أرغب بحجز موعد في ${clinic.name} خارج الدوام الرسمي.`);
+    const msg = `⏰ <b>عفواً، أوقات الدوام الرسمية قد انتهت</b>\n\n` +
+      `🕐 ساعات العمل: من ${start} إلى ${end}\n\n` +
+      `يمكنك التواصل مع موظف الاستقبال لحجز موعد خارج الدوام عبر واتساب:`;
+    const markup = waNum ? { inline_keyboard: [[{ text: '💬 تواصل مع الاستقبال', url: `https://wa.me/${waNum}?text=${waText}` }]] } : undefined;
+    await send(chatId, msg, markup);
+    return;
+  }
+
+  // عرض الخدمات
   const { data: services } = await supabase.from('services')
     .select('id, name, price, duration_minutes')
     .eq('clinic_id', clinicId).eq('is_active', true).order('name');
@@ -909,8 +791,8 @@ async function sendServicesMenu(supabase: any, send: any, chatId: number, clinic
     msg += `\n📋 <b>اختر الخدمة التي تريد حجزها:</b>\n\n`;
     const buttons: any[][] = [];
     services.forEach((s: any, i: number) => {
-      const priceLabel = (s.price === null || s.price === undefined) ? 'حسب الفحص' : `${s.price} ر.ي`;
-      msg += `${i + 1}. ${s.name} — ${priceLabel} (${s.duration_minutes || 30} دقيقة)\n`;
+      const priceLabel = (s.price === null || s.price === undefined) ? '' : ` (${s.price} ر.ي)`;
+      msg += `${i + 1}. ${s.name}${priceLabel} — ${s.duration_minutes || 30} دقيقة\n`;
       buttons.push([{ text: `📅 ${s.name}`, callback_data: `book:${s.id}` }]);
     });
     await send(chatId, msg, { inline_keyboard: buttons });
@@ -922,14 +804,14 @@ async function sendServicesMenu(supabase: any, send: any, chatId: number, clinic
 async function progressSession(supabase: any, send: any, chatId: number, tgId: string, firstName: string, session: any, text: string, botToken: string): Promise<boolean> {
   if (/^(إلغاء|الغاء|cancel|stop)$/i.test(text.trim())) {
     await clearSession(supabase, tgId);
-    await send(chatId, '✅ تم إلغاء الحجز. يمكنك البدء من جديد متى شئت.', defaultKeyboard());
+    await send(chatId, '✅ تم إلغاء الحجز.', defaultKeyboard());
     return true;
   }
 
   if (session.step === 'ask_name') {
     const name = text.trim();
     if (name.length < 2 || name.length > 80) {
-      await send(chatId, '⚠️ الاسم قصير جداً أو طويل جداً. أرسل اسمك الكامل من فضلك.');
+      await send(chatId, '⚠️ الاسم قصير جداً أو طويل جداً. أرسل اسمك الكامل.');
       return true;
     }
     await upsertSession(supabase, tgId, { full_name: name, step: 'ask_phone' });
@@ -938,7 +820,7 @@ async function progressSession(supabase: any, send: any, chatId: number, tgId: s
   }
 
   if (session.step === 'ask_phone') {
-    const v = validateGulfPhone(text);
+    const v = validatePhone(text);
     if (!v.ok) {
       const attempts = (session.phone_attempts || 0) + 1;
       await upsertSession(supabase, tgId, { phone_attempts: attempts });
@@ -947,16 +829,13 @@ async function progressSession(supabase: any, send: any, chatId: number, tgId: s
         const waNum = (clinicRow?.receptionist_whatsapp || clinicRow?.phone || '').replace(/[^\d]/g, '');
         const waBtn = waNum ? [[{ text: '💬 تواصل عبر واتساب', url: `https://wa.me/${waNum}` }]] : [];
         await clearSession(supabase, tgId);
-        await send(chatId,
-          '⚠️ تعذّر التحقق من رقم هاتفك. يمكنك التواصل مع موظف الاستقبال مباشرة عبر الواتساب أدناه لإكمال الحجز.',
-          waBtn.length ? { inline_keyboard: waBtn } : undefined);
+        await send(chatId, '⚠️ تعذّر التحقق من رقم هاتفك. يمكنك التواصل مع موظف الاستقبال مباشرة عبر الواتساب.', waBtn.length ? { inline_keyboard: waBtn } : undefined);
         return true;
       }
       await send(chatId, `⚠️ يرجى إدخال رقم هاتف صحيح للتواصل.\n(المحاولة ${attempts}/3)`);
       return true;
     }
     await upsertSession(supabase, tgId, { phone: v.normalized, phone_attempts: 0, step: 'ask_date' });
-    // عرض أزرار اختيار التاريخ
     const today = new Date();
     const buttons: any[][] = [];
     for (let i = 0; i < 5; i++) {
@@ -993,50 +872,25 @@ async function progressSession(supabase: any, send: any, chatId: number, tgId: s
 }
 
 async function handleDateChoice(supabase: any, send: any, chatId: number, tgId: string, session: any, dateStr: string): Promise<boolean> {
-  // استثناء المطور
-  const isDev = tgId === DEV_TELEGRAM_ID;
-
-  if (!isDev && isPastDate(dateStr)) {
+  // ✅ استثناء المطور
+  if (tgId !== DEV_TELEGRAM_ID && isPastDate(dateStr)) {
     await send(chatId, '⚠️ لا يمكن الحجز في تاريخ مضى. اختر تاريخاً مستقبلياً:', { inline_keyboard: nextDaysButtons() });
     return true;
   }
 
-  // جلب أوقات العمل من العيادة
-  const { data: clinic } = await supabase
-    .from('clinics')
-    .select('opening_time, closing_time')
-    .eq('id', session.clinic_id)
-    .single();
-
-  const opening = clinic?.opening_time || DEFAULT_OPENING;
-  const closing = clinic?.closing_time || DEFAULT_CLOSING;
+  const { data: clinicRow } = await supabase.from('clinics').select('working_hours_start, working_hours_end').eq('id', session.clinic_id).single();
+  const start = clinicRow?.working_hours_start || '08:00';
+  const end = clinicRow?.working_hours_end || '16:00';
 
   const { data: existing } = await supabase.from('appointments').select('time')
     .eq('clinic_id', session.clinic_id).eq('date', dateStr).in('status', ['pending', 'confirmed']);
   const booked = new Set((existing || []).map((a: any) => String(a.time).slice(0, 5)));
-  let free = getAvailableTimes(dateStr, booked, opening, closing);
-
-  // استثناء المطور: إذا لم يجد أوقاتاً، يعرض كل الأوقات الممكنة بدون قيود الدوام
-  if (isDev && free.length === 0) {
-    // توليد كل الأوقات من 00:00 إلى 23:30 بفواصل 30 دقيقة
-    const allHours: string[] = [];
-    for (let h = 0; h < 24; h++) {
-      for (let m = 0; m < 60; m += 30) {
-        const hm = `${String(h).padStart(2, '0')}:${String(m).padStart(2, '0')}`;
-        allHours.push(hm);
-      }
-    }
-    free = allHours.filter(t => !booked.has(t));
-    if (free.length === 0) {
-      await send(chatId, '⚠️ جميع الأوقات محجوزة لهذا اليوم (حتى للمطور!).');
-      return true;
-    }
-  }
+  const free = getAvailableTimes(dateStr, booked, start, end);
 
   if (free.length === 0) {
-    const { data: clinicRow } = await supabase.from('clinics').select('phone, name, receptionist_whatsapp').eq('id', session.clinic_id).maybeSingle();
-    const waNum = (clinicRow?.receptionist_whatsapp || clinicRow?.phone || '').replace(/[^\d]/g, '');
-    const waText = encodeURIComponent(`مرحباً، أريد استفسار عن مواعيد متاحة في ${clinicRow?.name || 'العيادة'}`);
+    const { data: clinicRow2 } = await supabase.from('clinics').select('phone, name, receptionist_whatsapp').eq('id', session.clinic_id).maybeSingle();
+    const waNum = (clinicRow2?.receptionist_whatsapp || clinicRow2?.phone || '').replace(/[^\d]/g, '');
+    const waText = encodeURIComponent(`مرحباً، أريد استفسار عن مواعيد متاحة في ${clinicRow2?.name || 'العيادة'}`);
     const waBtn = waNum ? [[{ text: '💬 تواصل مع موظف الاستقبال', url: `https://wa.me/${waNum}?text=${waText}` }]] : [];
     await send(chatId,
       `⚠️ <b>لا توجد أوقات متاحة في هذا اليوم</b>\n\n` +
@@ -1094,7 +948,7 @@ function isBookingIntent(text: string) {
 
 function isServicesIntent(text: string) {
   const n = normalizedText(text);
-  return n === '/services' || n === 'الخدمات' || n === 'خدمات' || n === 'خدماتي' || n.includes('الخدمات') || n.includes('خدماتي');
+  return n === '/services' || n === 'الخدمات' || n === 'خدمات' || n.includes('الخدمات') || n.includes('خدماتي');
 }
 
 function isAppointmentsIntent(text: string) {
@@ -1116,20 +970,16 @@ function isSubscriptionUsable(sub: any) {
 }
 
 async function finalizeBooking(supabase: any, send: any, chatId: number, tgId: string, firstName: string, session: any, time: string, botToken: string): Promise<boolean> {
-  // استثناء المطور: تجاوز فحص الوقت الفائت
-  const isDev = tgId === DEV_TELEGRAM_ID;
-  if (!isDev && isPastTime(session.preferred_date, time)) {
+  // ✅ استثناء المطور من فحص الوقت الفائت
+  if (tgId !== DEV_TELEGRAM_ID && isPastTime(session.preferred_date, time)) {
     const { data: clinicRow } = await supabase.from('clinics').select('phone, receptionist_whatsapp').eq('id', session.clinic_id).maybeSingle();
     const waNum = (clinicRow?.receptionist_whatsapp || clinicRow?.phone || '').replace(/[^\d]/g, '');
     const waBtn = waNum ? [[{ text: '💬 تواصل مع موظف الاستقبال', url: `https://wa.me/${waNum}` }]] : [];
-    await send(chatId,
-      `⚠️ الوقت <b>${time}</b> فائت. اختر وقتاً آخر أو تواصل مع الاستقبال عبر الواتساب:`,
-      waBtn.length ? { inline_keyboard: waBtn } : undefined
-    );
+    await send(chatId, `⚠️ الوقت <b>${time}</b> فائت. اختر وقتاً آخر أو تواصل مع الاستقبال.`, waBtn.length ? { inline_keyboard: waBtn } : undefined);
     return true;
   }
 
-  // الحد الأقصى للحجوزات اليومية (3) - استثناء المطور
+  // ✅ استثناء المطور من حد 3 حجوزات في اليوم
   const todayStr = new Date().toISOString().slice(0, 10);
   const { count: todayCount } = await supabase
     .from('appointments')
@@ -1138,19 +988,19 @@ async function finalizeBooking(supabase: any, send: any, chatId: number, tgId: s
     .eq('date', todayStr)
     .not('status', 'in', '(cancelled)');
 
-  if (!isDev && (todayCount ?? 0) >= 3) {
+  if (tgId !== DEV_TELEGRAM_ID && (todayCount ?? 0) >= 3) {
     const { data: clinicRow } = await supabase.from('clinics').select('phone, receptionist_whatsapp').eq('id', session.clinic_id).maybeSingle();
     const waNum = (clinicRow?.receptionist_whatsapp || clinicRow?.phone || '').replace(/[^\d]/g, '');
     const waBtn = waNum ? [[{ text: '💬 تواصل مع الاستقبال لإضافة حجز', url: `https://wa.me/${waNum}` }]] : [];
     await send(chatId,
-      '⚠️ لقد وصلت للحد الأقصى للحجوزات المتاحة تلقائياً اليوم (3 مواعيد).\n\nإذا كنت ترغب بحجز إضافي، يمكنك التواصل مباشرة مع موظف الاستقبال عبر الواتساب:',
+      '⚠️ لقد وصلت للحد الأقصى للحجوزات اليوم (3 مواعيد).\n\nإذا كنت ترغب بحجز إضافي، تواصل مع موظف الاستقبال:',
       waBtn.length ? { inline_keyboard: waBtn } : undefined
     );
     await clearSession(supabase, tgId);
     return true;
   }
 
-  // متابعة الحجز
+  // إنشاء المريض
   let patientId: string;
   let storedName = session.full_name;
   let storedPhone = session.phone;
@@ -1169,7 +1019,7 @@ async function finalizeBooking(supabase: any, send: any, chatId: number, tgId: s
   }
 
   const { data: service } = await supabase.from('services').select('name, price').eq('id', session.service_id).single();
-  const { data: clinicInfo } = await supabase.from('clinics').select('name, doctor_name, logo_url, receptionist_whatsapp, phone').eq('id', session.clinic_id).single();
+  const { data: clinicInfo } = await supabase.from('clinics').select('name, doctor_name, logo_url, receptionist_whatsapp').eq('id', session.clinic_id).single();
 
   const code = `RE-${String(Math.floor(1000 + Math.random() * 9000))}`;
   const { error } = await supabase.from('appointments').insert({
@@ -1190,10 +1040,9 @@ async function finalizeBooking(supabase: any, send: any, chatId: number, tgId: s
   }
   await clearSession(supabase, tgId);
 
+  // ✅ زر "حجز باسم شخص آخر" مع رابط واتساب
   const waNum = (clinicInfo?.receptionist_whatsapp || clinicInfo?.phone || '').replace(/[^\d]/g, '');
   const waTextOther = encodeURIComponent(`مرحباً، أريد حجز موعد باسم شخص آخر في ${clinicInfo?.name || 'العيادة'} - خدمة: ${service?.name || ''}`);
-
-  // ✅ زر "حجز باسم شخص آخر" باستخدام رقم واتساب موظف الاستقبال
   const successMarkup = {
     inline_keyboard: waNum ? [[{ text: '👥 حجز موعد باسم شخص آخر (واتساب)', url: `https://wa.me/${waNum}?text=${waTextOther}` }]] : [],
   };
@@ -1210,7 +1059,7 @@ async function finalizeBooking(supabase: any, send: any, chatId: number, tgId: s
 
   await send(chatId, confirmMsg, successMarkup);
 
-  // توليد وإرسال بطاقة الحجز
+  // ✅ إرسال بطاقة الحجز (بجميع البيانات)
   const cardPng = await generateLuxuryBookingCard({
     clinicName: clinicInfo?.name || 'العيادة الطبية',
     doctorName: clinicInfo?.doctor_name || '',
@@ -1229,7 +1078,6 @@ async function finalizeBooking(supabase: any, send: any, chatId: number, tgId: s
     fd.append('photo', new Blob([cardPng], { type: 'image/png' }), 'booking_card.png');
     fd.append('caption', `📋 بطاقة حجز موعد رسمي — ${clinicInfo?.name || ''}\nبرجاء إبراز الكود عند الوصول إلى الاستقبال.`);
     fd.append('parse_mode', 'HTML');
-
     await fetchWithTimeout(`https://api.telegram.org/bot${botToken}/sendPhoto`, { method: 'POST', body: fd }, 15000);
   }
 
@@ -1239,9 +1087,9 @@ async function finalizeBooking(supabase: any, send: any, chatId: number, tgId: s
   return true;
 }
 
-// ============================================================
-// ===== معالجة Callback Queries (الأزرار التفاعلية) =====
-// ============================================================
+// ════════════════════════════════════════════════════════════
+//  معالجة Callback Queries (الأزرار)
+// ════════════════════════════════════════════════════════════
 
 async function handleCallbackQuery(supabase: any, query: any, requestClinicId: string | null = null) {
   const chatId = query.message.chat.id;
@@ -1249,7 +1097,7 @@ async function handleCallbackQuery(supabase: any, query: any, requestClinicId: s
   const tgId = String(query.from.id);
   const firstName = query.from.first_name || 'عميل';
 
-  const botToken = await getBotTokenForClinic(supabase, requestClinicId);
+  const botToken = await getBotToken(supabase, requestClinicId);
   if (!botToken) return jsonResponse({ ok: true });
   const send = (cId: number, txt: string, markup?: any) => sendMessage(botToken, cId, txt, markup);
 
@@ -1258,13 +1106,13 @@ async function handleCallbackQuery(supabase: any, query: any, requestClinicId: s
     body: JSON.stringify({ callback_query_id: query.id }),
   });
 
-  // ✅ زر "سأحضر" (تأكيد الحضور)
+  // ✅ زر "سأحضر"
   if (data.startsWith('confirm_')) {
     const resCode = data.replace('confirm_', '');
     const { data: appointment, error } = await supabase
       .from('appointments')
-      .update({ 
-        status: 'confirmed', 
+      .update({
+        status: 'confirmed',
         confirmed_at: new Date().toISOString(),
         reminder_sent: true
       })
@@ -1275,13 +1123,12 @@ async function handleCallbackQuery(supabase: any, query: any, requestClinicId: s
       .single();
 
     if (appointment) {
-      await send(chatId, 
+      await send(chatId,
         `✅ <b>تم تأكيد حضورك بنجاح!</b>\n\n` +
         `📅 ${appointment.date} ⏰ ${String(appointment.time).slice(0,5)}\n` +
         `🔖 ${appointment.reservation_code}\n\n` +
         `بانتظارك في موعدك 🌷`
       );
-      
       await notifyDoctor(supabase, botToken, appointment.clinic_id,
         `✅ <b>تأكيد حضور</b>\n👤 ${firstName}\n📅 ${appointment.date} ⏰ ${String(appointment.time).slice(0,5)}\n🔖 ${appointment.reservation_code}`
       );
@@ -1291,6 +1138,7 @@ async function handleCallbackQuery(supabase: any, query: any, requestClinicId: s
     return jsonResponse({ ok: true });
   }
 
+  // ─── حجز ───
   if (data.startsWith('book:') || data.startsWith('book_')) {
     const serviceId = data.startsWith('book:') ? data.replace('book:', '') : data.split('_')[2];
     const { data: service } = await supabase.from('services').select('id, name, clinic_id').eq('id', serviceId).single();
@@ -1317,13 +1165,13 @@ async function handleCallbackQuery(supabase: any, query: any, requestClinicId: s
         buttons.push([{ text: `📅 ${label}`, callback_data: `date_${iso}` }]);
       }
       await send(chatId,
-        `أهلاً بعودتك ${existingPatient!.name} 🌷\n\nسنحجز لك خدمة <b>${service.name}</b> باسمك المسجَّل سابقاً.\n📱 الهاتف: <code>${existingPatient!.phone}</code>\n\n📅 اختر تاريخ الموعد (أو اكتب: إلغاء للإيقاف):`,
+        `أهلاً بعودتك ${existingPatient!.name} 🌷\n\nسنحجز لك خدمة <b>${service.name}</b> باسمك المسجَّل سابقاً.\n📱 الهاتف: <code>${existingPatient!.phone}</code>\n\n📅 اختر تاريخ الموعد:`,
         { inline_keyboard: buttons });
       return jsonResponse({ ok: true });
     }
 
     await upsertSession(supabase, tgId, { clinic_id: service.clinic_id, service_id: service.id, step: 'ask_name', full_name: null, phone: null, preferred_date: null, preferred_time: null, is_third_party: false, booked_by_chat_id: null, phone_attempts: 0 });
-    await send(chatId, `📋 لحجز <b>${service.name}</b>:\n\nأرسل أولاً <b>اسمك الصريح الكامل</b> من فضلك.\n\n(لإلغاء العملية في أي وقت اكتب: إلغاء)`);
+    await send(chatId, `📋 لحجز <b>${service.name}</b>:\n\nأرسل أولاً <b>اسمك الصريح الكامل</b> من فضلك.\n\n(لإلغاء العملية اكتب: إلغاء)`);
     return jsonResponse({ ok: true });
   }
 
@@ -1366,9 +1214,9 @@ async function handleCallbackQuery(supabase: any, query: any, requestClinicId: s
   return jsonResponse({ ok: true });
 }
 
-// ============================================================
-// ===== دوال مساعدة عامة =====
-// ============================================================
+// ════════════════════════════════════════════════════════════
+//  دوال مساعدة عامة
+// ════════════════════════════════════════════════════════════
 
 function jsonResponse(data: any, status = 200) {
   return new Response(JSON.stringify(data), { status, headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
@@ -1393,9 +1241,16 @@ function extractClinicId(param: string | null): string | null {
   return prefixed.match(/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i) ? prefixed : null;
 }
 
-// ✅ قراءة التوكن من system_settings أولاً (الجدول الصحيح)
-async function getBotTokenForClinic(supabase: any, clinicId: string | null): Promise<string | null> {
-  // 1. أولوية قصوى: system_settings
+async function getBotToken(supabase: any, clinicId: string | null): Promise<string | null> {
+  // 1. النظام المركزي (الأدمن)
+  const { data: globalToken } = await supabase
+    .from('global_settings')
+    .select('telegram_bot_token')
+    .limit(1)
+    .maybeSingle();
+  if (globalToken?.telegram_bot_token) return globalToken.telegram_bot_token;
+
+  // 2. system_settings
   const { data: systemSettings } = await supabase
     .from('system_settings')
     .select('telegram_bot_token')
@@ -1403,21 +1258,13 @@ async function getBotTokenForClinic(supabase: any, clinicId: string | null): Pro
     .maybeSingle();
   if (systemSettings?.telegram_bot_token) return systemSettings.telegram_bot_token;
 
-  // 2. محاولة من global_settings (للتوافق الخلفي)
-  const { data: globalSettings } = await supabase
-    .from('global_settings')
-    .select('telegram_bot_token')
-    .limit(1)
-    .maybeSingle();
-  if (globalSettings?.telegram_bot_token) return globalSettings.telegram_bot_token;
-
-  // 3. من جدول clinics (للعياادات القديمة)
+  // 3. العيادة (للتوافق الخلفي)
   if (clinicId) {
     const { data } = await supabase.from('clinics').select('bot_token').eq('id', clinicId).maybeSingle();
     if (data?.bot_token) return data.bot_token;
   }
 
-  // 4. أخيراً متغير البيئة
+  // 4. متغير البيئة
   return Deno.env.get('TELEGRAM_BOT_TOKEN') || null;
 }
 
@@ -1464,7 +1311,7 @@ async function notifyDoctor(supabase: any, botToken: string, clinicId: string, i
 
 function detectEmergency(text: string): boolean {
   const n = text.toLowerCase();
-  const kw = ['طوارئ','اسعاف','إسعاف','نزيف','اختناق','لا يتنفس','ألم شديد','الم شديد','جلطة','إغماء','فقدان وعي','تشنج','تسمم'];
+  const kw = ['طوارئ','اسعاف','نزيف','اختناق','لا يتنفس','ألم شديد','جلطة','إغماء','فقدان وعي','تشنج','تسمم'];
   return kw.some((k) => n.includes(k.toLowerCase()));
 }
 
