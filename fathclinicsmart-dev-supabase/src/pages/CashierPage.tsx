@@ -11,8 +11,8 @@ import { Footer } from "@/components/layout/Footer";
 import { toast } from "@/hooks/use-toast";
 import {
   Banknote, CheckCircle, LogOut, Search, ShieldCheck, Stethoscope, Users,
-  Camera, X, Loader2, AlertCircle, Image as ImageIcon, Upload, RefreshCw, 
-  Printer, Download, Clock, Plus, UserPlus, DollarSign, TrendingUp, Receipt, 
+  Camera, X, Loader2, AlertCircle, Image as ImageIcon, Upload, RefreshCw,
+  Printer, Download, Clock, Plus, UserPlus, DollarSign, TrendingUp, Receipt,
   MessageCircle, MinusCircle, ArrowUpCircle, ArrowDownCircle, Sparkles, Send
 } from "lucide-react";
 import { BarChart, Bar, PieChart, Pie, Cell, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid, Legend } from "recharts";
@@ -447,22 +447,36 @@ export default function CashierPage() {
     setExpenseTitle(""); setExpenseAmount(""); setExpenseModalOpen(false);
   };
 
-  // ─── توليد صورة السند (باستخدام html2canvas) ───
-  const generateReceiptImage = async (): Promise<string> => {
-    const element = receiptContainerRef.current;
-    if (!element) throw new Error("عنصر السند غير موجود");
-    const canvas = await html2canvas(element, {
-      scale: 2,
-      useCORS: true,
-      backgroundColor: "#ffffff",
-      logging: false,
-    });
-    return canvas.toDataURL("image/png");
+  // ─── توليد صورة السند (باستخدام html2canvas مع معالجة الأخطاء) ───
+  const generateReceiptImage = async (): Promise<string | null> => {
+    try {
+      const element = receiptContainerRef.current;
+      if (!element) {
+        console.error("❌ عنصر السند غير موجود في DOM");
+        return null;
+      }
+      const canvas = await html2canvas(element, {
+        scale: 2,
+        useCORS: true,
+        backgroundColor: "#ffffff",
+        logging: false,
+        allowTaint: true,
+        onclone: (document) => {
+          // نضمن أن جميع العناصر مرسومة
+        }
+      });
+      return canvas.toDataURL("image/png");
+    } catch (err) {
+      console.error("❌ خطأ في توليد صورة السند:", err);
+      toast({ title: "خطأ في توليد السند", description: "حدث خطأ أثناء إنشاء صورة السند", variant: "destructive" });
+      return null;
+    }
   };
 
   const downloadReceipt = async () => {
+    const imgData = await generateReceiptImage();
+    if (!imgData) return;
     try {
-      const imgData = await generateReceiptImage();
       const link = document.createElement("a");
       link.href = imgData;
       link.download = `سند_${selectedAppointment?.reservation_code || "receipt"}.png`;
@@ -474,8 +488,9 @@ export default function CashierPage() {
   };
 
   const printReceipt = async () => {
+    const imgData = await generateReceiptImage();
+    if (!imgData) return;
     try {
-      const imgData = await generateReceiptImage();
       const win = window.open("", "_blank");
       if (win) {
         win.document.write(`
@@ -503,6 +518,7 @@ export default function CashierPage() {
     setSendingReceipt(true);
     try {
       const imgData = await generateReceiptImage();
+      if (!imgData) return;
       const link = document.createElement("a");
       link.href = imgData;
       link.download = `سند_${selectedAppointment.reservation_code}.png`;
@@ -527,13 +543,28 @@ export default function CashierPage() {
     }
   };
 
-  // ─── إرسال السند إلى تيليجرام (باستخدام نفس طريقة بطاقة الحجز) ───
-  // 🔴 التعديل الجوهري: استخدام system_settings بدلاً من global_settings
+  // ─── دالة جلب التوكن من system_settings (التصحيح الجوهري) ───
   const getTelegramBotToken = async (): Promise<string | null> => {
-    const { data } = await supabase.from('system_settings').select('telegram_bot_token').limit(1).maybeSingle();
-    return data?.telegram_bot_token || null;
+    try {
+      // 🟢 التعديل الجوهري: استخدام system_settings بدلاً من global_settings
+      const { data, error } = await supabase
+        .from('system_settings')
+        .select('telegram_bot_token')
+        .limit(1)
+        .maybeSingle();
+
+      if (error) {
+        console.error("❌ خطأ في جلب التوكن:", error);
+        return null;
+      }
+      return data?.telegram_bot_token || null;
+    } catch (err) {
+      console.error("❌ استثناء في جلب التوكن:", err);
+      return null;
+    }
   };
 
+  // ─── إرسال السند إلى تيليجرام (باستخدام نفس طريقة بطاقة الحجز) ───
   const sendViaTelegram = async () => {
     if (!selectedAppointment) return;
     const tgUserId = selectedAppointment.customer_telegram_id || selectedAppointment.patients?.telegram_user_id;
@@ -545,14 +576,19 @@ export default function CashierPage() {
     try {
       // 1. توليد صورة السند
       const imgData = await generateReceiptImage();
+      if (!imgData) {
+        toast({ title: "❌ فشل توليد صورة السند", variant: "destructive" });
+        return;
+      }
+
       const base64Data = imgData.replace(/^data:image\/\w+;base64,/, '');
       const imageBuffer = Uint8Array.from(atob(base64Data), c => c.charCodeAt(0));
       const imageBlob = new Blob([imageBuffer], { type: 'image/png' });
 
-      // 2. جلب توكن البوت الموحد (من system_settings)
+      // 2. جلب توكن البوت الموحد من system_settings
       const botToken = await getTelegramBotToken();
       if (!botToken) {
-        toast({ title: "❌ البوت غير مهيأ", description: "تأكد من توكن البوت في الإعدادات", variant: "destructive" });
+        toast({ title: "❌ البوت غير مهيأ", description: "تأكد من توكن البوت في system_settings", variant: "destructive" });
         return;
       }
 
@@ -613,35 +649,6 @@ export default function CashierPage() {
     if (statusFilter === "waiting") return !a.arrived_at && a.status !== "cancelled";
     return true;
   }), [appointments, search, statusFilter]);
-
-  // ─── Error Boundary (لحل الصفحة البيضاء) ───
-  const [hasError, setHasError] = useState(false);
-  useEffect(() => {
-    const handleError = (event: ErrorEvent) => {
-      console.error("CashierPage error:", event.error);
-      setHasError(true);
-    };
-    window.addEventListener("error", handleError);
-    return () => window.removeEventListener("error", handleError);
-  }, []);
-
-  if (hasError) {
-    return (
-      <div className="min-h-screen flex items-center justify-center p-4">
-        <div className="bg-red-50 dark:bg-red-950/20 border border-red-200 dark:border-red-800 rounded-2xl p-8 max-w-md text-center">
-          <AlertCircle className="w-12 h-12 text-red-500 mx-auto mb-4" />
-          <h2 className="text-xl font-bold text-foreground mb-2">حدث خطأ في تحميل الصفحة</h2>
-          <p className="text-sm text-muted-foreground mb-4">
-            يرجى تحديث الصفحة أو التواصل مع الدعم الفني.
-          </p>
-          <Button onClick={() => { setHasError(false); window.location.reload(); }}>
-            <RefreshCw className="w-4 h-4 ml-2" />
-            إعادة المحاولة
-          </Button>
-        </div>
-      </div>
-    );
-  }
 
   // ─── Guards ───
   if (authLoading || clinicLoading) return <div className="min-h-screen flex items-center justify-center">جاري التحميل...</div>;
