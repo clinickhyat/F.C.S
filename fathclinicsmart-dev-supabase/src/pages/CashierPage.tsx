@@ -11,8 +11,8 @@ import { Footer } from "@/components/layout/Footer";
 import { toast } from "@/hooks/use-toast";
 import {
   Banknote, CheckCircle, LogOut, Search, ShieldCheck, Stethoscope, Users,
-  Camera, X, Loader2, AlertCircle, Image as ImageIcon, Upload, RefreshCw,
-  Printer, Download, Clock, Plus, UserPlus, DollarSign, TrendingUp, Receipt,
+  Camera, X, Loader2, AlertCircle, Image as ImageIcon, Upload, RefreshCw, 
+  Printer, Download, Clock, Plus, UserPlus, DollarSign, TrendingUp, Receipt, 
   MessageCircle, MinusCircle, ArrowUpCircle, ArrowDownCircle, Sparkles, Send
 } from "lucide-react";
 import { BarChart, Bar, PieChart, Pie, Cell, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid, Legend } from "recharts";
@@ -527,9 +527,9 @@ export default function CashierPage() {
     }
   };
 
-  // ─── إرسال السند إلى تيليجرام (مع تصحيح اسم الجدول إلى system_settings) ───
+  // ─── إرسال السند إلى تيليجرام (باستخدام نفس طريقة بطاقة الحجز) ───
+  // 🔴 التعديل الجوهري: استخدام system_settings بدلاً من global_settings
   const getTelegramBotToken = async (): Promise<string | null> => {
-    // 🔴 التصحيح: الجدول هو system_settings وليس global_settings
     const { data } = await supabase.from('system_settings').select('telegram_bot_token').limit(1).maybeSingle();
     return data?.telegram_bot_token || null;
   };
@@ -549,10 +549,10 @@ export default function CashierPage() {
       const imageBuffer = Uint8Array.from(atob(base64Data), c => c.charCodeAt(0));
       const imageBlob = new Blob([imageBuffer], { type: 'image/png' });
 
-      // 2. جلب توكن البوت الموحد من system_settings
+      // 2. جلب توكن البوت الموحد (من system_settings)
       const botToken = await getTelegramBotToken();
       if (!botToken) {
-        toast({ title: "❌ البوت غير مهيأ", description: "تأكد من توكن البوت في system_settings", variant: "destructive" });
+        toast({ title: "❌ البوت غير مهيأ", description: "تأكد من توكن البوت في الإعدادات", variant: "destructive" });
         return;
       }
 
@@ -613,6 +613,35 @@ export default function CashierPage() {
     if (statusFilter === "waiting") return !a.arrived_at && a.status !== "cancelled";
     return true;
   }), [appointments, search, statusFilter]);
+
+  // ─── Error Boundary (لحل الصفحة البيضاء) ───
+  const [hasError, setHasError] = useState(false);
+  useEffect(() => {
+    const handleError = (event: ErrorEvent) => {
+      console.error("CashierPage error:", event.error);
+      setHasError(true);
+    };
+    window.addEventListener("error", handleError);
+    return () => window.removeEventListener("error", handleError);
+  }, []);
+
+  if (hasError) {
+    return (
+      <div className="min-h-screen flex items-center justify-center p-4">
+        <div className="bg-red-50 dark:bg-red-950/20 border border-red-200 dark:border-red-800 rounded-2xl p-8 max-w-md text-center">
+          <AlertCircle className="w-12 h-12 text-red-500 mx-auto mb-4" />
+          <h2 className="text-xl font-bold text-foreground mb-2">حدث خطأ في تحميل الصفحة</h2>
+          <p className="text-sm text-muted-foreground mb-4">
+            يرجى تحديث الصفحة أو التواصل مع الدعم الفني.
+          </p>
+          <Button onClick={() => { setHasError(false); window.location.reload(); }}>
+            <RefreshCw className="w-4 h-4 ml-2" />
+            إعادة المحاولة
+          </Button>
+        </div>
+      </div>
+    );
+  }
 
   // ─── Guards ───
   if (authLoading || clinicLoading) return <div className="min-h-screen flex items-center justify-center">جاري التحميل...</div>;
