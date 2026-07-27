@@ -147,9 +147,9 @@ async function generateLuxuryBookingCard(booking: {
       } catch (_) {}
     }
 
-    // ✅ إصلاح SVG: إزالة direction="rtl" واستخدام text-anchor بدلاً من ذلك
+    // ✅ إصلاح SVG: استخدام text-anchor و font-family عربية
     const svg = `
-    <svg width="800" height="1000" viewBox="0 0 800 1000" xmlns="http://www.w3.org/2000/svg">
+    <svg width="800" height="1000" viewBox="0 0 800 1000" xmlns="http://www.w3.org/2000/svg" xml:lang="ar">
       <defs>
         <linearGradient id="bgGrad" x1="0%" y1="0%" x2="100%" y2="100%">
           <stop offset="0%" stop-color="#0f172a"/>
@@ -187,42 +187,42 @@ async function generateLuxuryBookingCard(booking: {
         <image x="80" y="85" width="90" height="90" href="${logoBase64}" preserveAspectRatio="xMidYMid slice"/>
       ` : `
         <rect x="80" y="85" width="90" height="90" rx="20" fill="rgba(255,255,255,0.2)"/>
-        <text x="125" y="142" font-family="Arial, sans-serif" font-size="42" fill="#ffffff" text-anchor="middle">🏥</text>
+        <text x="125" y="142" font-family="Cairo, Arial, sans-serif" font-size="42" fill="#ffffff" text-anchor="middle">🏥</text>
       `}
 
-      <text x="195" y="118" font-family="Arial, sans-serif" font-size="28" font-weight="bold" fill="#ffffff" text-anchor="start">${booking.clinicName}</text>
-      <text x="195" y="152" font-family="Arial, sans-serif" font-size="18" fill="rgba(255,255,255,0.85)" text-anchor="start">
+      <text x="195" y="118" font-family="Cairo, Arial, sans-serif" font-size="28" font-weight="bold" fill="#ffffff" text-anchor="start">${booking.clinicName}</text>
+      <text x="195" y="152" font-family="Cairo, Arial, sans-serif" font-size="18" fill="rgba(255,255,255,0.85)" text-anchor="start">
         ${booking.doctorName ? `تحت إشراف: د. ${booking.doctorName}` : 'بطاقة حجز موعد طبي مؤكد'}
       </text>
 
       <rect x="580" y="95" width="130" height="42" rx="21" fill="rgba(255,255,255,0.25)"/>
-      <text x="645" y="122" font-family="Arial, sans-serif" font-size="16" font-weight="bold" fill="#ffffff" text-anchor="middle">مؤكد ✓</text>
+      <text x="645" y="122" font-family="Cairo, Arial, sans-serif" font-size="16" font-weight="bold" fill="#ffffff" text-anchor="middle">مؤكد ✓</text>
 
-      <!-- 🔹 جميع النصوص التالية تعتمد على text-anchor="end" لتوافق RTL بدون direction="rtl" -->
-      <text x="700" y="270" font-family="Arial, sans-serif" font-size="16" fill="#64748b" text-anchor="end">اسم المريض الصريح</text>
-      <text x="700" y="305" font-family="Arial, sans-serif" font-size="26" font-weight="bold" fill="#0f172a" text-anchor="end">${booking.patientName}</text>
+      <!-- جميع النصوص تستخدم text-anchor="end" -->
+      <text x="700" y="270" font-family="Cairo, Arial, sans-serif" font-size="16" fill="#64748b" text-anchor="end">اسم المريض الصريح</text>
+      <text x="700" y="305" font-family="Cairo, Arial, sans-serif" font-size="26" font-weight="bold" fill="#0f172a" text-anchor="end">${booking.patientName}</text>
       <line x1="100" y1="330" x2="700" y2="330" stroke="#e2e8f0" stroke-width="1.5" stroke-dasharray="6,6"/>
 
-      <text x="700" y="370" font-family="Arial, sans-serif" font-size="16" fill="#64748b" text-anchor="end">رقم الهاتف التواصل</text>
-      <text x="700" y="405" font-family="Arial, sans-serif" font-size="22" font-weight="bold" fill="#0f172a" text-anchor="end" direction="ltr">${booking.patientPhone}</text>
+      <text x="700" y="370" font-family="Cairo, Arial, sans-serif" font-size="16" fill="#64748b" text-anchor="end">رقم الهاتف التواصل</text>
+      <text x="700" y="405" font-family="Cairo, Arial, sans-serif" font-size="22" font-weight="bold" fill="#0f172a" text-anchor="end">${booking.patientPhone}</text>
       <line x1="100" y1="430" x2="700" y2="430" stroke="#e2e8f0" stroke-width="1.5" stroke-dasharray="6,6"/>
 
-      <text x="700" y="470" font-family="Arial, sans-serif" font-size="16" fill="#64748b" text-anchor="end">الخدمة الطبية المطلوبة</text>
-      <text x="700" y="505" font-family="Arial, sans-serif" font-size="22" font-weight="bold" fill="#059669" text-anchor="end">${booking.serviceName}</text>
+      <text x="700" y="470" font-family="Cairo, Arial, sans-serif" font-size="16" fill="#64748b" text-anchor="end">الخدمة الطبية المطلوبة</text>
+      <text x="700" y="505" font-family="Cairo, Arial, sans-serif" font-size="22" font-weight="bold" fill="#059669" text-anchor="end">${booking.serviceName}</text>
       <line x1="100" y1="530" x2="700" y2="530" stroke="#e2e8f0" stroke-width="1.5" stroke-dasharray="6,6"/>
 
       <g>
         <rect x="410" y="560" width="290" height="85" rx="16" fill="#f8fafc"/>
-        <text x="680" y="590" font-family="Arial, sans-serif" font-size="14" fill="#64748b" text-anchor="end">📅 تاريخ الموعد</text>
-        <text x="680" y="625" font-family="Arial, sans-serif" font-size="20" font-weight="bold" fill="#0f172a" text-anchor="end">${booking.date}</text>
+        <text x="680" y="590" font-family="Cairo, Arial, sans-serif" font-size="14" fill="#64748b" text-anchor="end">📅 تاريخ الموعد</text>
+        <text x="680" y="625" font-family="Cairo, Arial, sans-serif" font-size="20" font-weight="bold" fill="#0f172a" text-anchor="end">${booking.date}</text>
 
         <rect x="100" y="560" width="290" height="85" rx="16" fill="#f8fafc"/>
-        <text x="370" y="590" font-family="Arial, sans-serif" font-size="14" fill="#64748b" text-anchor="end">⏰ الوقت المكتمل</text>
-        <text x="370" y="625" font-family="Arial, sans-serif" font-size="20" font-weight="bold" fill="#0f172a" text-anchor="end">${booking.time}</text>
+        <text x="370" y="590" font-family="Cairo, Arial, sans-serif" font-size="14" fill="#64748b" text-anchor="end">⏰ الوقت المكتمل</text>
+        <text x="370" y="625" font-family="Cairo, Arial, sans-serif" font-size="20" font-weight="bold" fill="#0f172a" text-anchor="end">${booking.time}</text>
       </g>
 
       <rect x="100" y="670" width="600" height="65" rx="20" fill="url(#goldGrad)"/>
-      <text x="400" y="711" font-family="Monospace, Arial, sans-serif" font-size="26" font-weight="bold" fill="#ffffff" text-anchor="middle">
+      <text x="400" y="711" font-family="Cairo, Arial, sans-serif" font-size="26" font-weight="bold" fill="#ffffff" text-anchor="middle">
         كود الحجز المباشر: ${booking.code}
       </text>
 
@@ -233,10 +233,10 @@ async function generateLuxuryBookingCard(booking: {
         </g>
       ` : ''}
 
-      <text x="400" y="930" font-family="Arial, sans-serif" font-size="16" font-weight="bold" fill="#94a3b8" text-anchor="middle">
+      <text x="400" y="930" font-family="Cairo, Arial, sans-serif" font-size="16" font-weight="bold" fill="#94a3b8" text-anchor="middle">
         Smart Clinic System — نظام إدارة العيادات الذكي
       </text>
-      <text x="400" y="958" font-family="Monospace, Arial, sans-serif" font-size="14" fill="#38bdf8" text-anchor="middle">
+      <text x="400" y="958" font-family="Cairo, Arial, sans-serif" font-size="14" fill="#38bdf8" text-anchor="middle">
         alkhyatalkhyat79@gmail.com
       </text>
     </svg>
@@ -361,7 +361,7 @@ async function generateWithGTTS(text: string): Promise<Uint8Array | null> {
 }
 
 // ============================================================
-// ===== دوال الذكاء الاصطناعي الذكي متعدد اللغات =====
+// ===== دوال الذكاء الاصطناعي الذكي =====
 // ============================================================
 
 async function callAI(userMessage: string, userName: string, clinicContext: string, tone = 'ودود ومحترم'): Promise<string | null> {
@@ -557,7 +557,6 @@ serve(async (req) => {
       }
 
       try {
-        // تحويل base64 إلى صورة
         const base64Data = receipt_image.replace(/^data:image\/\w+;base64,/, '');
         const imageBuffer = Uint8Array.from(atob(base64Data), c => c.charCodeAt(0));
         
@@ -1077,7 +1076,6 @@ async function finalizeBooking(supabase: any, send: any, chatId: number, tgId: s
     return true;
   }
 
-  // فحص الحد الأقصى للحجوزات اليومية (3 مواعيد كحد أقصى) مع استثناء معرف المطور 1303830148
   const todayStr = new Date().toISOString().slice(0, 10);
   const { count: todayCount } = await supabase
     .from('appointments')
@@ -1117,7 +1115,7 @@ async function finalizeBooking(supabase: any, send: any, chatId: number, tgId: s
   }
 
   const { data: service } = await supabase.from('services').select('name, price').eq('id', session.service_id).single();
-  const { data: clinicInfo } = await supabase.from('clinics').select('name, doctor_name, logo_url').eq('id', session.clinic_id).single();
+  const { data: clinicInfo } = await supabase.from('clinics').select('name, doctor_name, logo_url, receptionist_whatsapp').eq('id', session.clinic_id).single();
 
   const code = `RE-${String(Math.floor(1000 + Math.random() * 9000))}`;
   const { error } = await supabase.from('appointments').insert({
@@ -1138,8 +1136,7 @@ async function finalizeBooking(supabase: any, send: any, chatId: number, tgId: s
   }
   await clearSession(supabase, tgId);
 
-  const { data: clinicRow } = await supabase.from('clinics').select('phone, receptionist_whatsapp').eq('id', session.clinic_id).maybeSingle();
-  const waNum = (clinicRow?.receptionist_whatsapp || clinicRow?.phone || '').replace(/[^\d]/g, '');
+  const waNum = (clinicInfo?.receptionist_whatsapp || clinicInfo?.phone || '').replace(/[^\d]/g, '');
   const waTextOther = encodeURIComponent(`مرحباً، أريد حجز موعد باسم شخص آخر في ${clinicInfo?.name || 'العيادة'} - خدمة: ${service?.name || ''}`);
 
   // ✅ زر "حجز باسم شخص آخر" مع رابط واتساب موظف الاستقبال
@@ -1206,7 +1203,7 @@ async function handleCallbackQuery(supabase: any, query: any, requestClinicId: s
     body: JSON.stringify({ callback_query_id: query.id }),
   });
 
-  // ✅ إصلاح: زر "سأحضر" (تأكيد الحضور)
+  // ✅ زر "سأحضر" (تأكيد الحضور)
   if (data.startsWith('confirm_')) {
     const resCode = data.replace('confirm_', '');
     const { data: appointment, error } = await supabase
@@ -1229,13 +1226,6 @@ async function handleCallbackQuery(supabase: any, query: any, requestClinicId: s
         `🔖 ${appointment.reservation_code}\n\n` +
         `بانتظارك في موعدك 🌷`
       );
-      
-      // إشعار للعيادة
-      const { data: clinic } = await supabase
-        .from('clinics')
-        .select('name')
-        .eq('id', appointment.clinic_id)
-        .single();
       
       await notifyDoctor(supabase, botToken, appointment.clinic_id,
         `✅ <b>تأكيد حضور</b>\n👤 ${firstName}\n📅 ${appointment.date} ⏰ ${String(appointment.time).slice(0,5)}\n🔖 ${appointment.reservation_code}`
@@ -1348,30 +1338,38 @@ function extractClinicId(param: string | null): string | null {
   return prefixed.match(/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i) ? prefixed : null;
 }
 
-async function getBotTokenFromDB(supabase: any): Promise<string | null> {
-  const { data } = await supabase.from('system_settings').select('telegram_bot_token').eq('id', 1).single();
-  return data?.telegram_bot_token || null;
-}
-
+// ✅ إصلاح: قراءة التوكن من system_settings أولاً
 async function getBotTokenForClinic(supabase: any, clinicId: string | null): Promise<string | null> {
-  // ✅ إعطاء أولوية للتوكن الموحد للأدمن من global_settings
-  const { data: globalToken } = await supabase
+  // 1. أولوية قصوى للتوكن الموحد من system_settings (كما هو في قاعدة البيانات)
+  const { data: systemSettings } = await supabase
+    .from('system_settings')
+    .select('telegram_bot_token')
+    .limit(1)
+    .maybeSingle();
+  
+  if (systemSettings?.telegram_bot_token) {
+    return systemSettings.telegram_bot_token;
+  }
+
+  // 2. محاولة قراءة من global_settings (للتوافق الخلفي)
+  const { data: globalSettings } = await supabase
     .from('global_settings')
     .select('telegram_bot_token')
     .limit(1)
     .maybeSingle();
   
-  if (globalToken?.telegram_bot_token) {
-    return globalToken.telegram_bot_token;
+  if (globalSettings?.telegram_bot_token) {
+    return globalSettings.telegram_bot_token;
   }
 
-  // إذا لم يوجد، نبحث عن توكن العيادة القديم (للتوافق الخلفي)
+  // 3. إذا لم يوجد، نبحث عن توكن العيادة القديم (للتوافق الخلفي)
   if (clinicId) {
     const { data } = await supabase.from('clinics').select('bot_token').eq('id', clinicId).maybeSingle();
     if (data?.bot_token) return data.bot_token;
   }
   
-  return Deno.env.get('TELEGRAM_BOT_TOKEN') || await getBotTokenFromDB(supabase);
+  // 4. أخيراً، استخدام متغير البيئة
+  return Deno.env.get('TELEGRAM_BOT_TOKEN') || null;
 }
 
 async function sendMessage(botToken: string, chatId: number, text: string, replyMarkup?: any) {
