@@ -15,7 +15,6 @@ import {
 } from "lucide-react";
 import { BarChart, Bar, PieChart, Pie, Cell, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid, Legend } from "recharts";
 import { Html5Qrcode } from "html5-qrcode";
-import html2canvas from "html2canvas";
 
 type Appointment = {
   id: string;
@@ -532,20 +531,68 @@ export default function CashierPage() {
   };
 
   // ─── توليد صورة السند ───
-  const generateReceiptImage = useCallback(async (): Promise<string> => {
-    const element = document.getElementById("receipt-card-container");
-    if (!element) throw new Error("عنصر السند غير موجود");
-    const canvas = await html2canvas(element, { scale: 2, useCORS: true, backgroundColor: "#ffffff" });
-    return canvas.toDataURL("image/png");
-  }, []);
+  const generateReceiptBlob = async (): Promise<Blob> => {
+    // نستخدم نفس أسلوب كرت الحجز: إنشاء عنصر div في الذاكرة، ثم تحويله إلى صورة
+    const container = document.createElement('div');
+    container.id = 'receipt-temp-container';
+    container.style.cssText = 'position:absolute;left:-9999px;top:-9999px;width:400px;background:white;padding:24px;font-family:system-ui;border-radius:16px;box-shadow:0 20px 60px rgba(0,0,0,0.15);border:1px solid #e2e8f0;';
+    container.dir = 'rtl';
+    
+    const appt = selectedAppointment!;
+    const patientName = editPatientName || appt.extracted_patient_name || appt.patients?.name || 'غير محدد';
+    const patientPhone = editPatientPhone || appt.extracted_patient_phone || appt.patients?.phone || '';
+    const finalAmount = (appt.paid_amount || appt.services?.price || 0) - (appt.discount_amount || 0);
+    const discount = appt.discount_amount || 0;
+    
+    container.innerHTML = `
+      <div style="background:linear-gradient(135deg,#059669,#0d9488);padding:16px 20px;border-radius:12px;color:white;display:flex;align-items:center;gap:12px;margin-bottom:16px;">
+        <div style="background:rgba(255,255,255,0.2);border-radius:50%;width:48px;height:48px;display:flex;align-items:center;justify-content:center;font-size:28px;">${clinic?.logo_url ? `<img src="${clinic.logo_url}" style="width:40px;height:40px;border-radius:50%;object-fit:cover;">` : '🏥'}</div>
+        <div style="flex:1;">
+          <p style="font-size:10px;opacity:0.8;letter-spacing:1px;">OFFICIAL PAYMENT RECEIPT</p>
+          <h2 style="font-size:18px;font-weight:900;margin:0;">${clinic?.name || 'العيادة الطبية'}</h2>
+          <p style="font-size:11px;opacity:0.85;margin:2px 0 0;">سند استلام مبلغ رسمي</p>
+        </div>
+        <div style="background:rgba(255,255,255,0.2);padding:4px 12px;border-radius:8px;text-align:center;font-size:12px;font-weight:800;">مدفوع ✓</div>
+      </div>
+      <div style="space-y:8px;font-size:13px;color:#1a202c;">
+        <div style="display:flex;justify-content:space-between;padding:4px 0;border-bottom:1px solid #e2e8f0;"><span style="color:#64748b;">رقم السند / الحجز:</span><span style="font-weight:700;font-family:monospace;">${appt.reservation_code}</span></div>
+        <div style="display:flex;justify-content:space-between;padding:4px 0;border-bottom:1px solid #e2e8f0;"><span style="color:#64748b;">تاريخ ووقت السداد:</span><span style="font-weight:600;">${format(new Date(), "yyyy/MM/dd - hh:mm a")}</span></div>
+        <div style="display:flex;justify-content:space-between;padding:4px 0;border-bottom:1px solid #e2e8f0;"><span style="color:#64748b;">اسم المريض الصريح:</span><span style="font-weight:700;font-size:14px;">${patientName}</span></div>
+        <div style="display:flex;justify-content:space-between;padding:4px 0;border-bottom:1px solid #e2e8f0;"><span style="color:#64748b;">رقم الهاتف:</span><span style="font-weight:600;font-family:monospace;">${patientPhone || 'غير مسجل'}</span></div>
+        <div style="display:flex;justify-content:space-between;padding:4px 0;border-bottom:1px solid #e2e8f0;"><span style="color:#64748b;">الخدمة المقدمة:</span><span style="font-weight:600;">${appt.services?.name || 'فحص طبي'}</span></div>
+        ${discount > 0 ? `<div style="display:flex;justify-content:space-between;padding:4px 0;border-bottom:1px solid #e2e8f0;color:#dc2626;"><span>الخصم الممنوح:</span><span style="font-weight:700;">-${discount} ر.ي</span></div>` : ''}
+        <div style="display:flex;justify-content:space-between;padding:12px 0;border-top:2px dashed #d1d5db;margin-top:8px;background:#ecfdf5;border-radius:12px;padding:12px 16px;">
+          <span style="font-weight:700;color:#065f46;">المبلغ الصافي المستلم:</span>
+          <span style="font-size:20px;font-weight:900;color:#059669;">${finalAmount} <span style="font-size:12px;font-weight:400;">ر.ي</span></span>
+        </div>
+        <div style="display:flex;justify-content:space-between;padding:8px 0;border-top:1px solid #e2e8f0;margin-top:8px;font-size:10px;color:#64748b;">
+          <span>رمز إثبات الصحة: <span style="font-family:monospace;font-weight:700;">PAY-VERIFIED|${appt.reservation_code}|${finalAmount}YR|${appt.id.slice(0,6).toUpperCase()}</span></span>
+        </div>
+        <div style="text-align:center;font-size:9px;color:#94a3b8;border-top:1px solid #e2e8f0;padding-top:8px;margin-top:4px;">معتمد إلكترونياً عبر صندوق الخزينة</div>
+      </div>
+    `;
+    
+    document.body.appendChild(container);
+    
+    // استخدام html2canvas بشكل ديناميكي (يتم استيراده عند الحاجة)
+    const html2canvas = (await import('html2canvas')).default;
+    const canvas = await html2canvas(container, { scale: 2, backgroundColor: '#ffffff', useCORS: true });
+    document.body.removeChild(container);
+    
+    return new Promise((resolve) => {
+      canvas.toBlob((blob) => resolve(blob!), 'image/png');
+    });
+  };
 
   const downloadReceipt = async () => {
     try {
-      const imgData = await generateReceiptImage();
-      const link = document.createElement("a");
-      link.href = imgData;
-      link.download = `سند_دفع_${selectedAppointment?.reservation_code || "receipt"}.png`;
+      const blob = await generateReceiptBlob();
+      const url = URL.createObjectURL(blob);
+      const link = document.createElement('a');
+      link.href = url;
+      link.download = `سند_دفع_${selectedAppointment?.reservation_code || 'receipt'}.png`;
       link.click();
+      URL.revokeObjectURL(url);
     } catch (_) {
       toast({ title: "خطأ", description: "تعذر تنزيل السند", variant: "destructive" });
     }
@@ -553,19 +600,14 @@ export default function CashierPage() {
 
   const printReceipt = async () => {
     try {
-      const imgData = await generateReceiptImage();
-      const win = window.open("", "_blank");
+      const blob = await generateReceiptBlob();
+      const url = URL.createObjectURL(blob);
+      const win = window.open('', '_blank');
       if (win) {
-        win.document.write(`
-          <html>
-            <head><title>طباعة سند الدفع</title></head>
-            <body style="margin:0; display:flex; align-items:center; justify-content:center; min-height:100vh; background:#f4f4f5;">
-              <img src="${imgData}" style="max-width:100%; height:auto;" onload="window.print();window.close();" />
-            </body>
-          </html>
-        `);
+        win.document.write(`<img src="${url}" style="max-width:100%;height:auto;" onload="window.print();window.close();" />`);
         win.document.close();
       }
+      URL.revokeObjectURL(url);
     } catch (_) {
       toast({ title: "خطأ", description: "تعذر طباعة السند", variant: "destructive" });
     }
@@ -589,12 +631,13 @@ export default function CashierPage() {
 
     setSendingReceipt(true);
     try {
-      const imgData = await generateReceiptImage();
-      
-      const link = document.createElement("a");
-      link.href = imgData;
+      const blob = await generateReceiptBlob();
+      const url = URL.createObjectURL(blob);
+      const link = document.createElement('a');
+      link.href = url;
       link.download = `سند_${selectedAppointment.reservation_code}.png`;
       link.click();
+      URL.revokeObjectURL(url);
 
       const patientName = editPatientName || selectedAppointment.extracted_patient_name || selectedAppointment.patients?.name || "المريض";
       const finalAmt = (selectedAppointment.paid_amount || selectedAppointment.services?.price || 0) - (selectedAppointment.discount_amount || 0);
@@ -626,11 +669,11 @@ export default function CashierPage() {
     }
   };
 
-  // ─── إرسال السند إلى تيليجرام (بنفس طريقة كرت الحجز) ───
-  const getTelegramBotToken = useCallback(async (): Promise<string | null> => {
+  // ─── إرسال السند إلى تيليجرام (نفس طريقة كرت الحجز) ───
+  const getTelegramBotToken = async (): Promise<string | null> => {
     const { data } = await supabase.from('global_settings').select('telegram_bot_token').limit(1).maybeSingle();
     return data?.telegram_bot_token || null;
-  }, []);
+  };
 
   const sendViaTelegram = async () => {
     if (!selectedAppointment) return;
@@ -648,25 +691,20 @@ export default function CashierPage() {
 
     setSendingTelegram(true);
     try {
-      // 1. توليد صورة السند
-      const imgData = await generateReceiptImage();
+      // 1. توليد صورة السند (نفس طريقة توليد كرت الحجز)
+      const blob = await generateReceiptBlob();
       
-      // 2. تحويل إلى Blob (نفس طريقة كرت الحجز)
-      const base64Data = imgData.replace(/^data:image\/\w+;base64,/, '');
-      const imageBuffer = Uint8Array.from(atob(base64Data), c => c.charCodeAt(0));
-      const imageBlob = new Blob([imageBuffer], { type: 'image/png' });
-
-      // 3. جلب توكن البوت الموحد
+      // 2. جلب توكن البوت الموحد (نفس التوكن المستخدم في كرت الحجز)
       const botToken = await getTelegramBotToken();
       if (!botToken) {
         toast({ title: "❌ البوت غير مهيأ", description: "تأكد من توكن البوت في الإعدادات", variant: "destructive" });
         return;
       }
 
-      // 4. إرسال الصورة عبر sendPhoto (نفس طريقة بطاقة الحجز)
+      // 3. إرسال الصورة عبر sendPhoto (نفس طريقة كرت الحجز)
       const fd = new FormData();
       fd.append('chat_id', String(tgUserId));
-      fd.append('photo', imageBlob, `receipt_${selectedAppointment.reservation_code}.png`);
+      fd.append('photo', blob, `receipt_${selectedAppointment.reservation_code}.png`);
       fd.append('caption', 
         `🧾 <b>سند دفع رسمي</b>\n` +
         `━━━━━━━━━━━━━━━\n` +
@@ -1024,79 +1062,75 @@ export default function CashierPage() {
                   </span>
                 </div>
 
-                {/* السند الإلكتروني الفاخر */}
-                <div 
-                  id="receipt-card-container" 
-                  className="bg-white text-gray-900 rounded-2xl border border-gray-200 shadow-xl relative overflow-hidden" 
-                  style={{ direction: 'rtl', fontFamily: 'system-ui, -apple-system, sans-serif' }}
-                >
+                {/* السند الإلكتروني الفاخر - سيتم عرضه كصورة تولد في الذاكرة */}
+                <div className="bg-white text-gray-900 rounded-2xl border border-gray-200 shadow-xl relative overflow-hidden p-5" style={{ direction: 'rtl', fontFamily: 'system-ui, -apple-system, sans-serif' }}>
                   <div style={{
                     background: "linear-gradient(135deg, #059669 0%, #0d9488 50%, #0891b2 100%)",
-                    padding: "20px 24px 18px",
+                    padding: "16px 20px",
+                    borderRadius: "12px",
                     color: "white",
                     display: "flex",
                     alignItems: "center",
-                    gap: "14px"
+                    gap: "12px",
+                    marginBottom: "16px"
                   }}>
                     <div style={{
-                      width: "48px", height: "48px",
+                      width: "44px", height: "44px",
                       background: "rgba(255,255,255,0.2)",
-                      borderRadius: "12px",
+                      borderRadius: "50%",
                       display: "flex", alignItems: "center", justifyContent: "center",
                       flexShrink: 0,
-                      border: "1.5px solid rgba(255,255,255,0.3)",
+                      fontSize: "24px"
                     }}>
                       {clinic?.logo_url ? (
-                        <img src={clinic.logo_url} alt="logo" style={{ width: "36px", height: "36px", borderRadius: "8px", objectFit: "cover" }} />
+                        <img src={clinic.logo_url} alt="logo" style={{ width: "36px", height: "36px", borderRadius: "50%", objectFit: "cover" }} />
                       ) : (
-                        <span style={{ fontSize: "22px" }}>🏥</span>
+                        <span>🏥</span>
                       )}
                     </div>
-
                     <div style={{ flex: 1 }}>
-                      <p style={{ fontSize: "9px", opacity: 0.8, marginBottom: "3px", letterSpacing: "1.5px" }}>OFFICIAL PAYMENT RECEIPT</p>
+                      <p style={{ fontSize: "9px", opacity: 0.8, marginBottom: "2px", letterSpacing: "1px" }}>OFFICIAL PAYMENT RECEIPT</p>
                       <h2 style={{ fontSize: "17px", fontWeight: 900, margin: 0, lineHeight: 1.2 }}>
-                        {clinic?.name || "العيادة الطبية Smart Clinic"}
+                        {clinic?.name || "العيادة الطبية"}
                       </h2>
-                      <p style={{ fontSize: "10px", opacity: 0.85, marginTop: "3px" }}>سند استلام مبلغ رسمـي</p>
+                      <p style={{ fontSize: "10px", opacity: 0.85, marginTop: "2px" }}>سند استلام مبلغ رسمي</p>
                     </div>
-
                     <div style={{
                       background: "rgba(255,255,255,0.2)",
-                      borderRadius: "10px",
-                      padding: "6px 10px",
+                      borderRadius: "8px",
+                      padding: "4px 12px",
                       textAlign: "center",
-                      border: "1px solid rgba(255,255,255,0.25)",
+                      fontSize: "12px",
+                      fontWeight: 800
                     }}>
-                      <p style={{ fontSize: "8px", opacity: 0.9, margin: 0 }}>الحالة</p>
-                      <p style={{ fontSize: "10px", fontWeight: 800, margin: "2px 0 0" }}>مدفوع ✓</p>
+                      مدفوع ✓
                     </div>
                   </div>
 
-                  <div className="p-5 space-y-2 text-xs">
-                    <div className="flex justify-between items-center text-gray-600">
-                      <span>رقم السند / الحجز:</span>
-                      <span className="font-mono font-bold text-gray-900 bg-gray-100 px-2 py-0.5 rounded">{selectedAppointment.reservation_code}</span>
+                  <div className="space-y-2 text-sm">
+                    <div className="flex justify-between items-center border-b border-gray-100 pb-2">
+                      <span className="text-gray-500">رقم السند / الحجز:</span>
+                      <span className="font-mono font-bold">{selectedAppointment.reservation_code}</span>
                     </div>
-                    <div className="flex justify-between items-center text-gray-600">
-                      <span>تاريخ ووقت السداد:</span>
-                      <span className="font-medium text-gray-800">{format(new Date(), "yyyy/MM/dd - hh:mm a")}</span>
+                    <div className="flex justify-between items-center border-b border-gray-100 pb-2">
+                      <span className="text-gray-500">تاريخ ووقت السداد:</span>
+                      <span className="font-medium">{format(new Date(), "yyyy/MM/dd - hh:mm a")}</span>
                     </div>
-                    <div className="flex justify-between items-center text-gray-600">
-                      <span>اسم المريض الصريح:</span>
-                      <span className="font-bold text-gray-900 text-sm">{editPatientName || extractCleanInfo(selectedAppointment).cleanName}</span>
+                    <div className="flex justify-between items-center border-b border-gray-100 pb-2">
+                      <span className="text-gray-500">اسم المريض الصريح:</span>
+                      <span className="font-bold">{editPatientName || extractCleanInfo(selectedAppointment).cleanName}</span>
                     </div>
-                    <div className="flex justify-between items-center text-gray-600">
-                      <span>رقم الهاتف:</span>
-                      <span className="font-medium text-gray-800">{editPatientPhone || extractCleanInfo(selectedAppointment).cleanPhone}</span>
+                    <div className="flex justify-between items-center border-b border-gray-100 pb-2">
+                      <span className="text-gray-500">رقم الهاتف:</span>
+                      <span className="font-mono">{editPatientPhone || extractCleanInfo(selectedAppointment).cleanPhone}</span>
                     </div>
-                    <div className="flex justify-between items-center text-gray-600">
-                      <span>الخدمة المقدمة:</span>
-                      <span className="font-medium text-gray-800">{selectedAppointment.services?.name || "فحص طبي"}</span>
+                    <div className="flex justify-between items-center border-b border-gray-100 pb-2">
+                      <span className="text-gray-500">الخدمة المقدمة:</span>
+                      <span className="font-medium">{selectedAppointment.services?.name || "فحص طبي"}</span>
                     </div>
 
                     {(selectedAppointment.discount_amount || 0) > 0 && (
-                      <div className="flex justify-between items-center text-red-600">
+                      <div className="flex justify-between items-center text-red-600 border-b border-gray-100 pb-2">
                         <span>الخصم الممنوح:</span>
                         <span className="font-bold">-{selectedAppointment.discount_amount} ر.ي</span>
                       </div>
@@ -1105,34 +1139,28 @@ export default function CashierPage() {
                     <div className="my-3 border-t border-dashed border-gray-200" />
 
                     <div className="flex justify-between items-center bg-emerald-50/80 p-3 rounded-xl border border-emerald-100">
-                      <span className="font-bold text-emerald-900 text-sm">المبلغ الصافي المستلم:</span>
+                      <span className="font-bold text-emerald-900">المبلغ الصافي المستلم:</span>
                       <span className="font-black text-emerald-700 text-xl">
                         {(selectedAppointment.paid_amount || 0) - (selectedAppointment.discount_amount || 0)} <span className="text-xs font-normal">ر.ي</span>
                       </span>
                     </div>
 
-                    <div className="mt-4 pt-3 border-t border-gray-100 flex items-center justify-between">
-                      <div>
-                        <p className="text-[10px] font-bold text-gray-700">رمز إثبات صحة السند المالي:</p>
-                        <p className="text-[9px] font-mono text-gray-400 mt-0.5">{getUniquePaymentToken(selectedAppointment)}</p>
-                      </div>
-                      <div className="bg-white p-1 rounded-lg border border-gray-200 shrink-0">
-                        <img 
-                          src={`https://api.qrserver.com/v1/create-qr-code/?size=120x100&data=${encodeURIComponent(getUniquePaymentToken(selectedAppointment))}`} 
-                          alt="Payment Verification QR" 
-                          className="w-12 h-12"
-                          crossOrigin="anonymous"
-                        />
-                      </div>
+                    <div className="mt-3 pt-3 border-t border-gray-100 flex items-center justify-between">
+                      <span className="text-[10px] text-gray-500">رمز إثبات الصحة: <span className="font-mono font-bold">{getUniquePaymentToken(selectedAppointment)}</span></span>
+                      <img 
+                        src={`https://api.qrserver.com/v1/create-qr-code/?size=60x60&data=${encodeURIComponent(getUniquePaymentToken(selectedAppointment))}`} 
+                        alt="QR"
+                        className="w-12 h-12 rounded-lg border border-gray-200"
+                      />
                     </div>
 
-                    <div className="mt-3 text-center text-[9px] text-gray-400 border-t border-gray-100 pt-2">
+                    <div className="text-center text-[9px] text-gray-400 border-t border-gray-100 pt-2 mt-2">
                       معتمد إلكترونياً عبر صندوق الخزينة — جميع الحقوق محفوظة
                     </div>
                   </div>
                 </div>
 
-                {/* أزرار المشاركة المتقدمة */}
+                {/* أزرار المشاركة */}
                 <div className="grid grid-cols-2 gap-2 pt-2">
                   <Button variant="outline" size="sm" className="text-xs gap-1" onClick={downloadReceipt}>
                     <Download className="w-3.5 h-3.5" />
@@ -1152,7 +1180,6 @@ export default function CashierPage() {
                     إرسال للواتساب
                   </Button>
                   
-                  {/* زر إرسال السند عبر البوت الموحد لتليجرام (نفس طريقة كرت الحجز) */}
                   {(selectedAppointment.customer_telegram_id || selectedAppointment.patients?.telegram_user_id) && (
                     <Button 
                       size="sm" 
