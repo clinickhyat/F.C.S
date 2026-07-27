@@ -11,8 +11,8 @@ import { Footer } from "@/components/layout/Footer";
 import { toast } from "@/hooks/use-toast";
 import {
   Banknote, CheckCircle, LogOut, Search, ShieldCheck, Stethoscope, Users,
-  Camera, X, Loader2, AlertCircle, Image as ImageIcon, Upload, RefreshCw, 
-  Printer, Download, Clock, Plus, UserPlus, DollarSign, TrendingUp, Receipt, 
+  Camera, X, Loader2, AlertCircle, Image as ImageIcon, Upload, RefreshCw,
+  Printer, Download, Clock, Plus, UserPlus, DollarSign, TrendingUp, Receipt,
   MessageCircle, MinusCircle, ArrowUpCircle, ArrowDownCircle, Sparkles, Send
 } from "lucide-react";
 import { BarChart, Bar, PieChart, Pie, Cell, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid, Legend } from "recharts";
@@ -449,7 +449,6 @@ export default function CashierPage() {
 
   // ─── توليد صورة السند (باستخدام html2canvas) ───
   const generateReceiptImage = async (): Promise<string> => {
-    // استخدام ref بدلاً من getElementById لضمان وجود العنصر
     const element = receiptContainerRef.current;
     if (!element) throw new Error("عنصر السند غير موجود");
     const canvas = await html2canvas(element, {
@@ -457,9 +456,6 @@ export default function CashierPage() {
       useCORS: true,
       backgroundColor: "#ffffff",
       logging: false,
-      onclone: (document) => {
-        // تأكد من أن جميع العناصر مرسومة
-      }
     });
     return canvas.toDataURL("image/png");
   };
@@ -531,9 +527,10 @@ export default function CashierPage() {
     }
   };
 
-  // ─── إرسال السند إلى تيليجرام (باستخدام نفس طريقة بطاقة الحجز) ───
+  // ─── إرسال السند إلى تيليجرام (مع تصحيح اسم الجدول إلى system_settings) ───
   const getTelegramBotToken = async (): Promise<string | null> => {
-    const { data } = await supabase.from('global_settings').select('telegram_bot_token').limit(1).maybeSingle();
+    // 🔴 التصحيح: الجدول هو system_settings وليس global_settings
+    const { data } = await supabase.from('system_settings').select('telegram_bot_token').limit(1).maybeSingle();
     return data?.telegram_bot_token || null;
   };
 
@@ -552,10 +549,10 @@ export default function CashierPage() {
       const imageBuffer = Uint8Array.from(atob(base64Data), c => c.charCodeAt(0));
       const imageBlob = new Blob([imageBuffer], { type: 'image/png' });
 
-      // 2. جلب توكن البوت الموحد
+      // 2. جلب توكن البوت الموحد من system_settings
       const botToken = await getTelegramBotToken();
       if (!botToken) {
-        toast({ title: "❌ البوت غير مهيأ", description: "تأكد من توكن البوت في الإعدادات", variant: "destructive" });
+        toast({ title: "❌ البوت غير مهيأ", description: "تأكد من توكن البوت في system_settings", variant: "destructive" });
         return;
       }
 
