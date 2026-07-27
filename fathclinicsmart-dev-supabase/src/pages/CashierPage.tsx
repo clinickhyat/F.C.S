@@ -532,16 +532,16 @@ export default function CashierPage() {
   };
 
   // ─── توليد صورة السند ───
-  const generateReceiptCanvas = async (): Promise<HTMLCanvasElement> => {
+  const generateReceiptImage = useCallback(async (): Promise<string> => {
     const element = document.getElementById("receipt-card-container");
-    if (!element) throw new Error("عنصر السند غير متوفر");
-    return await html2canvas(element, { scale: 3, useCORS: true, backgroundColor: "#ffffff" });
-  };
+    if (!element) throw new Error("عنصر السند غير موجود");
+    const canvas = await html2canvas(element, { scale: 2, useCORS: true, backgroundColor: "#ffffff" });
+    return canvas.toDataURL("image/png");
+  }, []);
 
   const downloadReceipt = async () => {
     try {
-      const canvas = await generateReceiptCanvas();
-      const imgData = canvas.toDataURL("image/png");
+      const imgData = await generateReceiptImage();
       const link = document.createElement("a");
       link.href = imgData;
       link.download = `سند_دفع_${selectedAppointment?.reservation_code || "receipt"}.png`;
@@ -553,8 +553,7 @@ export default function CashierPage() {
 
   const printReceipt = async () => {
     try {
-      const canvas = await generateReceiptCanvas();
-      const imgData = canvas.toDataURL("image/png");
+      const imgData = await generateReceiptImage();
       const win = window.open("", "_blank");
       if (win) {
         win.document.write(`
@@ -590,8 +589,7 @@ export default function CashierPage() {
 
     setSendingReceipt(true);
     try {
-      const canvas = await generateReceiptCanvas();
-      const imgData = canvas.toDataURL("image/png");
+      const imgData = await generateReceiptImage();
       
       const link = document.createElement("a");
       link.href = imgData;
@@ -628,11 +626,11 @@ export default function CashierPage() {
     }
   };
 
-  // ─── إرسال السند إلى تيليجرام (نفس طريقة بطاقة الحجز) ───
-  const getTelegramBotToken = async (): Promise<string | null> => {
+  // ─── إرسال السند إلى تيليجرام (بنفس طريقة كرت الحجز) ───
+  const getTelegramBotToken = useCallback(async (): Promise<string | null> => {
     const { data } = await supabase.from('global_settings').select('telegram_bot_token').limit(1).maybeSingle();
     return data?.telegram_bot_token || null;
-  };
+  }, []);
 
   const sendViaTelegram = async () => {
     if (!selectedAppointment) return;
@@ -650,20 +648,22 @@ export default function CashierPage() {
 
     setSendingTelegram(true);
     try {
-      const canvas = await generateReceiptCanvas();
-      const imageDataUrl = canvas.toDataURL("image/png");
+      // 1. توليد صورة السند
+      const imgData = await generateReceiptImage();
       
-      // تحويل إلى Blob (نفس طريقة بطاقة الحجز)
-      const base64Data = imageDataUrl.replace(/^data:image\/\w+;base64,/, '');
+      // 2. تحويل إلى Blob (نفس طريقة كرت الحجز)
+      const base64Data = imgData.replace(/^data:image\/\w+;base64,/, '');
       const imageBuffer = Uint8Array.from(atob(base64Data), c => c.charCodeAt(0));
       const imageBlob = new Blob([imageBuffer], { type: 'image/png' });
 
+      // 3. جلب توكن البوت الموحد
       const botToken = await getTelegramBotToken();
       if (!botToken) {
         toast({ title: "❌ البوت غير مهيأ", description: "تأكد من توكن البوت في الإعدادات", variant: "destructive" });
         return;
       }
 
+      // 4. إرسال الصورة عبر sendPhoto (نفس طريقة بطاقة الحجز)
       const fd = new FormData();
       fd.append('chat_id', String(tgUserId));
       fd.append('photo', imageBlob, `receipt_${selectedAppointment.reservation_code}.png`);
@@ -743,6 +743,7 @@ export default function CashierPage() {
       <div id={QR_FILE_ELEMENT_ID} className="hidden" />
       <input type="file" ref={fileInputRef} accept="image/*" className="hidden" onChange={handleFileUpload} />
 
+      {/* مودال الماسح الضوئي */}
       {scannerOpen && (
         <div className="fixed inset-0 z-50 bg-black/90 backdrop-blur-lg flex items-center justify-center p-4">
           <div className="bg-white dark:bg-gray-900 rounded-3xl max-w-sm w-full shadow-2xl overflow-hidden border border-border">
@@ -803,6 +804,7 @@ export default function CashierPage() {
         </div>
       )}
 
+      {/* قفل PIN */}
       {!unlocked && (
         <div className="fixed inset-0 z-50 bg-background/95 backdrop-blur-xl flex items-center justify-center p-4">
           <div className="card-modern p-8 w-full max-w-sm text-center space-y-5">
@@ -814,6 +816,7 @@ export default function CashierPage() {
         </div>
       )}
 
+      {/* الهيدر */}
       <header className="glass-strong sticky top-0 z-40">
         <div className="container mx-auto px-4 h-18 py-3 flex items-center justify-between">
           <div className="flex items-center gap-3">
@@ -829,6 +832,7 @@ export default function CashierPage() {
         </div>
       </header>
 
+      {/* المحتوى الرئيسي */}
       <main className="flex-1 container mx-auto px-4 py-6 space-y-6">
         <CashierStats appointments={appointments} expenses={expenses} />
 
@@ -1128,6 +1132,7 @@ export default function CashierPage() {
                   </div>
                 </div>
 
+                {/* أزرار المشاركة المتقدمة */}
                 <div className="grid grid-cols-2 gap-2 pt-2">
                   <Button variant="outline" size="sm" className="text-xs gap-1" onClick={downloadReceipt}>
                     <Download className="w-3.5 h-3.5" />
@@ -1147,6 +1152,7 @@ export default function CashierPage() {
                     إرسال للواتساب
                   </Button>
                   
+                  {/* زر إرسال السند عبر البوت الموحد لتليجرام (نفس طريقة كرت الحجز) */}
                   {(selectedAppointment.customer_telegram_id || selectedAppointment.patients?.telegram_user_id) && (
                     <Button 
                       size="sm" 
@@ -1190,6 +1196,7 @@ export default function CashierPage() {
         </div>
       )}
 
+      {/* مودال مريض مباشر */}
       <Dialog open={walkInOpen} onOpenChange={setWalkInOpen}>
         <DialogContent dir="rtl" className="max-w-md">
           <DialogHeader><DialogTitle>إضافة مريض مباشر (Walk-In)</DialogTitle></DialogHeader>
@@ -1201,6 +1208,7 @@ export default function CashierPage() {
         </DialogContent>
       </Dialog>
 
+      {/* مودال مصروف جديد */}
       <Dialog open={expenseModalOpen} onOpenChange={setExpenseModalOpen}>
         <DialogContent dir="rtl" className="max-w-md">
           <DialogHeader><DialogTitle className="text-red-600 flex items-center gap-1"><MinusCircle className="w-5 h-5" /> تسجـيل مصروف جديد</DialogTitle></DialogHeader>
