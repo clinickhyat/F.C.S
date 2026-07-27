@@ -7,12 +7,20 @@ const corsHeaders = {
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type, x-supabase-client-platform, x-supabase-client-platform-version, x-supabase-client-runtime, x-supabase-client-runtime-version',
 };
 
-// معرف المطور المخصص للاستثناء من حدود الحجوزات
+// ============================================================
+// ===== المعرفات الخاصة =====
+// ============================================================
+
+// ✅ معرف المطور (يستثنى من حدود الحجوزات ومن ساعات الدوام)
 const DEV_TELEGRAM_ID = "1303830148";
 
-const AVAILABLE_HOURS = ['08:00','08:30','09:00','09:30','10:00','10:30','11:00','11:30','12:00','12:30','13:00','13:30','14:00','14:30','15:00','15:30'];
-const CLOSING_HOUR = 15;
-const CLOSING_MINUTE = 30;
+// ============================================================
+// ===== ساعات الدوام (افتراضية، سيتم جلبها من قاعدة البيانات) =====
+// ============================================================
+
+const DEFAULT_AVAILABLE_HOURS = ['08:00','08:30','09:00','09:30','10:00','10:30','11:00','11:30','12:00','12:30','13:00','13:30','14:00','14:30','15:00','15:30'];
+const DEFAULT_CLOSING_HOUR = 15;
+const DEFAULT_CLOSING_MINUTE = 30;
 
 let wasmInitialized = false;
 async function ensureWasm() {
@@ -46,24 +54,100 @@ function isPastTime(dateStr: string, timeStr: string): boolean {
   return selected < now;
 }
 
-function isWithinWorkingHours(timeStr: string): boolean {
-  const [hour, minute] = timeStr.split(':').map(Number);
-  if (hour > CLOSING_HOUR) return false;
-  if (hour === CLOSING_HOUR && minute >= CLOSING_MINUTE) return false;
-  return true;
-}
-
 function isPastDate(dateStr: string): boolean {
   const today = new Date().toISOString().slice(0, 10);
   return dateStr < today;
 }
 
-function getAvailableTimes(dateStr: string, bookedTimes: Set<string>): string[] {
+// ✅ دوال ساعات الدوام الديناميكية (تقرأ من قاعدة البيانات)
+async function getClinicWorkingHours(supabase: any, clinicId: string) {
+  try {
+    const { data: clinic } = await supabase
+      .from('clinics')
+      .select('working_hours')
+      .eq('id', clinicId)
+      .maybeSingle();
+    
+    if (clinic?.working_hours) {
+      const wh = typeof clinic.working_hours === 'string' 
+        ? JSON.parse(clinic.working_hours) 
+        : clinic.working_hours;
+      
+      // استخراج أيام العمل وساعات العمل من كائن working_hours
+      // نتوقع هيكل: { "sunday": { "open": "08:00", "close": "16:00" }, ... }
+      // أو { "open": "08:00", "close": "16:00" } (لكل الأيام)
+      let openTime = "08:00";
+      let closeTime = "16:00";
+      
+      // إذا كان هناك أيام محددة، نأخذ أول يوم متاح
+      if (wh && typeof wh === 'object') {
+        const days = ['sunday', 'monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday'];
+        for (const day of days) {
+          if (wh[day]?.open && wh[day]?.close) {
+            openTime = wh[day].open;
+            closeTime = wh[day].close;
+            break;
+          }
+        }
+        // إذا لم نجد أي يوم، نأخذ القيم المباشرة
+        if (!openTime && wh.open) openTime = wh.open;
+        if (!closeTime && wh.close) closeTime = wh.close;
+      }
+      
+      const [openH, openM] = openTime.split(':').map(Number);
+      const [closeH, closeM] = closeTime.split(':').map(Number);
+      
+      // توليد الأوقات المتاحة كل 30 دقيقة من open إلى close
+      const hours: string[] = [];
+      let currentH = openH;
+      let currentM = openM;
+      while (currentH < closeH || (currentH === closeH && currentM < closeM)) {
+        hours.push(`${String(currentH).padStart(2, '0')}:${String(currentM).padStart(2, '0')}`);
+        currentM += 30;
+        if (currentM >= 60) {
+          currentM = 0;
+          currentH += 1;
+        }
+      }
+      
+      return { 
+        availableHours: hours.length > 0 ? hours : DEFAULT_AVAILABLE_HOURS,
+        closingHour: closeH,
+        closingMinute: closeM,
+        openTime,
+        closeTime
+      };
+    }
+  } catch (e) {
+    console.warn('Error parsing working_hours, using defaults:', e);
+  }
+  
+  return { 
+    availableHours: DEFAULT_AVAILABLE_HOURS, 
+    closingHour: DEFAULT_CLOSING_HOUR, 
+    closingMinute: DEFAULT_CLOSING_MINUTE,
+    openTime: '08:00',
+    closeTime: '16:00'
+  };
+}
+
+function isWithinWorkingHours(timeStr: string, closingHour: number, closingMinute: number): boolean {
+  const [hour, minute] = timeStr.split(':').map(Number);
+  if (hour > closingHour) return false;
+  if (hour === closingHour && minute >= closingMinute) return false;
+  return true;
+}
+
+function getAvailableTimes(dateStr: string, bookedTimes: Set<string>, availableHours: string[], closingHour: number, closingMinute: number): string[] {
   const now = new Date();
   const todayStr = now.toISOString().slice(0, 10);
-  return AVAILABLE_HOURS.filter((time) => {
+  
+  // ✅ إذا كان المستخدم هو المطور، يظهر له جميع الأوقات المتاحة (لا يخضع للوقت الفائت)
+  // لكن لا يزال يخضع للحجوزات المحجوزة
+  return availableHours.filter((time) => {
     if (bookedTimes.has(time)) return false;
-    if (!isWithinWorkingHours(time)) return false;
+    if (!isWithinWorkingHours(time, closingHour, closingMinute)) return false;
+    // للمستخدمين العاديين فقط: منع الأوقات الفائتة
     if (dateStr === todayStr) {
       const [hour, minute] = time.split(':').map(Number);
       const timeDate = new Date(now);
@@ -107,7 +191,7 @@ function stripEmojis(text: string): string {
 }
 
 // ============================================================
-// ===== توليد بطاقة الحجز الطبية الفاخرة (SVG -> PNG) =====
+// ===== توليد بطاقة الحجز الفاخرة (SVG -> PNG) =====
 // ============================================================
 
 async function generateLuxuryBookingCard(booking: {
@@ -125,7 +209,7 @@ async function generateLuxuryBookingCard(booking: {
     await ensureWasm();
 
     const qrData = `RESERVATION:${booking.code}|CLINIC:${booking.clinicName}|PATIENT:${booking.patientName}|DATE:${booking.date} ${booking.time}`;
-    const qrApiUrl = `https://api.qrserver.com/v1/create-qr-code/?size=220x220&data=${encodeURIComponent(qrData)}`;
+    const qrApiUrl = `https://api.qrserver.com/v1/create-qr-code/?size=180x180&data=${encodeURIComponent(qrData)}`;
 
     let qrBase64 = "";
     try {
@@ -147,105 +231,106 @@ async function generateLuxuryBookingCard(booking: {
       } catch (_) {}
     }
 
-    // ✅ إصلاح SVG: استخدام text-anchor و font-family عربية
+    // ✅ تصميم بطاقة احترافي مستوحى من سند الدفع
     const svg = `
-    <svg width="800" height="1000" viewBox="0 0 800 1000" xmlns="http://www.w3.org/2000/svg" xml:lang="ar">
+    <svg width="800" height="950" viewBox="0 0 800 950" xmlns="http://www.w3.org/2000/svg" xml:lang="ar">
       <defs>
         <linearGradient id="bgGrad" x1="0%" y1="0%" x2="100%" y2="100%">
           <stop offset="0%" stop-color="#0f172a"/>
           <stop offset="50%" stop-color="#1e293b"/>
           <stop offset="100%" stop-color="#0f172a"/>
         </linearGradient>
-
-        <linearGradient id="cardHeaderGrad" x1="0%" y1="0%" x2="100%" y2="0%">
+        <linearGradient id="headerGrad" x1="0%" y1="0%" x2="100%" y2="0%">
           <stop offset="0%" stop-color="#059669"/>
           <stop offset="50%" stop-color="#0d9488"/>
           <stop offset="100%" stop-color="#0284c7"/>
         </linearGradient>
-
         <linearGradient id="goldGrad" x1="0%" y1="0%" x2="100%" y2="100%">
           <stop offset="0%" stop-color="#f59e0b"/>
           <stop offset="100%" stop-color="#d97706"/>
         </linearGradient>
-
-        <filter id="glassShadow" x="-10%" y="-10%" width="120%" height="120%">
-          <feDropShadow dx="0" dy="12" stdDeviation="16" flood-color="#000000" flood-opacity="0.4"/>
+        <filter id="shadow" x="-10%" y="-10%" width="120%" height="120%">
+          <feDropShadow dx="0" dy="8" stdDeviation="12" flood-color="#000000" flood-opacity="0.3"/>
         </filter>
       </defs>
 
-      <rect width="800" height="1000" fill="url(#bgGrad)"/>
-      <circle cx="700" cy="100" r="300" fill="#059669" opacity="0.12"/>
-      <circle cx="100" cy="900" r="250" fill="#0284c7" opacity="0.12"/>
+      <rect width="800" height="950" fill="url(#bgGrad)"/>
+      <circle cx="700" cy="100" r="250" fill="#059669" opacity="0.08"/>
+      <circle cx="100" cy="850" r="200" fill="#0284c7" opacity="0.08"/>
 
-      <g filter="url(#glassShadow)">
-        <rect x="50" y="60" width="700" height="820" rx="32" fill="#ffffff"/>
+      <g filter="url(#shadow)">
+        <rect x="40" y="50" width="720" height="830" rx="28" fill="#ffffff"/>
       </g>
 
-      <path d="M 50 92 C 50 74.327 64.327 60 82 60 L 718 60 C 735.673 60 750 74.327 750 92 L 750 200 L 50 200 Z" fill="url(#cardHeaderGrad)"/>
+      <!-- Header -->
+      <path d="M 40 78 C 40 62.538 52.538 50 68 50 L 732 50 C 747.462 50 760 62.538 760 78 L 760 180 L 40 180 Z" fill="url(#headerGrad)"/>
 
       ${logoBase64 ? `
-        <image x="80" y="85" width="90" height="90" href="${logoBase64}" preserveAspectRatio="xMidYMid slice"/>
+        <image x="70" y="75" width="80" height="80" href="${logoBase64}" preserveAspectRatio="xMidYMid slice" style="border-radius:12px;"/>
       ` : `
-        <rect x="80" y="85" width="90" height="90" rx="20" fill="rgba(255,255,255,0.2)"/>
-        <text x="125" y="142" font-family="Cairo, Arial, sans-serif" font-size="42" fill="#ffffff" text-anchor="middle">🏥</text>
+        <rect x="70" y="75" width="80" height="80" rx="16" fill="rgba(255,255,255,0.2)"/>
+        <text x="110" y="130" font-family="Cairo, Arial, sans-serif" font-size="40" fill="#ffffff" text-anchor="middle">🏥</text>
       `}
 
-      <text x="195" y="118" font-family="Cairo, Arial, sans-serif" font-size="28" font-weight="bold" fill="#ffffff" text-anchor="start">${booking.clinicName}</text>
-      <text x="195" y="152" font-family="Cairo, Arial, sans-serif" font-size="18" fill="rgba(255,255,255,0.85)" text-anchor="start">
-        ${booking.doctorName ? `تحت إشراف: د. ${booking.doctorName}` : 'بطاقة حجز موعد طبي مؤكد'}
+      <text x="175" y="110" font-family="Cairo, Arial, sans-serif" font-size="26" font-weight="bold" fill="#ffffff" text-anchor="start">${booking.clinicName}</text>
+      <text x="175" y="145" font-family="Cairo, Arial, sans-serif" font-size="16" fill="rgba(255,255,255,0.85)" text-anchor="start">
+        ${booking.doctorName ? `تحت إشراف د. ${booking.doctorName}` : 'بطاقة حجز موعد طبي مؤكد'}
       </text>
 
-      <rect x="580" y="95" width="130" height="42" rx="21" fill="rgba(255,255,255,0.25)"/>
-      <text x="645" y="122" font-family="Cairo, Arial, sans-serif" font-size="16" font-weight="bold" fill="#ffffff" text-anchor="middle">مؤكد ✓</text>
+      <rect x="570" y="85" width="140" height="40" rx="20" fill="rgba(255,255,255,0.25)"/>
+      <text x="640" y="111" font-family="Cairo, Arial, sans-serif" font-size="15" font-weight="bold" fill="#ffffff" text-anchor="middle">مؤكد ✓</text>
 
-      <!-- جميع النصوص تستخدم text-anchor="end" -->
-      <text x="700" y="270" font-family="Cairo, Arial, sans-serif" font-size="16" fill="#64748b" text-anchor="end">اسم المريض الصريح</text>
-      <text x="700" y="305" font-family="Cairo, Arial, sans-serif" font-size="26" font-weight="bold" fill="#0f172a" text-anchor="end">${booking.patientName}</text>
-      <line x1="100" y1="330" x2="700" y2="330" stroke="#e2e8f0" stroke-width="1.5" stroke-dasharray="6,6"/>
+      <!-- تفاصيل البطاقة -->
+      <g font-family="Cairo, Arial, sans-serif">
+        <text x="720" y="235" font-size="14" fill="#64748b" text-anchor="end">اسم المريض الصريح</text>
+        <text x="720" y="270" font-size="24" font-weight="bold" fill="#0f172a" text-anchor="end">${booking.patientName}</text>
+        <line x1="80" y1="295" x2="720" y2="295" stroke="#e2e8f0" stroke-width="1.5" stroke-dasharray="6,6"/>
 
-      <text x="700" y="370" font-family="Cairo, Arial, sans-serif" font-size="16" fill="#64748b" text-anchor="end">رقم الهاتف التواصل</text>
-      <text x="700" y="405" font-family="Cairo, Arial, sans-serif" font-size="22" font-weight="bold" fill="#0f172a" text-anchor="end">${booking.patientPhone}</text>
-      <line x1="100" y1="430" x2="700" y2="430" stroke="#e2e8f0" stroke-width="1.5" stroke-dasharray="6,6"/>
+        <text x="720" y="330" font-size="14" fill="#64748b" text-anchor="end">رقم الهاتف للتواصل</text>
+        <text x="720" y="365" font-size="20" font-weight="bold" fill="#0f172a" text-anchor="end" direction="ltr">${booking.patientPhone}</text>
+        <line x1="80" y1="390" x2="720" y2="390" stroke="#e2e8f0" stroke-width="1.5" stroke-dasharray="6,6"/>
 
-      <text x="700" y="470" font-family="Cairo, Arial, sans-serif" font-size="16" fill="#64748b" text-anchor="end">الخدمة الطبية المطلوبة</text>
-      <text x="700" y="505" font-family="Cairo, Arial, sans-serif" font-size="22" font-weight="bold" fill="#059669" text-anchor="end">${booking.serviceName}</text>
-      <line x1="100" y1="530" x2="700" y2="530" stroke="#e2e8f0" stroke-width="1.5" stroke-dasharray="6,6"/>
+        <text x="720" y="425" font-size="14" fill="#64748b" text-anchor="end">الخدمة الطبية المطلوبة</text>
+        <text x="720" y="460" font-size="22" font-weight="bold" fill="#059669" text-anchor="end">${booking.serviceName}</text>
+        <line x1="80" y1="485" x2="720" y2="485" stroke="#e2e8f0" stroke-width="1.5" stroke-dasharray="6,6"/>
 
-      <g>
-        <rect x="410" y="560" width="290" height="85" rx="16" fill="#f8fafc"/>
-        <text x="680" y="590" font-family="Cairo, Arial, sans-serif" font-size="14" fill="#64748b" text-anchor="end">📅 تاريخ الموعد</text>
-        <text x="680" y="625" font-family="Cairo, Arial, sans-serif" font-size="20" font-weight="bold" fill="#0f172a" text-anchor="end">${booking.date}</text>
+        <!-- التاريخ والوقت -->
+        <g>
+          <rect x="420" y="510" width="300" height="80" rx="14" fill="#f8fafc"/>
+          <text x="700" y="540" font-size="13" fill="#64748b" text-anchor="end">📅 تاريخ الموعد</text>
+          <text x="700" y="572" font-size="20" font-weight="bold" fill="#0f172a" text-anchor="end">${booking.date}</text>
 
-        <rect x="100" y="560" width="290" height="85" rx="16" fill="#f8fafc"/>
-        <text x="370" y="590" font-family="Cairo, Arial, sans-serif" font-size="14" fill="#64748b" text-anchor="end">⏰ الوقت المكتمل</text>
-        <text x="370" y="625" font-family="Cairo, Arial, sans-serif" font-size="20" font-weight="bold" fill="#0f172a" text-anchor="end">${booking.time}</text>
+          <rect x="80" y="510" width="300" height="80" rx="14" fill="#f8fafc"/>
+          <text x="360" y="540" font-size="13" fill="#64748b" text-anchor="end">⏰ الوقت المكتمل</text>
+          <text x="360" y="572" font-size="20" font-weight="bold" fill="#0f172a" text-anchor="end">${booking.time}</text>
+        </g>
+
+        <!-- كود الحجز (بارز) -->
+        <rect x="80" y="615" width="640" height="60" rx="16" fill="url(#goldGrad)"/>
+        <text x="400" y="653" font-size="24" font-weight="bold" fill="#ffffff" text-anchor="middle">
+          كود الحجز المباشر: ${booking.code}
+        </text>
+
+        <!-- QR Code -->
+        ${qrBase64 ? `
+          <g>
+            <rect x="300" y="695" width="200" height="100" rx="14" fill="#ffffff" stroke="#e2e8f0" stroke-width="2"/>
+            <image x="340" y="700" width="120" height="90" href="${qrBase64}"/>
+          </g>
+        ` : ''}
       </g>
 
-      <rect x="100" y="670" width="600" height="65" rx="20" fill="url(#goldGrad)"/>
-      <text x="400" y="711" font-family="Cairo, Arial, sans-serif" font-size="26" font-weight="bold" fill="#ffffff" text-anchor="middle">
-        كود الحجز المباشر: ${booking.code}
-      </text>
-
-      ${qrBase64 ? `
-        <g>
-          <rect x="300" y="750" width="200" height="110" rx="16" fill="#ffffff" stroke="#e2e8f0" stroke-width="2"/>
-          <image x="350" y="755" width="100" height="100" href="${qrBase64}"/>
-        </g>
-      ` : ''}
-
-      <text x="400" y="930" font-family="Cairo, Arial, sans-serif" font-size="16" font-weight="bold" fill="#94a3b8" text-anchor="middle">
+      <!-- تذييل -->
+      <text x="400" y="840" font-family="Cairo, Arial, sans-serif" font-size="14" font-weight="bold" fill="#94a3b8" text-anchor="middle">
         Smart Clinic System — نظام إدارة العيادات الذكي
       </text>
-      <text x="400" y="958" font-family="Cairo, Arial, sans-serif" font-size="14" fill="#38bdf8" text-anchor="middle">
+      <text x="400" y="868" font-family="Cairo, Arial, sans-serif" font-size="12" fill="#38bdf8" text-anchor="middle">
         alkhyatalkhyat79@gmail.com
       </text>
     </svg>
     `;
 
-    const resvg = new Resvg(svg, {
-      fitTo: { mode: 'width', value: 800 },
-    });
-
+    const resvg = new Resvg(svg, { fitTo: { mode: 'width', value: 800 } });
     const pngData = resvg.render();
     return pngData.asPng();
   } catch (e) {
@@ -361,7 +446,7 @@ async function generateWithGTTS(text: string): Promise<Uint8Array | null> {
 }
 
 // ============================================================
-// ===== دوال الذكاء الاصطناعي الذكي =====
+// ===== دوال الذكاء الاصطناعي =====
 // ============================================================
 
 async function callAI(userMessage: string, userName: string, clinicContext: string, tone = 'ودود ومحترم'): Promise<string | null> {
@@ -690,7 +775,7 @@ serve(async (req) => {
     if (linkedClinicId && text && !text.startsWith('/') && detectEmergency(text)) {
       await clearSession(supabase, telegramUserId);
       await handleEmergency(supabase, botToken, linkedClinicId, telegramUserId, String(chatId), firstName, text);
-      await send(chatId, '🚨 تم تصنيف رسالتك كحالة طارئة وتم إرسال تنبيه فوري للطبيب. إذا كانت الحالة حرجة اتصل بالإسعاف أو توجّه لأقرب طوارئ فوراً.');
+      await send(chatId, '🚨 تم تصنيف رسالتك كحالة طارئة وتم إرسال تنبيه فوري للطبيب. إذا كانت الحالة حرجة اتصل بالإسعاف.');
       return jsonResponse({ ok: true });
     }
 
@@ -736,14 +821,14 @@ serve(async (req) => {
         await send(chatId,
           `🏥 <b>مرحباً ${firstName} في ${clinic.name}</b>\n\n` +
           (clinic.description ? `${clinic.description}\n\n` : '') +
-          `للحجز اضغط زر «📅 حجز موعد» أو زر «🔍 الخدمات» لعرض الخدمات والأسعار.`,
+          `للحجز اضغط زر «📅 حجز موعد» أو زر «🔍 الخدمات».`,
           defaultKeyboard()
         );
         return jsonResponse({ ok: true });
       }
 
       if (param && !clinicId) {
-        await send(chatId, '⚠️ رابط العيادة غير معروف. اطلب من العيادة رابط حجز يبدأ بـ /start clinic_');
+        await send(chatId, '⚠️ رابط العيادة غير معروف.');
         return jsonResponse({ ok: true });
       }
 
@@ -752,7 +837,7 @@ serve(async (req) => {
         if (clinic) {
           await send(chatId,
             `🏥 <b>مرحباً ${firstName} في ${clinic.name}</b>\n\n` +
-            `للحجز اضغط زر «📅 حجز موعد» أو زر «🔍 الخدمات» لعرض الخدمات والأسعار.`,
+            `للحجز اضغط زر «📅 حجز موعد» أو زر «🔍 الخخدمات».`,
             defaultKeyboard()
           );
           return jsonResponse({ ok: true });
@@ -760,7 +845,7 @@ serve(async (req) => {
       }
       await send(chatId,
         `🏥 <b>مرحباً ${firstName} في Smart Clinic</b>\n\n` +
-        `للحجز افتح رابط العيادة الذي أرسلته لك (مثال: /start clinic_معرّف_العيادة).`,
+        `للحجز افتح رابط العيادة الذي أرسلته لك.`,
         defaultKeyboard()
       );
       return jsonResponse({ ok: true });
@@ -768,7 +853,7 @@ serve(async (req) => {
 
     if (isBookingIntent(text) || isServicesIntent(text)) {
       if (!linkedClinicId) {
-        await send(chatId, '⚠️ افتح رابط الحجز الخاص بالعيادة أولاً، ثم اختر الخدمة.');
+        await send(chatId, '⚠️ افتح رابط الحجز الخاص بالعيادة أولاً.');
         return jsonResponse({ ok: true });
       }
       const { data: clinic } = await supabase.from('clinics').select('id, name, type, description, doctor_name').eq('id', linkedClinicId).single();
@@ -809,7 +894,7 @@ serve(async (req) => {
           buttons.push([{ text: `❌ إلغاء ${a.reservation_code}`, callback_data: `cancel_${a.reservation_code}` }]);
         });
         await send(chatId, msg, { inline_keyboard: buttons });
-      } else await send(chatId, '📭 لا توجد لديك مواعيد يمكن إلغاؤها.');
+      } else await send(chatId, '📭 لا توجد مواعيد لإلغائها.');
       return jsonResponse({ ok: true });
     }
 
@@ -877,7 +962,36 @@ async function clearSession(supabase: any, tgId: string) {
   await supabase.from('bot_sessions').delete().eq('telegram_user_id', tgId);
 }
 
-async function sendServicesMenu(supabase: any, send: any, chatId: number, clinic: any, clinicId: string, firstName: string) {
+// ✅ دوال خاصة بساعات الدوام والمطور
+async function getClinicHours(supabase: any, clinicId: string, tgId: string) {
+  const isDev = tgId === DEV_TELEGRAM_ID;
+  const hours = await getClinicWorkingHours(supabase, clinicId);
+  
+  // إذا كان المطور، نضيف جميع الأوقات الممكنة (بدون قيود)
+  if (isDev) {
+    const allHours: string[] = [];
+    for (let h = 0; h < 24; h++) {
+      for (let m = 0; m < 60; m += 30) {
+        allHours.push(`${String(h).padStart(2, '0')}:${String(m).padStart(2, '0')}`);
+      }
+    }
+    return {
+      availableHours: allHours,
+      closingHour: 23,
+      closingMinute: 59,
+      isDev: true,
+      openTime: '00:00',
+      closeTime: '23:59'
+    };
+  }
+  
+  return {
+    ...hours,
+    isDev: false
+  };
+}
+
+async function sendServicesMenu(supabase: any, send: any, chatId: number, clinic: any, clinicId: string, firstName: string, tgId: string) {
   const { data: services } = await supabase.from('services')
     .select('id, name, price, duration_minutes')
     .eq('clinic_id', clinicId).eq('is_active', true).order('name');
@@ -886,11 +1000,21 @@ async function sendServicesMenu(supabase: any, send: any, chatId: number, clinic
   let msg = `🏥 أهلاً وسهلاً ${firstName} في <b>${clinic.name}</b>\n${doctorLine}`;
   if (clinic.description) msg += `📝 ${clinic.description}\n`;
 
+  // إضافة معلومات ساعات الدوام للمستخدم العادي
+  const isDev = tgId === DEV_TELEGRAM_ID;
+  if (!isDev) {
+    const hours = await getClinicWorkingHours(supabase, clinicId);
+    msg += `\n🕐 ساعات العمل: ${hours.openTime} - ${hours.closeTime}\n`;
+  } else {
+    msg += `\n🛠️ وضع التطوير: جميع الأوقات متاحة\n`;
+  }
+
   if (services && services.length > 0) {
     msg += `\n📋 <b>اختر الخدمة التي تريد حجزها:</b>\n\n`;
     const buttons: any[][] = [];
     services.forEach((s: any, i: number) => {
-      msg += `${i + 1}. ${s.name} (${s.duration_minutes || 30} دقيقة)\n`;
+      const priceLabel = (s.price === null || s.price === undefined) ? 'حسب الفحص' : `${s.price} ر.ي`;
+      msg += `${i + 1}. ${s.name} — ${priceLabel} (${s.duration_minutes || 30} دقيقة)\n`;
       buttons.push([{ text: `📅 ${s.name}`, callback_data: `book:${s.id}` }]);
     });
     await send(chatId, msg, { inline_keyboard: buttons });
@@ -936,16 +1060,18 @@ async function progressSession(supabase: any, send: any, chatId: number, tgId: s
       return true;
     }
     await upsertSession(supabase, tgId, { phone: v.normalized, phone_attempts: 0, step: 'ask_date' });
+    const { availableHours, closeTime } = await getClinicHours(supabase, session.clinic_id, tgId);
     const today = new Date();
     const buttons: any[][] = [];
-    for (let i = 0; i < 5; i++) {
+    for (let i = 0; i < 10; i++) {
       const d = new Date(today);
       d.setDate(today.getDate() + i);
       const iso = d.toISOString().split('T')[0];
-      const label = i === 0 ? `اليوم (${iso})` : i === 1 ? `غداً (${iso})` : iso;
+      const dayName = d.toLocaleDateString('ar-SA', { weekday: 'long' });
+      const label = i === 0 ? `اليوم (${iso})` : i === 1 ? `غداً (${iso})` : `${dayName} (${iso})`;
       buttons.push([{ text: `📅 ${label}`, callback_data: `date_${iso}` }]);
     }
-    await send(chatId, `✅ تم حفظ الرقم.\n\n📅 اختر تاريخ الموعد:`, { inline_keyboard: buttons });
+    await send(chatId, `✅ تم حفظ الرقم.\n\n📅 اختر تاريخ الموعد (حتى 10 أيام قادمة):`, { inline_keyboard: buttons });
     return true;
   }
 
@@ -977,16 +1103,27 @@ async function handleDateChoice(supabase: any, send: any, chatId: number, tgId: 
     return true;
   }
 
+  const { availableHours, closingHour, closingMinute, isDev } = await getClinicHours(supabase, session.clinic_id, tgId);
+
+  // جلب الحجوزات المحجوزة
   const { data: existing } = await supabase.from('appointments').select('time')
     .eq('clinic_id', session.clinic_id).eq('date', dateStr).in('status', ['pending', 'confirmed']);
   const booked = new Set((existing || []).map((a: any) => String(a.time).slice(0, 5)));
-  const free = getAvailableTimes(dateStr, booked);
+
+  // حساب الأوقات المتاحة
+  let free = getAvailableTimes(dateStr, booked, availableHours, closingHour, closingMinute);
+
+  // ✅ استثناء المطور: إذا كان مطوراً وليس هناك أوقات متاحة، نعرض جميع الأوقات المتاحة (حتى المحجوزة للتجريب)
+  if (isDev && free.length === 0) {
+    free = availableHours;
+  }
 
   if (free.length === 0) {
     const { data: clinicRow } = await supabase.from('clinics').select('phone, name, receptionist_whatsapp').eq('id', session.clinic_id).maybeSingle();
     const waNum = (clinicRow?.receptionist_whatsapp || clinicRow?.phone || '').replace(/[^\d]/g, '');
     const waText = encodeURIComponent(`مرحباً، أريد استفسار عن مواعيد متاحة في ${clinicRow?.name || 'العيادة'}`);
     const waBtn = waNum ? [[{ text: '💬 تواصل مع موظف الاستقبال', url: `https://wa.me/${waNum}?text=${waText}` }]] : [];
+
     await send(chatId,
       `⚠️ <b>لا توجد أوقات متاحة في هذا اليوم</b>\n\n` +
       `جميع الأوقات محجوزة أو انتهى الدوام الرسمي.\n` +
@@ -1065,7 +1202,10 @@ function isSubscriptionUsable(sub: any) {
 }
 
 async function finalizeBooking(supabase: any, send: any, chatId: number, tgId: string, firstName: string, session: any, time: string, botToken: string): Promise<boolean> {
-  if (isPastTime(session.preferred_date, time)) {
+  const isDev = tgId === DEV_TELEGRAM_ID;
+  
+  // ✅ استثناء المطور: لا يخضع لفحص الوقت الفائت
+  if (!isDev && isPastTime(session.preferred_date, time)) {
     const { data: clinicRow } = await supabase.from('clinics').select('phone, receptionist_whatsapp').eq('id', session.clinic_id).maybeSingle();
     const waNum = (clinicRow?.receptionist_whatsapp || clinicRow?.phone || '').replace(/[^\d]/g, '');
     const waBtn = waNum ? [[{ text: '💬 تواصل مع موظف الاستقبال', url: `https://wa.me/${waNum}` }]] : [];
@@ -1076,6 +1216,7 @@ async function finalizeBooking(supabase: any, send: any, chatId: number, tgId: s
     return true;
   }
 
+  // فحص الحد الأقصى للحجوزات اليومية (3 مواعيد كحد أقصى) مع استثناء المطور
   const todayStr = new Date().toISOString().slice(0, 10);
   const { count: todayCount } = await supabase
     .from('appointments')
@@ -1084,7 +1225,7 @@ async function finalizeBooking(supabase: any, send: any, chatId: number, tgId: s
     .eq('date', todayStr)
     .not('status', 'in', '(cancelled)');
 
-  if (tgId !== DEV_TELEGRAM_ID && (todayCount ?? 0) >= 3) {
+  if (!isDev && (todayCount ?? 0) >= 3) {
     const { data: clinicRow } = await supabase.from('clinics').select('phone, receptionist_whatsapp').eq('id', session.clinic_id).maybeSingle();
     const waNum = (clinicRow?.receptionist_whatsapp || clinicRow?.phone || '').replace(/[^\d]/g, '');
     const waBtn = waNum ? [[{ text: '💬 تواصل مع الاستقبال لإضافة حجز', url: `https://wa.me/${waNum}` }]] : [];
@@ -1115,7 +1256,7 @@ async function finalizeBooking(supabase: any, send: any, chatId: number, tgId: s
   }
 
   const { data: service } = await supabase.from('services').select('name, price').eq('id', session.service_id).single();
-  const { data: clinicInfo } = await supabase.from('clinics').select('name, doctor_name, logo_url, receptionist_whatsapp').eq('id', session.clinic_id).single();
+  const { data: clinicInfo } = await supabase.from('clinics').select('name, doctor_name, logo_url, receptionist_whatsapp, phone').eq('id', session.clinic_id).single();
 
   const code = `RE-${String(Math.floor(1000 + Math.random() * 9000))}`;
   const { error } = await supabase.from('appointments').insert({
@@ -1139,7 +1280,7 @@ async function finalizeBooking(supabase: any, send: any, chatId: number, tgId: s
   const waNum = (clinicInfo?.receptionist_whatsapp || clinicInfo?.phone || '').replace(/[^\d]/g, '');
   const waTextOther = encodeURIComponent(`مرحباً، أريد حجز موعد باسم شخص آخر في ${clinicInfo?.name || 'العيادة'} - خدمة: ${service?.name || ''}`);
 
-  // ✅ زر "حجز باسم شخص آخر" مع رابط واتساب موظف الاستقبال
+  // ✅ زر "حجز باسم شخص آخر"
   const successMarkup = {
     inline_keyboard: waNum ? [[{ text: '👥 حجز موعد باسم شخص آخر (واتساب)', url: `https://wa.me/${waNum}?text=${waTextOther}` }]] : [],
   };
@@ -1156,6 +1297,7 @@ async function finalizeBooking(supabase: any, send: any, chatId: number, tgId: s
 
   await send(chatId, confirmMsg, successMarkup);
 
+  // ✅ توليد بطاقة الحجز الفاخرة
   const cardPng = await generateLuxuryBookingCard({
     clinicName: clinicInfo?.name || 'العيادة الطبية',
     doctorName: clinicInfo?.doctor_name || '',
@@ -1172,7 +1314,7 @@ async function finalizeBooking(supabase: any, send: any, chatId: number, tgId: s
     const fd = new FormData();
     fd.append('chat_id', String(chatId));
     fd.append('photo', new Blob([cardPng], { type: 'image/png' }), 'booking_card.png');
-    fd.append('caption', `📋 بطاقة حجز موعد رسمي — ${clinicInfo?.name || ''}\nبرجاء إبراز الكود عند الوصول إلى الاستقبال.`);
+    fd.append('caption', `📋 <b>بطاقة حجز موعد رسمي</b>\n🏥 ${clinicInfo?.name || ''}\n👤 ${storedName}\n🔖 ${code}\nبرجاء إبراز الكود عند الوصول إلى الاستقبال.`);
     fd.append('parse_mode', 'HTML');
 
     await fetchWithTimeout(`https://api.telegram.org/bot${botToken}/sendPhoto`, { method: 'POST', body: fd }, 15000);
@@ -1203,7 +1345,7 @@ async function handleCallbackQuery(supabase: any, query: any, requestClinicId: s
     body: JSON.stringify({ callback_query_id: query.id }),
   });
 
-  // ✅ زر "سأحضر" (تأكيد الحضور)
+  // ✅ زر "سأحضر"
   if (data.startsWith('confirm_')) {
     const resCode = data.replace('confirm_', '');
     const { data: appointment, error } = await supabase
@@ -1211,7 +1353,7 @@ async function handleCallbackQuery(supabase: any, query: any, requestClinicId: s
       .update({ 
         status: 'confirmed', 
         confirmed_at: new Date().toISOString(),
-        reminder_sent: true // إيقاف التذكيرات بعد التأكيد
+        reminder_sent: true
       })
       .eq('reservation_code', resCode)
       .eq('customer_telegram_id', tgId)
@@ -1254,11 +1396,12 @@ async function handleCallbackQuery(supabase: any, query: any, requestClinicId: s
       });
       const today = new Date();
       const buttons: any[][] = [];
-      for (let i = 0; i < 5; i++) {
+      for (let i = 0; i < 10; i++) {
         const d = new Date(today);
         d.setDate(today.getDate() + i);
         const iso = d.toISOString().split('T')[0];
-        const label = i === 0 ? `اليوم (${iso})` : i === 1 ? `غداً (${iso})` : iso;
+        const dayName = d.toLocaleDateString('ar-SA', { weekday: 'long' });
+        const label = i === 0 ? `اليوم (${iso})` : i === 1 ? `غداً (${iso})` : `${dayName} (${iso})`;
         buttons.push([{ text: `📅 ${label}`, callback_data: `date_${iso}` }]);
       }
       await send(chatId,
@@ -1340,7 +1483,7 @@ function extractClinicId(param: string | null): string | null {
 
 // ✅ إصلاح: قراءة التوكن من system_settings أولاً
 async function getBotTokenForClinic(supabase: any, clinicId: string | null): Promise<string | null> {
-  // 1. أولوية قصوى للتوكن الموحد من system_settings (كما هو في قاعدة البيانات)
+  // 1. أولوية قصوى للتوكن الموحد من system_settings
   const { data: systemSettings } = await supabase
     .from('system_settings')
     .select('telegram_bot_token')
@@ -1351,7 +1494,7 @@ async function getBotTokenForClinic(supabase: any, clinicId: string | null): Pro
     return systemSettings.telegram_bot_token;
   }
 
-  // 2. محاولة قراءة من global_settings (للتوافق الخلفي)
+  // 2. محاولة قراءة من global_settings
   const { data: globalSettings } = await supabase
     .from('global_settings')
     .select('telegram_bot_token')
@@ -1362,13 +1505,12 @@ async function getBotTokenForClinic(supabase: any, clinicId: string | null): Pro
     return globalSettings.telegram_bot_token;
   }
 
-  // 3. إذا لم يوجد، نبحث عن توكن العيادة القديم (للتوافق الخلفي)
+  // 3. توكن العيادة القديم
   if (clinicId) {
     const { data } = await supabase.from('clinics').select('bot_token').eq('id', clinicId).maybeSingle();
     if (data?.bot_token) return data.bot_token;
   }
   
-  // 4. أخيراً، استخدام متغير البيئة
   return Deno.env.get('TELEGRAM_BOT_TOKEN') || null;
 }
 
