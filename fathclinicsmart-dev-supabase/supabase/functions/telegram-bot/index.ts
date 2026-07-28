@@ -1,13 +1,15 @@
 // ============================================================
-// Telegram Bot — SmartClinicFath
+// Telegram Bot — SmartClinicFath (الإصدار النهائي)
 // الوظيفة: معالجة جميع رسائل وتفاعلات بوت تيليجرام
-// تشمل: حجز المواعيد، التذكيرات، بطاقات الحجز، إرسال السندات، وإدارة الدوام
-// تم إصلاح: بطاقة الحجز الفارغة، زر الحجز باسم شخص آخر، رسالة انتهاء الدوام
+// تشمل: حجز المواعيد، التذكيرات، بطاقات الحجز الفاخرة، إرسال السندات، وإدارة الدوام
+// تم إصلاح: انعكاس النصوص في بطاقة الحجز، التحقق من صحة الأرقام، منع الحجز المزدوج، إشعارات البريد الإلكتروني
 // ============================================================
 
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.39.8";
 import { Resvg, initWasm } from "https://esm.sh/@resvg/resvg-wasm@2.4.1";
+import satori from "https://esm.sh/satori@0.10.13";
+import { html } from "https://esm.sh/satori-html@0.3.2";
 
 // ─── إعدادات CORS ───
 const corsHeaders = {
@@ -36,21 +38,140 @@ async function ensureWasm() {
   }
 }
 
+// ─── ذاكرة التخزين المؤقت للخطوط الرسمية ───
+let cachedCairoFont: ArrayBuffer | null = null;
+let cachedRobotoFont: ArrayBuffer | null = null;
+
+async function getCairoFont(): Promise<ArrayBuffer | null> {
+  if (cachedCairoFont && cachedCairoFont.byteLength > 10000) return cachedCairoFont;
+  const urls = [
+    "https://cdn.jsdelivr.net/fontsource/fonts/cairo@latest/arabic-700-normal.ttf",
+    "https://raw.githubusercontent.com/google/fonts/main/ofl/cairo/static/Cairo-Bold.ttf"
+  ];
+  for (const u of urls) {
+    try {
+      const res = await fetchWithTimeout(u, {}, 8000);
+      if (res.ok) {
+        const buf = await res.arrayBuffer();
+        if (buf.byteLength > 10000) {
+          cachedCairoFont = buf;
+          return cachedCairoFont;
+        }
+      }
+    } catch (_) {}
+  }
+  return null;
+}
+
+async function getRobotoFont(): Promise<ArrayBuffer | null> {
+  if (cachedRobotoFont && cachedRobotoFont.byteLength > 5000) return cachedRobotoFont;
+  try {
+    const res = await fetchWithTimeout("https://cdn.jsdelivr.net/fontsource/fonts/roboto@latest/latin-700-normal.ttf", {}, 8000);
+    if (res.ok) {
+      const buf = await res.arrayBuffer();
+      if (buf.byteLength > 5000) {
+        cachedRobotoFont = buf;
+        return cachedRobotoFont;
+      }
+    }
+  } catch (_) {}
+  return null;
+}
+
 // ════════════════════════════════════════════════════════════
-//  دوال مساعدة
+// دوال مساعدة للتحقق من صحة الأرقام (محسّنة للدول العربية)
 // ════════════════════════════════════════════════════════════
 
-function validatePhone(raw: string): { ok: boolean; normalized?: string } {
-  const s = raw.replace(/[\s\-().]/g, '').replace(/^00/, '+');
-  if (/^\+?[1-9]\d{7,14}$/.test(s)) {
-    return { ok: true, normalized: s.startsWith('+') ? s : '+' + s };
+// قائمة بادئات الدول العربية مع الطول المتوقع (بدون الصفر الأول)
+const COUNTRY_CODES: Record<string, { prefix: string; lengths: number[] }> = {
+  'sa': { prefix: '966', lengths: [9] }, // السعودية: 9 أرقام بعد 966
+  'ye': { prefix: '967', lengths: [9] }, // اليمن: 9 أرقام بعد 967
+  'ae': { prefix: '971', lengths: [9] }, // الإمارات: 9 أرقام بعد 971
+  'eg': { prefix: '20', lengths: [10] }, // مصر: 10 أرقام بعد 20
+  'jo': { prefix: '962', lengths: [9] }, // الأردن: 9 أرقام بعد 962
+  'lb': { prefix: '961', lengths: [8] }, // لبنان: 8 أرقام بعد 961
+  'kw': { prefix: '965', lengths: [8] }, // الكويت: 8 أرقام بعد 965
+  'qa': { prefix: '974', lengths: [8] }, // قطر: 8 أرقام بعد 974
+  'bh': { prefix: '973', lengths: [8] }, // البحرين: 8 أرقام بعد 973
+  'om': { prefix: '968', lengths: [8] }, // عمان: 8 أرقام بعد 968
+  'iq': { prefix: '964', lengths: [10] }, // العراق: 10 أرقام بعد 964
+  'sy': { prefix: '963', lengths: [9] }, // سوريا: 9 أرقام بعد 963
+  'ps': { prefix: '970', lengths: [9] }, // فلسطين: 9 أرقام بعد 970
+  'dz': { prefix: '213', lengths: [9] }, // الجزائر: 9 أرقام بعد 213
+  'ma': { prefix: '212', lengths: [9] }, // المغرب: 9 أرقام بعد 212
+  'tn': { prefix: '216', lengths: [8] }, // تونس: 8 أرقام بعد 216
+  'ly': { prefix: '218', lengths: [9] }, // ليبيا: 9 أرقام بعد 218
+  'sd': { prefix: '249', lengths: [9] }, // السودان: 9 أرقام بعد 249
+  'so': { prefix: '252', lengths: [8] }, // الصومال: 8 أرقام بعد 252
+  'dj': { prefix: '253', lengths: [8] }, // جيبوتي: 8 أرقام بعد 253
+  'mr': { prefix: '222', lengths: [8] }, // موريتانيا: 8 أرقام بعد 222
+};
+
+function getCountryCodeInfo(phone: string): { prefix: string; lengths: number[] } | null {
+  const clean = phone.replace(/[^0-9+]/g, '');
+  for (const country of Object.values(COUNTRY_CODES)) {
+    if (clean.startsWith('+' + country.prefix)) {
+      return country;
+    }
+    if (clean.startsWith(country.prefix)) {
+      return country;
+    }
   }
-  return { ok: false };
+  return null;
 }
+
+function validatePhoneEnhanced(raw: string): { ok: boolean; normalized?: string; error?: string } {
+  // إزالة المسافات والرموز الخاصة
+  const s = raw.replace(/[\s\-().]/g, '').replace(/^00/, '+');
+  
+  // التحقق من وجود + ورقم
+  if (!s.startsWith('+')) {
+    // إذا لم يبدأ بـ +، نحاول إضافة + افتراضياً (لكن نطلب إدخال الرقم كاملاً)
+    return { ok: false, error: 'الرجاء إدخال رقم الهاتف مع مفتاح الدولة (مثل +967XXXXXXXXX).' };
+  }
+
+  // إزالة + للتحقق من البادئة
+  const numberPart = s.slice(1);
+  const countryInfo = getCountryCodeInfo(s);
+  if (!countryInfo) {
+    return { ok: false, error: 'مفتاح الدولة غير معروف. يرجى استخدام مفتاح دولة عربية صحيح (مثل +966، +967، +971، +20، إلخ).' };
+  }
+
+  // التحقق من الطول
+  const digits = numberPart.slice(countryInfo.prefix.length);
+  if (!countryInfo.lengths.includes(digits.length)) {
+    return {
+      ok: false,
+      error: `رقم الهاتف يجب أن يتكون من ${countryInfo.lengths.join(' أو ')} أرقام بعد مفتاح الدولة. الرقم الحالي يحتوي على ${digits.length} أرقام.`
+    };
+  }
+
+  // التحقق من أن جميع الأحرف أرقام
+  if (!/^\d+$/.test(digits)) {
+    return { ok: false, error: 'رقم الهاتف يحتوي على أحرف غير صالحة. يرجى إدخال أرقام فقط.' };
+  }
+
+  return { ok: true, normalized: '+' + countryInfo.prefix + digits };
+}
+
+// ════════════════════════════════════════════════════════════
+// دوال مساعدة عامة
+// ════════════════════════════════════════════════════════════
 
 function isPastDate(dateStr: string): boolean {
   const today = new Date().toISOString().slice(0, 10);
   return dateStr < today;
+}
+
+function isPastTime(dateStr: string, timeStr: string): boolean {
+  const now = new Date();
+  const todayStr = now.toISOString().slice(0, 10);
+  if (dateStr < todayStr) return true;
+  if (dateStr > todayStr) return false;
+  const [h, m] = timeStr.split(':').map(Number);
+  const timeDate = new Date(now);
+  timeDate.setHours(h, m, 0, 0);
+  return timeDate <= now;
 }
 
 function isWithinWorkingHours(timeStr: string, start: string, end: string): boolean {
@@ -112,7 +233,7 @@ function stripEmojis(text: string): string {
 }
 
 // ════════════════════════════════════════════════════════════
-//  توليد بطاقة الحجز (SVG → PNG) — بنفس منطق سند الدفع
+// توليد بطاقة الحجز الرسمية (مع إصلاح انعكاس النصوص)
 // ════════════════════════════════════════════════════════════
 
 async function generateLuxuryBookingCard(booking: {
@@ -129,23 +250,19 @@ async function generateLuxuryBookingCard(booking: {
   try {
     await ensureWasm();
 
-    // QR Code
-    const qrData = `RESERVATION:${booking.code}|CLINIC:${booking.clinicName}|PATIENT:${booking.patientName}|DATE:${booking.date} ${booking.time}`;
-    const qrApiUrl = `https://api.qrserver.com/v1/create-qr-code/?size=220x220&data=${encodeURIComponent(qrData)}`;
-    let qrBase64 = "";
-    try {
-      const qrRes = await fetchWithTimeout(qrApiUrl, {}, 5000);
-      if (qrRes.ok) {
-        const qrBuf = await qrRes.arrayBuffer();
-        qrBase64 = `data:image/png;base64,${btoa(String.fromCharCode(...new Uint8Array(qrBuf)))}`;
-      }
-    } catch (_) {}
+    const cairoFont = await getCairoFont();
+    const robotoFont = await getRobotoFont();
 
-    // Logo
+    if (!cairoFont) {
+      console.error("لم يتم تحميل الخط العربي Cairo");
+      return null;
+    }
+
+    // جلب الشعار
     let logoBase64 = "";
     if (booking.logoUrl) {
       try {
-        const lRes = await fetchWithTimeout(booking.logoUrl, {}, 5000);
+        const lRes = await fetchWithTimeout(booking.logoUrl, {}, 6000);
         if (lRes.ok) {
           const lBuf = await lRes.arrayBuffer();
           logoBase64 = `data:image/png;base64,${btoa(String.fromCharCode(...new Uint8Array(lBuf)))}`;
@@ -153,115 +270,130 @@ async function generateLuxuryBookingCard(booking: {
       } catch (_) {}
     }
 
-    // ✅ SVG محسّن بالكامل — يعرض جميع النصوص العربية بوضوح
-    const svg = `
-    <svg width="800" height="1000" viewBox="0 0 800 1000" xmlns="http://www.w3.org/2000/svg">
-      <defs>
-        <linearGradient id="bgGrad" x1="0%" y1="0%" x2="100%" y2="100%">
-          <stop offset="0%" stop-color="#0f172a"/>
-          <stop offset="50%" stop-color="#1e293b"/>
-          <stop offset="100%" stop-color="#0f172a"/>
-        </linearGradient>
-        <linearGradient id="cardHeaderGrad" x1="0%" y1="0%" x2="100%" y2="0%">
-          <stop offset="0%" stop-color="#059669"/>
-          <stop offset="50%" stop-color="#0d9488"/>
-          <stop offset="100%" stop-color="#0284c7"/>
-        </linearGradient>
-        <linearGradient id="goldGrad" x1="0%" y1="0%" x2="100%" y2="100%">
-          <stop offset="0%" stop-color="#f59e0b"/>
-          <stop offset="100%" stop-color="#d97706"/>
-        </linearGradient>
-        <filter id="glassShadow" x="-10%" y="-10%" width="120%" height="120%">
-          <feDropShadow dx="0" dy="12" stdDeviation="16" flood-color="#000000" flood-opacity="0.4"/>
-        </filter>
-      </defs>
+    // توليد QR
+    const qrData = `RESERVATION:${booking.code}|CLINIC:${booking.clinicName}|PATIENT:${booking.patientName}|DATE:${booking.date} ${booking.time}`;
+    const qrApiUrl = `https://api.qrserver.com/v1/create-qr-code/?size=250x250&data=${encodeURIComponent(qrData)}`;
+    let qrBase64 = "";
+    try {
+      const qrRes = await fetchWithTimeout(qrApiUrl, {}, 6000);
+      if (qrRes.ok) {
+        const qrBuf = await qrRes.arrayBuffer();
+        qrBase64 = `data:image/png;base64,${btoa(String.fromCharCode(...new Uint8Array(qrBuf)))}`;
+      }
+    } catch (_) {}
 
-      <rect width="800" height="1000" fill="url(#bgGrad)"/>
-      <circle cx="700" cy="100" r="300" fill="#059669" opacity="0.12"/>
-      <circle cx="100" cy="900" r="250" fill="#0284c7" opacity="0.12"/>
+    // تحضير الشعار
+    const logoImgHtml = logoBase64
+      ? `<img src="${logoBase64}" width="64" height="64" style="border-radius: 50%; object-fit: cover; margin-left: 15px; border: 2px solid rgba(255,255,255,0.5);" />`
+      : `<div style="display: flex; background-color: rgba(255,255,255,0.2); width: 64px; height: 64px; border-radius: 50%; justify-content: center; align-items: center; font-size: 28px; color: white; margin-left: 15px;">🏥</div>`;
 
-      <g filter="url(#glassShadow)">
-        <rect x="50" y="60" width="700" height="820" rx="32" fill="#ffffff"/>
-      </g>
+    const qrImgHtml = qrBase64
+      ? `<img src="${qrBase64}" width="110" height="110" style="border-radius: 12px; border: 2px solid #cbd5e1; padding: 5px; background-color: #ffffff;" />`
+      : `<div style="display: flex; background-color: #f1f5f9; width: 110px; height: 110px; border-radius: 12px; justify-content: center; align-items: center; color: #64748b; font-size: 12px; font-weight: bold;">QR</div>`;
 
-      <path d="M 50 92 C 50 74.327 64.327 60 82 60 L 718 60 C 735.673 60 750 74.327 750 92 L 750 200 L 50 200 Z" fill="url(#cardHeaderGrad)"/>
+    const subTitle = booking.doctorName
+      ? `تحت إشراف: د. ${booking.doctorName}`
+      : 'بطاقة حجز موعد طبي مؤكد';
 
-      ${logoBase64 ? `
-        <image x="80" y="85" width="90" height="90" href="${logoBase64}" preserveAspectRatio="xMidYMid slice"/>
-      ` : `
-        <rect x="80" y="85" width="90" height="90" rx="20" fill="rgba(255,255,255,0.2)"/>
-        <text x="125" y="142" font-family="Cairo, Arial, sans-serif" font-size="42" fill="#ffffff" text-anchor="middle">🏥</text>
-      `}
+    // HTML مع row-reverse لإصلاح انعكاس النصوص
+    const htmlTemplate = `
+      <div style="display: flex; flex-direction: column; width: 800px; height: 1000px; background-color: #0f172a; padding: 40px; font-family: 'Cairo', 'Roboto'; box-sizing: border-box; justify-content: center; align-items: center;">
+        <div style="display: flex; flex-direction: column; width: 720px; height: 920px; background-color: #ffffff; border-radius: 28px; overflow: hidden; box-shadow: 0 20px 50px rgba(0,0,0,0.4); box-sizing: border-box;">
+          
+          <!-- رأس البطاقة -->
+          <div style="display: flex; flex-direction: row; justify-content: space-between; align-items: center; background: linear-gradient(135deg, #059669 0%, #0d9488 50%, #0284c7 100%); padding: 30px 35px; width: 100%; box-sizing: border-box;">
+            <div style="display: flex; flex-direction: row-reverse; align-items: center; width: 100%;">
+              ${logoImgHtml}
+              <div style="display: flex; flex-direction: column; margin-right: 15px;">
+                <span style="font-size: 12px; color: rgba(255,255,255,0.8); font-weight: bold; letter-spacing: 1px; margin-bottom: 2px;">بطاقة حجز رسمية</span>
+                <span style="font-size: 26px; font-weight: bold; color: #ffffff;">${booking.clinicName}</span>
+                <span style="font-size: 14px; color: rgba(255,255,255,0.9); margin-top: 2px;">${subTitle}</span>
+              </div>
+            </div>
+            <div style="display: flex; background-color: rgba(255,255,255,0.22); border: 1px solid rgba(255,255,255,0.4); border-radius: 50px; padding: 8px 20px; align-items: center; justify-content: center;">
+              <span style="font-size: 16px; font-weight: bold; color: #ffffff;">✓ حجز مؤكد</span>
+            </div>
+          </div>
 
-      <text x="195" y="118" font-family="Cairo, Arial, sans-serif" font-size="28" font-weight="bold" fill="#ffffff" text-anchor="start">${booking.clinicName}</text>
-      <text x="195" y="152" font-family="Cairo, Arial, sans-serif" font-size="18" fill="rgba(255,255,255,0.85)" text-anchor="start">
-        ${booking.doctorName ? `تحت إشراف: د. ${booking.doctorName}` : 'بطاقة حجز موعد طبي مؤكد'}
-      </text>
+          <!-- محتوى البطاقة -->
+          <div style="display: flex; flex-direction: column; padding: 35px; justify-content: space-between; flex: 1; width: 100%; box-sizing: border-box;">
 
-      <rect x="580" y="95" width="130" height="42" rx="21" fill="rgba(255,255,255,0.25)"/>
-      <text x="645" y="122" font-family="Cairo, Arial, sans-serif" font-size="16" font-weight="bold" fill="#ffffff" text-anchor="middle">مؤكد ✓</text>
+            <div style="display: flex; flex-direction: row-reverse; justify-content: space-between; align-items: center; border-bottom: 1px dashed #cbd5e1; padding-bottom: 12px; width: 100%;">
+              <span style="font-size: 16px; color: #64748b; font-weight: bold;">🔖 رقم الحجز:</span>
+              <span style="font-size: 22px; font-weight: bold; color: #0f172a; background-color: #f1f5f9; padding: 4px 16px; border-radius: 10px; font-family: 'Roboto', 'Cairo';">${booking.code}</span>
+            </div>
 
-      <text x="700" y="270" font-family="Cairo, Arial, sans-serif" font-size="16" fill="#64748b" text-anchor="end">اسم المريض الصريح</text>
-      <text x="700" y="305" font-family="Cairo, Arial, sans-serif" font-size="26" font-weight="bold" fill="#0f172a" text-anchor="end">${booking.patientName}</text>
-      <line x1="100" y1="330" x2="700" y2="330" stroke="#e2e8f0" stroke-width="1.5" stroke-dasharray="6,6"/>
+            <div style="display: flex; flex-direction: row-reverse; justify-content: space-between; align-items: center; border-bottom: 1px dashed #cbd5e1; padding-bottom: 12px; width: 100%;">
+              <span style="font-size: 16px; color: #64748b; font-weight: bold;">👤 اسم المريض:</span>
+              <span style="font-size: 22px; font-weight: bold; color: #0f172a;">${booking.patientName}</span>
+            </div>
 
-      <text x="700" y="370" font-family="Cairo, Arial, sans-serif" font-size="16" fill="#64748b" text-anchor="end">رقم الهاتف التواصل</text>
-      <text x="700" y="405" font-family="Cairo, Arial, sans-serif" font-size="22" font-weight="bold" fill="#0f172a" text-anchor="end">${booking.patientPhone}</text>
-      <line x1="100" y1="430" x2="700" y2="430" stroke="#e2e8f0" stroke-width="1.5" stroke-dasharray="6,6"/>
+            <div style="display: flex; flex-direction: row-reverse; justify-content: space-between; align-items: center; border-bottom: 1px dashed #cbd5e1; padding-bottom: 12px; width: 100%;">
+              <span style="font-size: 16px; color: #64748b; font-weight: bold;">📱 رقم الهاتف:</span>
+              <span style="font-size: 20px; font-weight: bold; color: #0f172a; font-family: 'Roboto', 'Cairo';">${booking.patientPhone}</span>
+            </div>
 
-      <text x="700" y="470" font-family="Cairo, Arial, sans-serif" font-size="16" fill="#64748b" text-anchor="end">الخدمة الطبية المطلوبة</text>
-      <text x="700" y="505" font-family="Cairo, Arial, sans-serif" font-size="22" font-weight="bold" fill="#059669" text-anchor="end">${booking.serviceName}</text>
-      <line x1="100" y1="530" x2="700" y2="530" stroke="#e2e8f0" stroke-width="1.5" stroke-dasharray="6,6"/>
+            <div style="display: flex; flex-direction: row-reverse; justify-content: space-between; align-items: center; border-bottom: 1px dashed #cbd5e1; padding-bottom: 12px; width: 100%;">
+              <span style="font-size: 16px; color: #64748b; font-weight: bold;">💊 الخدمة الطبية:</span>
+              <span style="font-size: 20px; font-weight: bold; color: #059669;">${booking.serviceName}</span>
+            </div>
 
-      <g>
-        <rect x="410" y="560" width="290" height="85" rx="16" fill="#f8fafc"/>
-        <text x="680" y="590" font-family="Cairo, Arial, sans-serif" font-size="14" fill="#64748b" text-anchor="end">📅 تاريخ الموعد</text>
-        <text x="680" y="625" font-family="Cairo, Arial, sans-serif" font-size="20" font-weight="bold" fill="#0f172a" text-anchor="end">${booking.date}</text>
+            <div style="display: flex; flex-direction: row-reverse; justify-content: space-between; align-items: center; background-color: #ecfdf5; border: 1.5px solid #a7f3d0; padding: 16px 24px; border-radius: 20px; width: 100%; box-sizing: border-box; margin-top: 5px;">
+              <span style="font-size: 18px; font-weight: bold; color: #065f46;">📅 تاريخ ووقت الموعد:</span>
+              <span style="font-size: 22px; font-weight: bold; color: #047857; font-family: 'Roboto', 'Cairo';">${booking.date} — ${booking.time}</span>
+            </div>
 
-        <rect x="100" y="560" width="290" height="85" rx="16" fill="#f8fafc"/>
-        <text x="370" y="590" font-family="Cairo, Arial, sans-serif" font-size="14" fill="#64748b" text-anchor="end">⏰ الوقت المكتمل</text>
-        <text x="370" y="625" font-family="Cairo, Arial, sans-serif" font-size="20" font-weight="bold" fill="#0f172a" text-anchor="end">${booking.time}</text>
-      </g>
+            <div style="display: flex; flex-direction: row-reverse; justify-content: space-between; align-items: center; width: 100%; margin-top: 15px; padding-top: 10px; border-top: 1px solid #f1f5f9;">
+              <div style="display: flex; flex-direction: column; align-items: flex-start;">
+                <span style="font-size: 16px; font-weight: bold; color: #334155; margin-bottom: 4px;">✅ رمز إثبات صحة الموعد:</span>
+                <span style="font-size: 13px; color: #64748b; font-weight: bold; font-family: 'Roboto', 'Cairo';">VERIFIED | ${booking.code} | ${booking.patientPhone}</span>
+                <span style="font-size: 13px; color: #0284c7; margin-top: 6px; font-weight: bold;">يرجى إبراز هذه البطاقة عند الحضور إلى العيادة</span>
+              </div>
+              ${qrImgHtml}
+            </div>
 
-      <rect x="100" y="670" width="600" height="65" rx="20" fill="url(#goldGrad)"/>
-      <text x="400" y="711" font-family="Cairo, Arial, sans-serif" font-size="26" font-weight="bold" fill="#ffffff" text-anchor="middle">
-        كود الحجز المباشر: ${booking.code}
-      </text>
-
-      ${qrBase64 ? `
-        <g>
-          <rect x="300" y="750" width="200" height="110" rx="16" fill="#ffffff" stroke="#e2e8f0" stroke-width="2"/>
-          <image x="350" y="755" width="100" height="100" href="${qrBase64}"/>
-        </g>
-      ` : ''}
-
-      <text x="400" y="930" font-family="Cairo, Arial, sans-serif" font-size="16" font-weight="bold" fill="#94a3b8" text-anchor="middle">
-        Smart Clinic System — نظام إدارة العيادات الذكي
-      </text>
-      <text x="400" y="958" font-family="Cairo, Arial, sans-serif" font-size="14" fill="#38bdf8" text-anchor="middle">
-        alkhyatalkhyat79@gmail.com
-      </text>
-    </svg>
+            <div style="display: flex; justify-content: center; align-items: center; width: 100%; margin-top: 8px;">
+              <span style="font-size: 13px; color: #94a3b8;">معتمد إلكترونياً — جميع الحقوق محفوظة © SmartClinic</span>
+            </div>
+          </div>
+        </div>
+      </div>
     `;
 
-    const resvg = new Resvg(svg, { fitTo: { mode: 'width', value: 800 } });
+    const fontList: any[] = [
+      { name: 'Cairo', data: cairoFont, weight: 700, style: 'normal' }
+    ];
+
+    if (robotoFont) {
+      fontList.push({ name: 'Roboto', data: robotoFont, weight: 700, style: 'normal' });
+    }
+
+    const svg = await satori(html(htmlTemplate), {
+      width: 800,
+      height: 1000,
+      fonts: fontList,
+    });
+
+    const resvg = new Resvg(svg, {
+      fitTo: { mode: 'width', value: 800 }
+    });
     const pngData = resvg.render();
     return pngData.asPng();
+
   } catch (e) {
-    console.error('Error generating luxury card:', e);
+    console.error('خطأ في توليد البطاقة:', e);
     return null;
   }
 }
 
 // ════════════════════════════════════════════════════════════
-//  نظام الصوت (TTS)
+// نظام الصوت (TTS)
 // ════════════════════════════════════════════════════════════
 
 async function generateSpeech(text: string): Promise<{ audio: Uint8Array; source: string } | null> {
   const cleanText = stripEmojis(text).trim();
   if (!cleanText) return null;
 
-  // Google Translate TTS (مجاني)
   try {
     const chunks: string[] = [];
     let currentChunk = '';
@@ -315,7 +447,7 @@ async function sendVoiceReply(botToken: string, chatId: number, htmlText: string
 }
 
 // ════════════════════════════════════════════════════════════
-//  الذكاء الاصطناعي
+// الذكاء الاصطناعي
 // ════════════════════════════════════════════════════════════
 
 async function callAI(userMessage: string, userName: string, clinicContext: string, tone = 'ودود ومحترم'): Promise<string | null> {
@@ -352,7 +484,7 @@ ${clinicContext}
 }
 
 // ════════════════════════════════════════════════════════════
-//  تحويل الصوت إلى نص
+// تحويل الصوت إلى نص
 // ════════════════════════════════════════════════════════════
 
 async function transcribeTelegramVoice(botToken: string, fileId: string): Promise<string | null> {
@@ -394,7 +526,64 @@ async function transcribeTelegramVoice(botToken: string, fileId: string): Promis
 }
 
 // ════════════════════════════════════════════════════════════
-//  الدالة الرئيسية
+// إشعارات البريد الإلكتروني (للطبيب)
+// ════════════════════════════════════════════════════════════
+
+async function sendEmailNotification(
+  supabase: any,
+  clinicId: string,
+  subject: string,
+  message: string,
+  recipientEmail?: string
+): Promise<boolean> {
+  try {
+    // إذا لم يتم توفير بريد المستلم، نحاول جلب بريد المالك من جدول profiles
+    let email = recipientEmail;
+    if (!email) {
+      const { data: clinic } = await supabase
+        .from('clinics')
+        .select('owner_id')
+        .eq('id', clinicId)
+        .single();
+      if (clinic) {
+        const { data: profile } = await supabase
+          .from('profiles')
+          .select('email')
+          .eq('user_id', clinic.owner_id)
+          .single();
+        if (profile?.email) email = profile.email;
+      }
+    }
+
+    if (!email) {
+      console.warn('لا يوجد بريد إلكتروني لإرسال الإشعار.');
+      return false;
+    }
+
+    // تسجيل الإشعار في قاعدة البيانات (سيتم إرساله لاحقاً)
+    await supabase.from('email_notifications').insert({
+      clinic_id: clinicId,
+      recipient_email: email,
+      subject,
+      message,
+      status: 'pending',
+      created_at: new Date().toISOString(),
+    });
+
+    // محاولة إرسال البريد فوراً عبر Supabase (إذا كان لديك خدمة SMTP)
+    // يمكنك استخدام Edge Function مخصصة للبريد الإلكتروني.
+    // لكن حالياً سنكتفي بتسجيله.
+    console.log(`📧 تم تسجيل إشعار بريد إلكتروني إلى ${email}: ${subject}`);
+
+    return true;
+  } catch (e) {
+    console.error('خطأ في تسجيل إشعار البريد:', e);
+    return false;
+  }
+}
+
+// ════════════════════════════════════════════════════════════
+// الدالة الرئيسية
 // ════════════════════════════════════════════════════════════
 
 serve(async (req) => {
@@ -564,7 +753,10 @@ serve(async (req) => {
 
         // التحقق من الاشتراك
         const { data: sub } = await supabase.from('subscriptions').select('status, is_active, trial_ends_at').eq('clinic_id', clinicId).single();
-        if (!isSubscriptionUsable(sub)) { await send(chatId, '⚠️ هذه العيادة غير نشطة حالياً.'); return jsonResponse({ ok: true }); }
+        if (!isSubscriptionUsable(sub)) {
+          await send(chatId, '⚠️ صاحب هذه العيادة لم يجدد الاشتراك. يرجى التواصل مع العيادة مباشرة.');
+          return jsonResponse({ ok: true });
+        }
 
         // تسجيل المريض
         const { data: existing } = await supabase.from('patients').select('id').eq('clinic_id', clinicId).eq('telegram_user_id', telegramUserId).maybeSingle();
@@ -743,7 +935,7 @@ serve(async (req) => {
 });
 
 // ════════════════════════════════════════════════════════════
-//  دوال جلسات الحجز
+// دوال جلسات الحجز
 // ════════════════════════════════════════════════════════════
 
 async function getSession(supabase: any, tgId: string) {
@@ -814,13 +1006,13 @@ async function progressSession(supabase: any, send: any, chatId: number, tgId: s
       await send(chatId, '⚠️ الاسم قصير جداً أو طويل جداً. أرسل اسمك الكامل.');
       return true;
     }
-    await upsertSession(supabase, tgId, { full_name: name, step: 'ask_phone' });
-    await send(chatId, `أهلاً بك ${name} 🌷\n\n📱 يرجى إدخال رقم هاتفك للتواصل:`);
+    await upsertSession(supabase, tgId, { full_name: name, step: 'ask_phone', phone_attempts: 0 });
+    await send(chatId, `أهلاً بك ${name} 🌷\n\n📱 يرجى إدخال رقم هاتفك للتواصل (مع مفتاح الدولة، مثال: +967XXXXXXXXX):`);
     return true;
   }
 
   if (session.step === 'ask_phone') {
-    const v = validatePhone(text);
+    const v = validatePhoneEnhanced(text);
     if (!v.ok) {
       const attempts = (session.phone_attempts || 0) + 1;
       await upsertSession(supabase, tgId, { phone_attempts: attempts });
@@ -829,10 +1021,10 @@ async function progressSession(supabase: any, send: any, chatId: number, tgId: s
         const waNum = (clinicRow?.receptionist_whatsapp || clinicRow?.phone || '').replace(/[^\d]/g, '');
         const waBtn = waNum ? [[{ text: '💬 تواصل عبر واتساب', url: `https://wa.me/${waNum}` }]] : [];
         await clearSession(supabase, tgId);
-        await send(chatId, '⚠️ تعذّر التحقق من رقم هاتفك. يمكنك التواصل مع موظف الاستقبال مباشرة عبر الواتساب.', waBtn.length ? { inline_keyboard: waBtn } : undefined);
+        await send(chatId, `⚠️ تعذّر التحقق من رقم هاتفك بعد 3 محاولات.\n${v.error || 'يرجى التأكد من الرقم.'}\nيمكنك التواصل مع موظف الاستقبال مباشرة عبر الواتساب.`, waBtn.length ? { inline_keyboard: waBtn } : undefined);
         return true;
       }
-      await send(chatId, `⚠️ يرجى إدخال رقم هاتف صحيح للتواصل.\n(المحاولة ${attempts}/3)`);
+      await send(chatId, `⚠️ ${v.error}\n(المحاولة ${attempts}/3)`);
       return true;
     }
     await upsertSession(supabase, tgId, { phone: v.normalized, phone_attempts: 0, step: 'ask_date' });
@@ -969,6 +1161,10 @@ function isSubscriptionUsable(sub: any) {
   return sub.status !== 'expired';
 }
 
+// ════════════════════════════════════════════════════════════
+// إكمال الحجز وإرسال البطاقة والتنبيهات
+// ════════════════════════════════════════════════════════════
+
 async function finalizeBooking(supabase: any, send: any, chatId: number, tgId: string, firstName: string, session: any, time: string, botToken: string): Promise<boolean> {
   // ✅ استثناء المطور من فحص الوقت الفائت
   if (tgId !== DEV_TELEGRAM_ID && isPastTime(session.preferred_date, time)) {
@@ -976,6 +1172,40 @@ async function finalizeBooking(supabase: any, send: any, chatId: number, tgId: s
     const waNum = (clinicRow?.receptionist_whatsapp || clinicRow?.phone || '').replace(/[^\d]/g, '');
     const waBtn = waNum ? [[{ text: '💬 تواصل مع موظف الاستقبال', url: `https://wa.me/${waNum}` }]] : [];
     await send(chatId, `⚠️ الوقت <b>${time}</b> فائت. اختر وقتاً آخر أو تواصل مع الاستقبال.`, waBtn.length ? { inline_keyboard: waBtn } : undefined);
+    return true;
+  }
+
+  // ✅ منع الحجز المزدوج (نفس المريض لنفس التاريخ والوقت)
+  const { data: duplicate, error: dupErr } = await supabase
+    .from('appointments')
+    .select('id')
+    .eq('clinic_id', session.clinic_id)
+    .eq('date', session.preferred_date)
+    .eq('time', time + ':00')
+    .in('status', ['pending', 'confirmed'])
+    .maybeSingle();
+
+  if (duplicate) {
+    await send(chatId, `⚠️ هذا الوقت محجوز بالفعل. يرجى اختيار وقت آخر.`);
+    // إعادة عرض الأوقات المتاحة
+    const { data: clinicRow } = await supabase.from('clinics').select('working_hours_start, working_hours_end').eq('id', session.clinic_id).single();
+    const start = clinicRow?.working_hours_start || '08:00';
+    const end = clinicRow?.working_hours_end || '16:00';
+    const { data: existing } = await supabase.from('appointments').select('time')
+      .eq('clinic_id', session.clinic_id).eq('date', session.preferred_date).in('status', ['pending', 'confirmed']);
+    const booked = new Set((existing || []).map((a: any) => String(a.time).slice(0, 5)));
+    const free = getAvailableTimes(session.preferred_date, booked, start, end);
+    if (free.length > 0) {
+      const buttons: any[][] = [];
+      for (let i = 0; i < free.length; i += 3) {
+        buttons.push(free.slice(i, i + 3).map((t) => ({ text: `⏰ ${t}`, callback_data: `time_${t.replace(':', '')}` })));
+      }
+      await upsertSession(supabase, tgId, { preferred_date: session.preferred_date, step: 'ask_time' });
+      await send(chatId, `📅 التاريخ: <b>${session.preferred_date}</b>\n\n⏰ اختر وقتاً آخر:`, { inline_keyboard: buttons });
+    } else {
+      await send(chatId, `⚠️ لا توجد أوقات متاحة أخرى لهذا اليوم. اختر تاريخاً آخر.`);
+      await clearSession(supabase, tgId);
+    }
     return true;
   }
 
@@ -1059,7 +1289,7 @@ async function finalizeBooking(supabase: any, send: any, chatId: number, tgId: s
 
   await send(chatId, confirmMsg, successMarkup);
 
-  // ✅ إرسال بطاقة الحجز (بجميع البيانات)
+  // ✅ إرسال بطاقة الحجز المكتملة
   const cardPng = await generateLuxuryBookingCard({
     clinicName: clinicInfo?.name || 'العيادة الطبية',
     doctorName: clinicInfo?.doctor_name || '',
@@ -1081,14 +1311,29 @@ async function finalizeBooking(supabase: any, send: any, chatId: number, tgId: s
     await fetchWithTimeout(`https://api.telegram.org/bot${botToken}/sendPhoto`, { method: 'POST', body: fd }, 15000);
   }
 
-  await notifyDoctor(supabase, botToken, session.clinic_id,
-    `👤 ${storedName}\n📱 ${storedPhone}\n🏷 ${service?.name || ''}\n📅 ${session.preferred_date} ⏰ ${time}\n🔖 ${code}`);
+  // ✅ إشعار الطبيب عبر تيليجرام والبريد الإلكتروني
+  const doctorMessage =
+    `🔔 <b>حجز جديد</b>\n` +
+    `👤 المريض: ${storedName}\n` +
+    `📱 الهاتف: ${storedPhone}\n` +
+    `🏷 الخدمة: ${service?.name || ''}\n` +
+    `📅 التاريخ: ${session.preferred_date}\n` +
+    `⏰ الوقت: ${time}\n` +
+    `🔖 كود الحجز: ${code}`;
+
+  await notifyDoctor(supabase, botToken, session.clinic_id, doctorMessage);
+  await sendEmailNotification(
+    supabase,
+    session.clinic_id,
+    `حجز جديد في ${clinicInfo?.name || 'العيادة'}`,
+    doctorMessage
+  );
 
   return true;
 }
 
 // ════════════════════════════════════════════════════════════
-//  معالجة Callback Queries (الأزرار)
+// معالجة Callback Queries (الأزرار)
 // ════════════════════════════════════════════════════════════
 
 async function handleCallbackQuery(supabase: any, query: any, requestClinicId: string | null = null) {
@@ -1215,7 +1460,7 @@ async function handleCallbackQuery(supabase: any, query: any, requestClinicId: s
 }
 
 // ════════════════════════════════════════════════════════════
-//  دوال مساعدة عامة
+// دوال مساعدة عامة
 // ════════════════════════════════════════════════════════════
 
 function jsonResponse(data: any, status = 200) {
