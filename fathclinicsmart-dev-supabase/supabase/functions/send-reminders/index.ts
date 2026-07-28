@@ -20,7 +20,13 @@ serve(async (req) => {
   try {
     const supabaseUrl = Deno.env.get('SUPABASE_URL')!;
     const serviceKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
-    const envBotToken = Deno.env.get('TELEGRAM_BOT_TOKEN') || null;
+    // ✅ استخدم التوكن الموحد فقط (من متغير البيئة)
+    const botToken = Deno.env.get('TELEGRAM_BOT_TOKEN');
+    if (!botToken) {
+      console.error('❌ TELEGRAM_BOT_TOKEN not set in environment');
+      return new Response(JSON.stringify({ ok: false, error: 'TELEGRAM_BOT_TOKEN missing' }), { status: 500, headers: corsHeaders });
+    }
+
     const supabase = createClient(supabaseUrl, serviceKey);
 
     let body: any = {};
@@ -38,7 +44,7 @@ serve(async (req) => {
 
     let q = supabase
       .from('appointments')
-      .select('id, clinic_id, patient_id, date, time, reservation_code, customer_telegram_id, reminder_sent, reminder_last_sent_at, reminder_count, confirmed_at, status, services(name, price), patients(name, phone), clinics(name, bot_token)')
+      .select('id, clinic_id, patient_id, date, time, reservation_code, customer_telegram_id, reminder_sent, reminder_last_sent_at, reminder_count, confirmed_at, status, services(name, price), patients(name, phone), clinics(name)')
       .in('status', ['pending', 'confirmed'])
       .is('confirmed_at', null);
 
@@ -57,31 +63,24 @@ serve(async (req) => {
     for (const a of appts || []) {
       const apptDt = new Date(`${a.date}T${String(a.time).slice(0, 8)}`);
       if (!appointmentId && (apptDt < from || apptDt > to)) {
-        skipped++; details.push({ id: a.id, reason: 'out_of_window' });
+        skipped++;
         await logTelemetry(supabase, a.clinic_id, 'reminder_skipped', 'ok', { id: a.id, reason: 'out_of_window' });
         continue;
       }
       if (!appointmentId && a.reminder_last_sent_at && new Date(a.reminder_last_sent_at) > oneHourAgo) {
-        skipped++; details.push({ id: a.id, reason: 'already_reminded_this_hour' });
+        skipped++;
         await logTelemetry(supabase, a.clinic_id, 'reminder_skipped', 'ok', { id: a.id, reason: 'already_reminded_this_hour' });
         continue;
       }
       if (!a.customer_telegram_id) {
-        skipped++; details.push({ id: a.id, reason: 'no_telegram_id' });
+        skipped++;
         await logTelemetry(supabase, a.clinic_id, 'reminder_skipped', 'ok', { id: a.id, reason: 'no_telegram_id' });
-        continue;
-      }
-
-      const clinicToken = (a as any).clinics?.bot_token || envBotToken;
-      if (!clinicToken && !dryRun) {
-        skipped++; details.push({ id: a.id, reason: 'no_bot_token' });
-        await logTelemetry(supabase, a.clinic_id, 'reminder_skipped', 'ok', { id: a.id, reason: 'no_bot_token' });
         continue;
       }
 
       if (dryRun) {
         await supabase.from('appointments').update({ reminder_sent: true, reminder_last_sent_at: now.toISOString(), reminder_count: (a.reminder_count || 0) + 1 }).eq('id', a.id);
-        sent++; details.push({ id: a.id, dryRun: true });
+        sent++;
         await logTelemetry(supabase, a.clinic_id, 'reminder_sent', 'dry_run', { id: a.id, code: a.reservation_code });
         continue;
       }
@@ -108,20 +107,27 @@ serve(async (req) => {
         ]],
       };
 
-      const res = await fetch(`https://api.telegram.org/bot${clinicToken}/sendMessage`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ chat_id: Number(a.customer_telegram_id), text, parse_mode: 'HTML', reply_markup: replyMarkup }),
-      });
-      const result = await res.json();
-      if (result?.ok) {
-        sent++; details.push({ id: a.id, sent: true });
-        await supabase.from('appointments').update({ reminder_sent: true, reminder_last_sent_at: now.toISOString(), reminder_count: (a.reminder_count || 0) + 1 }).eq('id', a.id);
-        await logTelemetry(supabase, a.clinic_id, 'reminder_sent', 'ok', { id: a.id, code: a.reservation_code });
-      } else {
-        failed++; details.push({ id: a.id, error: result?.description });
-        console.error('reminder send failed', a.id, JSON.stringify(result));
-        await logTelemetry(supabase, a.clinic_id, 'reminder_failed', 'error', { id: a.id, error: result?.description });
+      // ✅ استخدام التوكن الموحد (وليس توكن العيادة)
+      try {
+        const res = await fetch(`https://api.telegram.org/bot${botToken}/sendMessage`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ chat_id: Number(a.customer_telegram_id), text, parse_mode: 'HTML', reply_markup: replyMarkup }),
+        });
+        const result = await res.json();
+        if (result?.ok) {
+          sent++;
+          await supabase.from('appointments').update({ reminder_sent: true, reminder_last_sent_at: now.toISOString(), reminder_count: (a.reminder_count || 0) + 1 }).eq('id', a.id);
+          await logTelemetry(supabase, a.clinic_id, 'reminder_sent', 'ok', { id: a.id, code: a.reservation_code });
+        } else {
+          failed++;
+          console.error('reminder send failed', a.id, result);
+          await logTelemetry(supabase, a.clinic_id, 'reminder_failed', 'error', { id: a.id, error: result?.description });
+        }
+      } catch (fetchError) {
+        failed++;
+        console.error('Fetch error for reminder', a.id, fetchError);
+        await logTelemetry(supabase, a.clinic_id, 'reminder_failed', 'error', { id: a.id, error: String(fetchError) });
       }
     }
 
