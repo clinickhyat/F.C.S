@@ -1,6 +1,7 @@
 // 
 // ============================================================
-// Telegram Bot — SmartClinicFath (الإصدار النهائي V3 المتكامل)
+// Telegram Bot — SmartClinicFath (V6 - النسخة النهائية الشاملة)
+// إصلاح جذري لمشكلة اسم المريض في كل الصفحات
 // ============================================================
 
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
@@ -15,6 +16,7 @@ const corsHeaders = {
 };
 
 const DEV_TELEGRAM_ID = "1303830148";
+const SUPPORT_EMAIL = "alkhyatalkhyat79@gmail.com";
 
 const AVAILABLE_HOURS = [
   '08:00','08:30','09:00','09:30','10:00','10:30','11:00','11:30',
@@ -97,7 +99,7 @@ async function getRobotoBoldFont(): Promise<ArrayBuffer | null> {
 }
 
 // ════════════════════════════════════════════════════════════
-// ✅ ترجمة تلقائية للبطاقة فقط (لا تؤثر على قاعدة البيانات)
+// ترجمة (للبطاقة فقط)
 // ════════════════════════════════════════════════════════════
 
 async function translateToEnglish(arabicText: string): Promise<string> {
@@ -117,7 +119,7 @@ async function translateToEnglish(arabicText: string): Promise<string> {
 }
 
 // ════════════════════════════════════════════════════════════
-// ✅ التحقق من الأرقام (مُصلَّح بالكامل)
+// التحقق من الأرقام
 // ════════════════════════════════════════════════════════════
 
 interface CountryRule {
@@ -158,7 +160,6 @@ function detectCountryAndValidate(raw: string): { ok: boolean; normalized?: stri
   const digitsOnly = s.replace(/[^0-9]/g, '');
   if (digitsOnly.length < 7 || digitsOnly.length > 15) return { ok: false, error: 'طول الرقم غير صحيح' };
 
-  // الحالة 1: رقم يبدأ بمفتاح دولة
   for (const [country, rule] of Object.entries(COUNTRY_RULES)) {
     if (digitsOnly.startsWith(rule.prefix)) {
       let localPart = digitsOnly.slice(rule.prefix.length);
@@ -171,7 +172,6 @@ function detectCountryAndValidate(raw: string): { ok: boolean; normalized?: stri
     }
   }
 
-  // الحالة 2: رقم محلي بدون مفتاح دولة
   if (!hasPlus) {
     let localCandidate = digitsOnly;
     if (localCandidate.startsWith('0')) localCandidate = localCandidate.slice(1);
@@ -198,7 +198,7 @@ function detectCountryAndValidate(raw: string): { ok: boolean; normalized?: stri
 }
 
 // ════════════════════════════════════════════════════════════
-// دوال مساعدة عامة
+// دوال مساعدة
 // ════════════════════════════════════════════════════════════
 
 function isPastDate(dateStr: string): boolean {
@@ -217,11 +217,14 @@ function isPastTime(dateStr: string, timeStr: string): boolean {
 }
 
 function isWithinWorkingHours(timeStr: string, start: string, end: string): boolean {
-  const [h, m] = timeStr.split(':').map(Number);
-  const totalMin = h * 60 + m;
-  const [sh, sm] = start.split(':').map(Number);
-  const [eh, em] = end.split(':').map(Number);
-  return totalMin >= (sh * 60 + sm) && totalMin <= (eh * 60 + em);
+  const parseTime = (t: string) => {
+    const parts = t.split(':').map(Number);
+    return parts[0] * 60 + (parts[1] || 0);
+  };
+  const timeMin = parseTime(timeStr);
+  const startMin = parseTime(start);
+  const endMin = parseTime(end);
+  return timeMin >= startMin && timeMin <= endMin;
 }
 
 function getAvailableTimes(dateStr: string, bookedTimes: Set<string>, start: string, end: string): string[] {
@@ -273,7 +276,7 @@ function stripEmojis(text: string): string {
 }
 
 // ════════════════════════════════════════════════════════════
-// ✨ توليد بطاقة الحجز (ترجمة للعرض فقط - لا تمس قاعدة البيانات) ✨
+// ✨ بطاقة الحجز الفاخرة (Satori + Fallback SVG)
 // ════════════════════════════════════════════════════════════
 
 async function generateLuxuryBookingCard(booking: {
@@ -293,15 +296,25 @@ async function generateLuxuryBookingCard(booking: {
     const cairoRegular = await getCairoRegularFont();
     const robotoFont = await getRobotoFont();
     const robotoBoldFont = await getRobotoBoldFont();
+
     if (!robotoFont && !cairoFont) return null;
 
-    // ✅ الترجمة فقط لعرض البطاقة - لا تؤثر على البيانات المحفوظة
-    const [clinicNameEn, doctorNameEn, patientNameEn, serviceNameEn] = await Promise.all([
-      translateToEnglish(booking.clinicName),
-      booking.doctorName ? translateToEnglish(booking.doctorName) : Promise.resolve(''),
-      translateToEnglish(booking.patientName),
-      translateToEnglish(booking.serviceName),
-    ]);
+    let clinicNameEn = booking.clinicName;
+    let doctorNameEn = booking.doctorName || '';
+    let patientNameEn = booking.patientName;
+    let serviceNameEn = booking.serviceName;
+    try {
+      const [c, d, p, s] = await Promise.all([
+        translateToEnglish(booking.clinicName),
+        booking.doctorName ? translateToEnglish(booking.doctorName) : Promise.resolve(''),
+        translateToEnglish(booking.patientName),
+        translateToEnglish(booking.serviceName),
+      ]);
+      clinicNameEn = c || booking.clinicName;
+      doctorNameEn = d || (booking.doctorName || '');
+      patientNameEn = p || booking.patientName;
+      serviceNameEn = s || booking.serviceName;
+    } catch (_) {}
 
     let formattedDate = booking.date;
     try {
@@ -309,125 +322,111 @@ async function generateLuxuryBookingCard(booking: {
       formattedDate = d.toLocaleDateString('en-US', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' });
     } catch (_) {}
 
-    let logoBase64 = "";
-    if (booking.logoUrl) {
-      try {
-        const lRes = await fetchWithTimeout(booking.logoUrl, {}, 6000);
-        if (lRes.ok) {
-          const lBuf = await lRes.arrayBuffer();
-          logoBase64 = `data:image/png;base64,${btoa(String.fromCharCode(...new Uint8Array(lBuf)))}`;
-        }
-      } catch (_) {}
-    }
-
     const qrData = `BOOKING:${booking.code}|CLINIC:${clinicNameEn}|PATIENT:${patientNameEn}|DATE:${booking.date} ${booking.time}`;
     const qrApiUrl = `https://api.qrserver.com/v1/create-qr-code/?size=300x300&data=${encodeURIComponent(qrData)}&color=0F172A&bgcolor=FFFFFF&margin=1&qzone=1`;
     let qrBase64 = "";
     try {
-      const qrRes = await fetchWithTimeout(qrApiUrl, {}, 6000);
+      const qrRes = await fetchWithTimeout(qrApiUrl, {}, 8000);
       if (qrRes.ok) {
         const qrBuf = await qrRes.arrayBuffer();
         qrBase64 = `data:image/png;base64,${btoa(String.fromCharCode(...new Uint8Array(qrBuf)))}`;
       }
     } catch (_) {}
 
-    const logoImgHtml = logoBase64
-      ? `<img src="${logoBase64}" width="72" height="72" style="border-radius: 18px; object-fit: cover;" />`
-      : `<div style="display: flex; background: #ffffff; width: 72px; height: 72px; border-radius: 18px; justify-content: center; align-items: center; box-shadow: 0 8px 20px rgba(0,0,0,0.15);">
-           <span style="font-size: 42px; color: #059669; font-weight: 900; line-height: 1;">+</span>
-         </div>`;
-
     const qrImgHtml = qrBase64
-      ? `<img src="${qrBase64}" width="140" height="140" style="border-radius: 14px; background: #ffffff; padding: 8px;" />`
-      : `<div style="display: flex; background: #ffffff; width: 140px; height: 140px; border-radius: 14px; justify-content: center; align-items: center; color: #64748b; font-size: 14px; font-weight: 700;">QR CODE</div>`;
+      ? `<img src="${qrBase64}" width="130" height="130" style="border-radius: 10px; background: #ffffff; padding: 6px;" />`
+      : `<div style="display: flex; background: #ffffff; width: 130px; height: 130px; border-radius: 10px; justify-content: center; align-items: center; color: #64748b; font-size: 12px; font-weight: 700;">QR</div>`;
 
-    const subTitle = doctorNameEn
-      ? `Under Supervision of Dr. ${doctorNameEn}`
-      : 'Official Medical Appointment';
+    const subTitle = doctorNameEn ? `Under Supervision of Dr. ${doctorNameEn}` : 'Official Medical Appointment';
 
     const htmlTemplate = `
-      <div style="display: flex; flex-direction: column; width: 900px; height: 1250px; background: linear-gradient(135deg, #0f172a 0%, #1e3a5f 50%, #0f172a 100%); padding: 40px; font-family: 'Roboto'; box-sizing: border-box; justify-content: center; align-items: center;">
-        <div style="display: flex; flex-direction: column; width: 820px; height: 1170px; background: #ffffff; border-radius: 32px; overflow: hidden; box-shadow: 0 40px 80px rgba(0,0,0,0.6); box-sizing: border-box;">
-          
-          <div style="display: flex; flex-direction: column; background: linear-gradient(135deg, #059669 0%, #10b981 40%, #0284c7 100%); padding: 36px 44px; width: 100%; box-sizing: border-box;">
+      <div style="display: flex; flex-direction: column; width: 900px; height: 1300px; background: linear-gradient(135deg, #0a1628 0%, #1a2b47 50%, #0a1628 100%); padding: 40px; font-family: 'Roboto'; box-sizing: border-box; justify-content: center; align-items: center;">
+        <div style="display: flex; flex-direction: column; width: 820px; height: 1220px; background: linear-gradient(180deg, rgba(15,42,60,0.98) 0%, rgba(20,50,70,0.98) 100%); border-radius: 24px; overflow: hidden; box-shadow: 0 30px 80px rgba(0,0,0,0.7); box-sizing: border-box; border: 1px solid rgba(255,255,255,0.08);">
+          <div style="display: flex; flex-direction: column; background: linear-gradient(135deg, #065f46 0%, #047857 40%, #059669 100%); padding: 32px 40px; width: 100%; box-sizing: border-box;">
             <div style="display: flex; flex-direction: row; justify-content: space-between; align-items: center; width: 100%;">
               <div style="display: flex; flex-direction: row; align-items: center;">
-                ${logoImgHtml}
-                <div style="display: flex; flex-direction: column; margin-left: 20px;">
-                  <span style="font-size: 11px; color: rgba(255,255,255,0.85); font-weight: 700; letter-spacing: 4px; text-transform: uppercase; margin-bottom: 6px;">OFFICIAL BOOKING</span>
-                  <span style="font-size: 28px; font-weight: 700; color: #ffffff; line-height: 1.1;">${clinicNameEn}</span>
+                <div style="display: flex; background: rgba(255,255,255,0.95); width: 68px; height: 68px; border-radius: 14px; justify-content: center; align-items: center; box-shadow: 0 8px 24px rgba(0,0,0,0.3);">
+                  <span style="font-size: 40px; color: #047857; font-weight: 900; line-height: 1;">+</span>
+                </div>
+                <div style="display: flex; flex-direction: column; margin-left: 18px;">
+                  <span style="font-size: 10px; color: rgba(255,255,255,0.9); font-weight: 700; letter-spacing: 4px; text-transform: uppercase; margin-bottom: 6px;">OFFICIAL BOOKING</span>
+                  <span style="font-size: 30px; font-weight: 700; color: #ffffff; line-height: 1;">${clinicNameEn}</span>
+                  <span style="font-size: 12px; color: rgba(255,255,255,0.85); font-weight: 500; margin-top: 6px;">${subTitle}</span>
                 </div>
               </div>
-              <div style="display: flex; background: rgba(255,255,255,0.25); border: 2px solid rgba(255,255,255,0.5); border-radius: 100px; padding: 10px 22px; align-items: center;">
-                <div style="display: flex; background: #10ff90; width: 10px; height: 10px; border-radius: 50%; margin-right: 8px;"></div>
-                <span style="font-size: 14px; font-weight: 700; color: #ffffff; letter-spacing: 1px;">CONFIRMED</span>
+              <div style="display: flex; background: rgba(255,255,255,0.15); border: 1px solid rgba(255,255,255,0.3); border-radius: 100px; padding: 10px 20px; align-items: center;">
+                <div style="display: flex; background: #10ff90; width: 8px; height: 8px; border-radius: 50%; margin-right: 8px;"></div>
+                <span style="font-size: 13px; font-weight: 700; color: #ffffff; letter-spacing: 1px;">CONFIRMED</span>
               </div>
-            </div>
-            <div style="display: flex; margin-top: 16px; padding-top: 16px; border-top: 1px solid rgba(255,255,255,0.2); width: 100%;">
-              <span style="font-size: 15px; color: rgba(255,255,255,0.95); font-weight: 500;">${subTitle}</span>
             </div>
           </div>
 
-          <div style="display: flex; flex-direction: row; justify-content: space-between; align-items: center; background: linear-gradient(90deg, #f8fafc, #f1f5f9); padding: 22px 44px; width: 100%; box-sizing: border-box; border-bottom: 1px solid #e2e8f0;">
+          <div style="display: flex; flex-direction: row; justify-content: space-between; align-items: center; background: linear-gradient(90deg, rgba(30,50,70,0.6), rgba(40,60,80,0.6)); padding: 20px 40px; width: 100%; box-sizing: border-box; border-bottom: 1px solid rgba(255,255,255,0.05);">
             <div style="display: flex; flex-direction: column;">
-              <span style="font-size: 11px; color: #64748b; font-weight: 700; letter-spacing: 2px; text-transform: uppercase;">Booking Reference</span>
-              <span style="font-size: 13px; color: #94a3b8; font-weight: 500; margin-top: 2px;">Keep this code safe</span>
+              <span style="font-size: 10px; color: rgba(255,255,255,0.6); font-weight: 700; letter-spacing: 2px; text-transform: uppercase;">Booking Reference</span>
+              <span style="font-size: 12px; color: rgba(255,255,255,0.5); font-weight: 500; margin-top: 2px;">Keep this code safe</span>
             </div>
-            <div style="display: flex; background: linear-gradient(135deg, #0f172a, #1e293b); padding: 12px 24px; border-radius: 12px; box-shadow: 0 6px 15px rgba(15,23,42,0.3);">
-              <span style="font-size: 26px; font-weight: 700; color: #ffffff; letter-spacing: 3px; font-family: 'Roboto';">${booking.code}</span>
+            <div style="display: flex; background: linear-gradient(135deg, #1e293b, #0f172a); padding: 10px 22px; border-radius: 10px; border: 1px solid rgba(255,255,255,0.1);">
+              <span style="font-size: 24px; font-weight: 700; color: #10ff90; letter-spacing: 3px; font-family: 'Roboto';">${booking.code}</span>
             </div>
           </div>
 
-          <div style="display: flex; flex-direction: column; padding: 34px 44px; flex: 1; width: 100%; box-sizing: border-box; background: #ffffff;">
-            <div style="display: flex; flex-direction: column; margin-bottom: 24px;">
-              <span style="font-size: 11px; color: #94a3b8; font-weight: 700; letter-spacing: 2px; text-transform: uppercase; margin-bottom: 12px;">— Patient Information</span>
-              <div style="display: flex; flex-direction: row; justify-content: space-between; align-items: center; padding: 18px 24px; background: #f8fafc; border-radius: 14px; border-left: 4px solid #0284c7; margin-bottom: 10px;">
-                <span style="font-size: 15px; font-weight: 600; color: #64748b;">Full Name</span>
-                <span style="font-size: 20px; font-weight: 700; color: #0f172a;">${patientNameEn}</span>
+          <div style="display: flex; flex-direction: column; padding: 30px 40px; flex: 1; width: 100%; box-sizing: border-box;">
+            <div style="display: flex; flex-direction: column; margin-bottom: 20px;">
+              <span style="font-size: 10px; color: #10ff90; font-weight: 700; letter-spacing: 2px; text-transform: uppercase; margin-bottom: 10px;">— PATIENT INFORMATION</span>
+              <div style="display: flex; flex-direction: row; justify-content: space-between; align-items: center; padding: 16px 22px; background: linear-gradient(90deg, rgba(255,255,255,0.06), rgba(255,255,255,0.03)); border-radius: 12px; border-left: 3px solid #10ff90; margin-bottom: 8px;">
+                <span style="font-size: 13px; font-weight: 600; color: rgba(255,255,255,0.6);">Full Name</span>
+                <span style="font-size: 19px; font-weight: 700; color: #ffffff;">${patientNameEn}</span>
               </div>
-              <div style="display: flex; flex-direction: row; justify-content: space-between; align-items: center; padding: 18px 24px; background: #f8fafc; border-radius: 14px; border-left: 4px solid #0284c7;">
-                <span style="font-size: 15px; font-weight: 600; color: #64748b;">Phone Number</span>
-                <span style="font-size: 18px; font-weight: 700; color: #0f172a; font-family: 'Roboto';">${booking.patientPhone}</span>
-              </div>
-            </div>
-
-            <div style="display: flex; flex-direction: column; margin-bottom: 24px;">
-              <span style="font-size: 11px; color: #94a3b8; font-weight: 700; letter-spacing: 2px; text-transform: uppercase; margin-bottom: 12px;">— Medical Service</span>
-              <div style="display: flex; flex-direction: row; justify-content: space-between; align-items: center; padding: 20px 24px; background: linear-gradient(135deg, #ecfdf5, #f0fdf4); border-radius: 14px; border-left: 4px solid #059669;">
-                <span style="font-size: 15px; font-weight: 600; color: #065f46;">Service</span>
-                <span style="font-size: 20px; font-weight: 700; color: #047857;">${serviceNameEn}</span>
+              <div style="display: flex; flex-direction: row; justify-content: space-between; align-items: center; padding: 16px 22px; background: linear-gradient(90deg, rgba(255,255,255,0.06), rgba(255,255,255,0.03)); border-radius: 12px; border-left: 3px solid #10ff90;">
+                <span style="font-size: 13px; font-weight: 600; color: rgba(255,255,255,0.6);">Phone Number</span>
+                <span style="font-size: 17px; font-weight: 700; color: #ffffff; font-family: 'Roboto';">${booking.patientPhone}</span>
               </div>
             </div>
 
-            <div style="display: flex; flex-direction: column; margin-bottom: 24px;">
-              <span style="font-size: 11px; color: #94a3b8; font-weight: 700; letter-spacing: 2px; text-transform: uppercase; margin-bottom: 12px;">— Appointment Schedule</span>
-              <div style="display: flex; flex-direction: column; padding: 24px 28px; background: linear-gradient(135deg, #fef3c7 0%, #fde68a 100%); border-radius: 16px; border: 2px solid #fbbf24; box-shadow: 0 4px 12px rgba(251,191,36,0.2);">
-                <div style="display: flex; flex-direction: row; justify-content: space-between; align-items: center; margin-bottom: 12px;">
-                  <span style="font-size: 14px; font-weight: 700; color: #78350f; letter-spacing: 1px;">DATE</span>
-                  <span style="font-size: 20px; font-weight: 700; color: #78350f; font-family: 'Roboto';">${formattedDate}</span>
+            <div style="display: flex; flex-direction: column; margin-bottom: 20px;">
+              <span style="font-size: 10px; color: #10ff90; font-weight: 700; letter-spacing: 2px; text-transform: uppercase; margin-bottom: 10px;">— MEDICAL SERVICE</span>
+              <div style="display: flex; flex-direction: row; justify-content: space-between; align-items: center; padding: 18px 22px; background: linear-gradient(135deg, rgba(16,185,129,0.15), rgba(5,150,105,0.1)); border-radius: 12px; border-left: 3px solid #10ff90;">
+                <span style="font-size: 13px; font-weight: 600; color: rgba(255,255,255,0.7);">Service</span>
+                <span style="font-size: 19px; font-weight: 700; color: #10ff90;">${serviceNameEn}</span>
+              </div>
+            </div>
+
+            <div style="display: flex; flex-direction: column; margin-bottom: 22px;">
+              <span style="font-size: 10px; color: #fbbf24; font-weight: 700; letter-spacing: 2px; text-transform: uppercase; margin-bottom: 10px;">— APPOINTMENT SCHEDULE</span>
+              <div style="display: flex; flex-direction: column; padding: 22px 26px; background: linear-gradient(135deg, #78350f 0%, #a16207 50%, #ca8a04 100%); border-radius: 14px; border: 1px solid rgba(251,191,36,0.4); box-shadow: 0 8px 24px rgba(202,138,4,0.35);">
+                <div style="display: flex; flex-direction: row; justify-content: space-between; align-items: center; margin-bottom: 10px;">
+                  <span style="font-size: 12px; font-weight: 700; color: rgba(255,255,255,0.9); letter-spacing: 1px;">DATE</span>
+                  <span style="font-size: 20px; font-weight: 700; color: #ffffff; font-family: 'Roboto';">${formattedDate}</span>
                 </div>
-                <div style="display: flex; width: 100%; height: 1px; background: rgba(120,53,15,0.2); margin: 4px 0 12px 0;"></div>
+                <div style="display: flex; width: 100%; height: 1px; background: rgba(255,255,255,0.2); margin: 4px 0 10px 0;"></div>
                 <div style="display: flex; flex-direction: row; justify-content: space-between; align-items: center;">
-                  <span style="font-size: 14px; font-weight: 700; color: #78350f; letter-spacing: 1px;">TIME</span>
-                  <span style="font-size: 32px; font-weight: 700; color: #78350f; font-family: 'Roboto'; letter-spacing: 2px;">${booking.time}</span>
+                  <span style="font-size: 12px; font-weight: 700; color: rgba(255,255,255,0.9); letter-spacing: 1px;">TIME</span>
+                  <span style="font-size: 34px; font-weight: 700; color: #fef3c7; font-family: 'Roboto'; letter-spacing: 2px;">${booking.time}</span>
                 </div>
               </div>
             </div>
 
-            <div style="display: flex; flex-direction: row; justify-content: space-between; align-items: center; padding: 20px 24px; background: linear-gradient(135deg, #f1f5f9, #e2e8f0); border-radius: 16px; margin-top: auto;">
+            <div style="display: flex; flex-direction: row; justify-content: space-between; align-items: center; padding: 18px 22px; background: linear-gradient(135deg, rgba(255,255,255,0.08), rgba(255,255,255,0.04)); border-radius: 14px; border: 1px solid rgba(255,255,255,0.1);">
               <div style="display: flex; flex-direction: column;">
-                <span style="font-size: 13px; font-weight: 700; color: #1e293b; letter-spacing: 1px; margin-bottom: 6px;">SCAN TO VERIFY</span>
-                <span style="font-size: 11px; color: #64748b; font-weight: 500; margin-bottom: 4px;">Digital verification code</span>
-                <span style="font-size: 10px; color: #94a3b8; font-weight: 600; font-family: 'Roboto';">${booking.code} | ${booking.patientPhone}</span>
-                <span style="font-size: 12px; color: #0284c7; font-weight: 700; margin-top: 8px;">Present at reception</span>
+                <span style="font-size: 12px; font-weight: 700; color: #ffffff; letter-spacing: 1px; margin-bottom: 4px;">SCAN TO VERIFY</span>
+                <span style="font-size: 10px; color: rgba(255,255,255,0.6); font-weight: 500; margin-bottom: 3px;">Digital verification code</span>
+                <span style="font-size: 9px; color: rgba(255,255,255,0.5); font-weight: 600; font-family: 'Roboto';">${booking.code} | ${booking.patientPhone}</span>
+                <span style="font-size: 11px; color: #10ff90; font-weight: 700; margin-top: 6px;">Present at reception</span>
               </div>
               ${qrImgHtml}
             </div>
           </div>
 
-          <div style="display: flex; flex-direction: row; justify-content: space-between; align-items: center; background: linear-gradient(90deg, #0f172a, #1e293b); padding: 18px 44px; width: 100%; box-sizing: border-box;">
-            <span style="font-size: 11px; color: #64748b; font-weight: 500;">SmartClinic System 2026</span>
-            <span style="font-size: 11px; color: #94a3b8; font-weight: 600; letter-spacing: 1px;">DIGITALLY VERIFIED</span>
+          <div style="display: flex; flex-direction: column; background: linear-gradient(90deg, #0a1628, #1a2b47); padding: 14px 40px; width: 100%; box-sizing: border-box; border-top: 1px solid rgba(255,255,255,0.05);">
+            <div style="display: flex; flex-direction: row; justify-content: space-between; align-items: center; margin-bottom: 6px;">
+              <span style="font-size: 10px; color: rgba(255,255,255,0.5); font-weight: 500;">${clinicNameEn} System 2026</span>
+              <span style="font-size: 10px; color: rgba(16,255,144,0.7); font-weight: 700; letter-spacing: 1px;">DIGITALLY VERIFIED</span>
+            </div>
+            <div style="display: flex; flex-direction: row; justify-content: center; align-items: center; padding-top: 6px; border-top: 1px solid rgba(255,255,255,0.05);">
+              <span style="font-size: 9px; color: rgba(255,255,255,0.4); font-weight: 500;">Technical Support: </span>
+              <span style="font-size: 10px; color: #10ff90; font-weight: 700; font-family: 'Roboto'; margin-left: 4px;">${SUPPORT_EMAIL}</span>
+            </div>
           </div>
         </div>
       </div>
@@ -439,14 +438,107 @@ async function generateLuxuryBookingCard(booking: {
     if (cairoFont) fontList.push({ name: 'Cairo', data: cairoFont, weight: 700, style: 'normal' });
     if (cairoRegular) fontList.push({ name: 'Cairo', data: cairoRegular, weight: 400, style: 'normal' });
 
-    const svg = await satori(html(htmlTemplate), { width: 900, height: 1250, fonts: fontList });
+    if (fontList.length === 0) return null;
+
+    const svg = await satori(html(htmlTemplate), { width: 900, height: 1300, fonts: fontList });
     const resvg = new Resvg(svg, { fitTo: { mode: 'width', value: 900 } });
-    const pngData = resvg.render();
-    return pngData.asPng();
+    return resvg.render().asPng();
   } catch (e) {
-    console.error('خطأ في توليد البطاقة:', e);
+    console.error('❌ خطأ توليد البطاقة:', e);
     return null;
   }
+}
+
+async function generateFallbackCard(booking: any): Promise<Uint8Array | null> {
+  try {
+    let clinicNameEn = booking.clinicName;
+    let patientNameEn = booking.patientName;
+    let serviceNameEn = booking.serviceName;
+    try {
+      const [c, p, s] = await Promise.all([
+        translateToEnglish(booking.clinicName),
+        translateToEnglish(booking.patientName),
+        translateToEnglish(booking.serviceName),
+      ]);
+      clinicNameEn = c;
+      patientNameEn = p;
+      serviceNameEn = s;
+    } catch (_) {}
+
+    await ensureWasm();
+    const svg = `<?xml version="1.0" encoding="UTF-8"?>
+<svg xmlns="http://www.w3.org/2000/svg" width="900" height="1300" viewBox="0 0 900 1300">
+  <defs>
+    <linearGradient id="bg" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#0a1628"/><stop offset="100%" stop-color="#1a2b47"/>
+    </linearGradient>
+    <linearGradient id="header" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#065f46"/><stop offset="100%" stop-color="#059669"/>
+    </linearGradient>
+    <linearGradient id="gold" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#78350f"/><stop offset="100%" stop-color="#ca8a04"/>
+    </linearGradient>
+  </defs>
+  <rect width="900" height="1300" fill="url(#bg)"/>
+  <rect x="40" y="40" width="820" height="1220" rx="24" fill="#0f2a3c"/>
+  <rect x="40" y="40" width="820" height="180" rx="24" fill="url(#header)"/>
+  <rect x="40" y="180" width="820" height="40" fill="url(#header)"/>
+  <rect x="80" y="80" width="68" height="68" rx="14" fill="white"/>
+  <text x="114" y="128" font-family="sans-serif" font-size="44" font-weight="900" fill="#047857" text-anchor="middle">+</text>
+  <text x="170" y="98" font-family="sans-serif" font-size="10" font-weight="700" fill="rgba(255,255,255,0.9)" letter-spacing="4">OFFICIAL BOOKING</text>
+  <text x="170" y="130" font-family="sans-serif" font-size="28" font-weight="700" fill="white">${escapeXml(clinicNameEn)}</text>
+  <text x="170" y="152" font-family="sans-serif" font-size="12" fill="rgba(255,255,255,0.85)">Official Medical Appointment</text>
+  <rect x="680" y="95" width="140" height="38" rx="19" fill="rgba(255,255,255,0.15)" stroke="rgba(255,255,255,0.3)"/>
+  <circle cx="705" cy="114" r="4" fill="#10ff90"/>
+  <text x="720" y="119" font-family="sans-serif" font-size="13" font-weight="700" fill="white">CONFIRMED</text>
+  <rect x="40" y="240" width="820" height="70" fill="rgba(30,50,70,0.6)"/>
+  <text x="80" y="270" font-family="sans-serif" font-size="10" font-weight="700" fill="rgba(255,255,255,0.6)" letter-spacing="2">BOOKING REFERENCE</text>
+  <text x="80" y="290" font-family="sans-serif" font-size="12" fill="rgba(255,255,255,0.5)">Keep this code safe</text>
+  <rect x="640" y="255" width="180" height="42" rx="10" fill="#0f172a"/>
+  <text x="730" y="284" font-family="monospace" font-size="24" font-weight="700" fill="#10ff90" text-anchor="middle" letter-spacing="3">${escapeXml(booking.code)}</text>
+  <text x="80" y="360" font-family="sans-serif" font-size="10" font-weight="700" fill="#10ff90" letter-spacing="2">— PATIENT INFORMATION</text>
+  <rect x="80" y="378" width="740" height="60" rx="12" fill="rgba(255,255,255,0.06)"/>
+  <rect x="80" y="378" width="3" height="60" fill="#10ff90"/>
+  <text x="102" y="415" font-family="sans-serif" font-size="13" font-weight="600" fill="rgba(255,255,255,0.6)">Full Name</text>
+  <text x="800" y="415" font-family="sans-serif" font-size="19" font-weight="700" fill="white" text-anchor="end">${escapeXml(patientNameEn)}</text>
+  <rect x="80" y="448" width="740" height="60" rx="12" fill="rgba(255,255,255,0.06)"/>
+  <rect x="80" y="448" width="3" height="60" fill="#10ff90"/>
+  <text x="102" y="485" font-family="sans-serif" font-size="13" font-weight="600" fill="rgba(255,255,255,0.6)">Phone Number</text>
+  <text x="800" y="485" font-family="monospace" font-size="17" font-weight="700" fill="white" text-anchor="end">${escapeXml(booking.patientPhone)}</text>
+  <text x="80" y="548" font-family="sans-serif" font-size="10" font-weight="700" fill="#10ff90" letter-spacing="2">— MEDICAL SERVICE</text>
+  <rect x="80" y="566" width="740" height="65" rx="12" fill="rgba(16,185,129,0.15)"/>
+  <rect x="80" y="566" width="3" height="65" fill="#10ff90"/>
+  <text x="102" y="605" font-family="sans-serif" font-size="13" font-weight="600" fill="rgba(255,255,255,0.7)">Service</text>
+  <text x="800" y="605" font-family="sans-serif" font-size="19" font-weight="700" fill="#10ff90" text-anchor="end">${escapeXml(serviceNameEn)}</text>
+  <text x="80" y="671" font-family="sans-serif" font-size="10" font-weight="700" fill="#fbbf24" letter-spacing="2">— APPOINTMENT SCHEDULE</text>
+  <rect x="80" y="689" width="740" height="140" rx="14" fill="url(#gold)"/>
+  <text x="102" y="720" font-family="sans-serif" font-size="12" font-weight="700" fill="rgba(255,255,255,0.9)" letter-spacing="1">DATE</text>
+  <text x="800" y="720" font-family="sans-serif" font-size="20" font-weight="700" fill="white" text-anchor="end">${escapeXml(booking.date)}</text>
+  <line x1="102" y1="745" x2="800" y2="745" stroke="rgba(255,255,255,0.2)"/>
+  <text x="102" y="785" font-family="sans-serif" font-size="12" font-weight="700" fill="rgba(255,255,255,0.9)" letter-spacing="1">TIME</text>
+  <text x="800" y="800" font-family="monospace" font-size="36" font-weight="700" fill="#fef3c7" text-anchor="end" letter-spacing="2">${escapeXml(booking.time)}</text>
+  <rect x="80" y="860" width="740" height="180" rx="14" fill="rgba(255,255,255,0.06)"/>
+  <text x="102" y="895" font-family="sans-serif" font-size="12" font-weight="700" fill="white" letter-spacing="1">SCAN TO VERIFY</text>
+  <text x="102" y="915" font-family="sans-serif" font-size="10" fill="rgba(255,255,255,0.6)">Digital verification code</text>
+  <text x="102" y="935" font-family="monospace" font-size="9" fill="rgba(255,255,255,0.5)">${escapeXml(booking.code)} | ${escapeXml(booking.patientPhone)}</text>
+  <text x="102" y="960" font-family="sans-serif" font-size="11" font-weight="700" fill="#10ff90">Present at reception</text>
+  <rect x="40" y="1180" width="820" height="80" fill="#0a1628"/>
+  <text x="80" y="1215" font-family="sans-serif" font-size="10" fill="rgba(255,255,255,0.5)">${escapeXml(clinicNameEn)} System 2026</text>
+  <text x="820" y="1215" font-family="sans-serif" font-size="10" font-weight="700" fill="rgba(16,255,144,0.7)" text-anchor="end" letter-spacing="1">DIGITALLY VERIFIED</text>
+  <line x1="80" y1="1225" x2="820" y2="1225" stroke="rgba(255,255,255,0.05)"/>
+  <text x="450" y="1250" font-family="sans-serif" font-size="10" fill="rgba(255,255,255,0.4)" text-anchor="middle">Technical Support: <tspan fill="#10ff90" font-weight="700">${escapeXml(SUPPORT_EMAIL)}</tspan></text>
+</svg>`;
+    const resvg = new Resvg(svg, { fitTo: { mode: 'width', value: 900 } });
+    return resvg.render().asPng();
+  } catch (e) {
+    console.error('❌ فشل البطاقة البديلة:', e);
+    return null;
+  }
+}
+
+function escapeXml(text: string): string {
+  if (!text) return '';
+  return String(text).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;').replace(/'/g, '&apos;');
 }
 
 // ════════════════════════════════════════════════════════════
@@ -485,22 +577,22 @@ async function generateSpeech(text: string): Promise<{ audio: Uint8Array; source
   } catch (_) { return null; }
 }
 
-async function sendVoiceReply(botToken: string, chatId: number, htmlText: string): Promise<boolean> {
+async function sendVoiceReply(botToken: string, chatId: number, htmlText: string, title = 'رسالة صوتية'): Promise<boolean> {
   const cleanText = stripEmojis(htmlText.replace(/<[^>]+>/g, '').replace(/\s+/g, ' ')).trim();
   if (!cleanText) return false;
   const result = await generateSpeech(cleanText);
   if (!result) return false;
   const fd = new FormData();
   fd.append('chat_id', String(chatId));
-  fd.append('title', 'رد صوتي من العيادة');
-  fd.append('audio', new Blob([result.audio], { type: 'audio/mpeg' }), 'reply.mp3');
+  fd.append('title', title);
+  fd.append('audio', new Blob([result.audio], { type: 'audio/mpeg' }), 'voice.mp3');
   const res = await fetchWithTimeout(`https://api.telegram.org/bot${botToken}/sendAudio`, { method: 'POST', body: fd }, 15000);
   const j = await res.json();
   return !!j?.ok;
 }
 
 // ════════════════════════════════════════════════════════════
-// الذكاء الاصطناعي
+// AI + Voice
 // ════════════════════════════════════════════════════════════
 
 async function callAI(userMessage: string, userName: string, clinicContext: string, tone = 'ودود ومحترم'): Promise<string | null> {
@@ -525,10 +617,6 @@ ${clinicContext}
     return result?.choices?.[0]?.message?.content || null;
   } catch (_) { return null; }
 }
-
-// ════════════════════════════════════════════════════════════
-// تحويل صوت → نص
-// ════════════════════════════════════════════════════════════
 
 async function transcribeTelegramVoice(botToken: string, fileId: string): Promise<string | null> {
   try {
@@ -563,10 +651,6 @@ async function transcribeTelegramVoice(botToken: string, fileId: string): Promis
   } catch (_) { return null; }
 }
 
-// ════════════════════════════════════════════════════════════
-// إشعارات البريد
-// ════════════════════════════════════════════════════════════
-
 async function sendEmailNotification(supabase: any, clinicId: string, subject: string, message: string, recipientEmail?: string): Promise<boolean> {
   try {
     let email = recipientEmail;
@@ -587,6 +671,21 @@ async function sendEmailNotification(supabase: any, clinicId: string, subject: s
 }
 
 // ════════════════════════════════════════════════════════════
+// ✅ دالة مساعدة: تحديد أعمدة الجدول المتاحة (اكتشاف تلقائي)
+// ════════════════════════════════════════════════════════════
+
+async function detectTableColumns(supabase: any, tableName: string): Promise<Set<string>> {
+  const cols = new Set<string>();
+  try {
+    const { data, error } = await supabase.from(tableName).select('*').limit(1);
+    if (!error && data && data.length > 0) {
+      Object.keys(data[0]).forEach(k => cols.add(k));
+    }
+  } catch (_) {}
+  return cols;
+}
+
+// ════════════════════════════════════════════════════════════
 // الدالة الرئيسية
 // ════════════════════════════════════════════════════════════
 
@@ -603,7 +702,6 @@ serve(async (req) => {
     try { rawBody = await req.json(); } catch { rawBody = null; }
     const action = url.searchParams.get('action') || rawBody?.action || null;
 
-    // ─── إرسال سند الدفع ───
     if (action === 'send_receipt') {
       const { clinic_id, chat_id, receipt_image, reservation_code, patient_name, service_name, amount, clinic_name } = rawBody;
       if (!chat_id || !receipt_image) return jsonResponse({ ok: false, error: 'بيانات غير مكتملة' }, 400);
@@ -627,7 +725,6 @@ serve(async (req) => {
       }
     }
 
-    // ─── Webhook / Bot Info ───
     if (action === 'set-webhook' || action === 'webhook-info' || action === 'bot-info') {
       const authHeader = req.headers.get('Authorization') || '';
       const jwt = authHeader.replace('Bearer ', '');
@@ -723,7 +820,6 @@ serve(async (req) => {
       await clearSession(supabase, telegramUserId);
     }
 
-    // ─── /start ───
     if (text.startsWith('/start')) {
       const parts = text.split(' ');
       const param = parts.length > 1 ? parts[1] : null;
@@ -751,18 +847,17 @@ serve(async (req) => {
           return jsonResponse({ ok: true });
         }
 
-        // ✅ تسجيل المريض باسمه العربي الأصلي من تيليجرام
-        const { data: existing } = await supabase.from('patients').select('id').eq('clinic_id', clinicId).eq('telegram_user_id', telegramUserId).maybeSingle();
+        // ✅ لا نُنشئ مريض هنا - سيتم إنشاؤه لاحقاً عند الحجز بالاسم الصحيح
+        // فقط نحفظ ربط أولي
+        const { data: existing } = await supabase.from('patients').select('id, name').eq('clinic_id', clinicId).eq('telegram_user_id', telegramUserId).maybeSingle();
         if (!existing) {
+          // مريض مؤقت باسم تليجرام
           await supabase.from('patients').insert({
             clinic_id: clinicId,
             name: firstName,
             phone: `tg:${telegramUserId}`,
             telegram_user_id: telegramUserId
           });
-        } else {
-          // ✅ لا نمحو الاسم الأصلي - فقط نحدث التاريخ
-          await supabase.from('patients').update({ created_at: new Date().toISOString() }).eq('id', existing.id);
         }
         await clearSession(supabase, telegramUserId);
 
@@ -801,7 +896,7 @@ serve(async (req) => {
 
     if (isAppointmentsIntent(text)) {
       const { data: appointments } = await supabase.from('appointments')
-        .select('id, date, time, status, reservation_code, services(name)')
+        .select('id, date, time, status, reservation_code, services(name), patients(name, phone)')
         .eq('customer_telegram_id', telegramUserId)
         .in('status', ['pending', 'confirmed'])
         .order('date', { ascending: true }).limit(10);
@@ -809,6 +904,7 @@ serve(async (req) => {
         let msg = '📅 <b>مواعيدك القادمة:</b>\n\n';
         appointments.forEach((a: any, i: number) => {
           msg += `${i + 1}. ${a.status === 'confirmed' ? '✅' : '⏳'} <b>${a.date}</b> ${String(a.time).slice(0,5)}\n`;
+          if (a.patients?.name) msg += `   👤 ${a.patients.name}\n`;
           if (a.services?.name) msg += `   🏷 ${a.services.name}\n`;
           msg += `   🔖 <code>${a.reservation_code}</code>\n\n`;
         });
@@ -881,7 +977,7 @@ serve(async (req) => {
 });
 
 // ════════════════════════════════════════════════════════════
-// جلسات الحجز
+// جلسات
 // ════════════════════════════════════════════════════════════
 
 async function getSession(supabase: any, tgId: string) {
@@ -933,7 +1029,6 @@ async function progressSession(supabase: any, send: any, chatId: number, tgId: s
       await send(chatId, '⚠️ الاسم قصير أو طويل. أرسل اسمك الكامل.');
       return true;
     }
-    // ✅ حفظ الاسم العربي الأصلي كما أدخله المستخدم
     await upsertSession(supabase, tgId, { full_name: name, step: 'ask_phone', phone_attempts: 0 });
     await send(chatId, `أهلاً بك ${name} 🌷\n\n📱 يرجى إدخال رقم هاتفك:`);
     return true;
@@ -945,20 +1040,15 @@ async function progressSession(supabase: any, send: any, chatId: number, tgId: s
       const attempts = (session.phone_attempts || 0) + 1;
       await upsertSession(supabase, tgId, { phone_attempts: attempts });
       if (attempts >= 3) {
-        // ✅ عند فشل التحقق 3 مرات: لا نمحو الجلسة بالكامل
-        // نحفظ الرقم كما هو ونتابع
-        const rawPhone = text.trim().replace(/[\s\-().]/g, '');
-        await upsertSession(supabase, tgId, { phone: rawPhone, phone_attempts: 0, step: 'ask_date' });
-        const today = new Date();
-        const buttons: any[][] = [];
-        for (let i = 0; i < 5; i++) {
-          const d = new Date(today);
-          d.setDate(today.getDate() + i);
-          const iso = d.toISOString().split('T')[0];
-          const label = i === 0 ? `اليوم (${iso})` : i === 1 ? `غداً (${iso})` : iso;
-          buttons.push([{ text: `📅 ${label}`, callback_data: `date_${iso}` }]);
-        }
-        await send(chatId, `⚠️ لم نتمكن من التحقق من الرقم بشكل كامل.\nتم حفظ الرقم: <code>${rawPhone}</code>\n\n📅 اختر تاريخ الموعد:`, { inline_keyboard: buttons });
+        const { data: clinicRow } = await supabase.from('clinics').select('phone, name, receptionist_whatsapp').eq('id', session.clinic_id).maybeSingle();
+        const waNum = (clinicRow?.receptionist_whatsapp || clinicRow?.phone || '').replace(/[^\d]/g, '');
+        const waText = encodeURIComponent(`السلام عليكم، أريد حجز موعد في ${clinicRow?.name || 'العيادة'}`);
+        const waBtn = waNum ? [[{ text: '💬 تواصل مع الاستقبال عبر واتساب', url: `https://wa.me/${waNum}?text=${waText}` }]] : [];
+        await clearSession(supabase, tgId);
+        await send(chatId,
+          `⚠️ <b>تعذّر التحقق من رقم هاتفك بعد 3 محاولات</b>\n\nتم إلغاء عملية الحجز.\nيرجى التواصل مباشرة مع موظف الاستقبال:`,
+          waBtn.length ? { inline_keyboard: waBtn } : undefined
+        );
         return true;
       }
       await send(chatId, `⚠️ الرقم غير صحيح. تأكد من الرقم.\n(المحاولة ${attempts}/3)`);
@@ -1081,26 +1171,45 @@ function isSubscriptionUsable(sub: any) {
 }
 
 // ════════════════════════════════════════════════════════════
-// ✅ إكمال الحجز (الاسم العربي يُحفظ في DB كما هو)
+// ✅ [الحل الجذري] إكمال الحجز مع ضمان حفظ الاسم في كل مكان
 // ════════════════════════════════════════════════════════════
 
 async function finalizeBooking(supabase: any, send: any, chatId: number, tgId: string, firstName: string, session: any, time: string, botToken: string): Promise<boolean> {
+  const { data: clinicRow } = await supabase.from('clinics').select(
+    'working_hours_start, working_hours_end, receptionist_whatsapp, name, phone, doctor_name, logo_url'
+  ).eq('id', session.clinic_id).single();
+  
+  const start = clinicRow?.working_hours_start || '08:00';
+  const end = clinicRow?.working_hours_end || '16:00';
+
+  // [1] فحص وقت الدوام صارم
+  if (tgId !== DEV_TELEGRAM_ID && !isWithinWorkingHours(time, start, end)) {
+    const waNum = (clinicRow?.receptionist_whatsapp || clinicRow?.phone || '').replace(/[^\d]/g, '');
+    const waText = encodeURIComponent(
+      `السلام عليكم،\nأرغب في حجز موعد خارج أوقات الدوام الرسمي في ${clinicRow?.name || 'العيادة'}.\n\n` +
+      `📅 التاريخ المطلوب: ${session.preferred_date}\n⏰ الوقت المطلوب: ${time}\n\nهل يمكنكم مساعدتي؟`
+    );
+    const msg =
+      `⏰ <b>عذراً، أوقات الدوام الرسمية قد انتهت</b>\n\n` +
+      `🏥 العيادة: ${clinicRow?.name || 'العيادة'}\n` +
+      `🕐 ساعات العمل الرسمية: من <b>${start}</b> إلى <b>${end}</b>\n` +
+      `⛔ الوقت المطلوب (<b>${time}</b>) خارج أوقات الدوام\n\n` +
+      `💡 يمكنك التواصل مع موظف الاستقبال عبر الواتساب:`;
+    const markup = waNum
+      ? { inline_keyboard: [[{ text: '💬 تواصل مع الاستقبال عبر واتساب', url: `https://wa.me/${waNum}?text=${waText}` }]] }
+      : undefined;
+    await send(chatId, msg, markup);
+    await clearSession(supabase, tgId);
+    return true;
+  }
+
+  // [2] فحص الوقت الفائت
   if (tgId !== DEV_TELEGRAM_ID && isPastTime(session.preferred_date, time)) {
     await send(chatId, `⚠️ الوقت <b>${time}</b> فائت. اختر وقتاً آخر.`);
     return true;
   }
 
-  const { data: clinicRow } = await supabase.from('clinics').select('working_hours_start, working_hours_end, receptionist_whatsapp, name, phone').eq('id', session.clinic_id).single();
-  const start = clinicRow?.working_hours_start || '08:00';
-  const end = clinicRow?.working_hours_end || '16:00';
-  if (tgId !== DEV_TELEGRAM_ID && !isWithinWorkingHours(time, start, end)) {
-    const waNum = (clinicRow?.receptionist_whatsapp || '').replace(/[^\d]/g, '');
-    const waText = encodeURIComponent(`السلام عليكم، حجز خارج الدوام في ${clinicRow?.name || 'العيادة'}`);
-    await send(chatId, `⏰ <b>خارج أوقات الدوام</b>\n🕐 ${start} — ${end}`,
-      waNum ? { inline_keyboard: [[{ text: '💬 تواصل واتساب', url: `https://wa.me/${waNum}?text=${waText}` }]] } : undefined);
-    return true;
-  }
-
+  // [3] فحص التكرار
   const { data: duplicate } = await supabase.from('appointments').select('id')
     .eq('clinic_id', session.clinic_id).eq('date', session.preferred_date)
     .eq('time', time + ':00').in('status', ['pending', 'confirmed']).maybeSingle();
@@ -1125,6 +1234,7 @@ async function finalizeBooking(supabase: any, send: any, chatId: number, tgId: s
     return true;
   }
 
+  // [4] الحد الأقصى
   const todayStr = new Date().toISOString().slice(0, 10);
   const { count: todayCount } = await supabase.from('appointments').select('id', { count: 'exact', head: true })
     .eq('customer_telegram_id', tgId).eq('date', todayStr).not('status', 'in', '(cancelled)');
@@ -1134,38 +1244,78 @@ async function finalizeBooking(supabase: any, send: any, chatId: number, tgId: s
     return true;
   }
 
-  // ✅ الاسم العربي الأصلي كما أدخله المستخدم
-  const storedName = session.full_name || firstName;
-  const storedPhone = session.phone || '';
+  // ✅ [5] الاسم والهاتف - نضمن أنها ليست فارغة
+  const storedName = (session.full_name && String(session.full_name).trim().length > 0) 
+    ? String(session.full_name).trim() 
+    : firstName;
+  const storedPhone = (session.phone && String(session.phone).trim().length > 0) 
+    ? String(session.phone).trim() 
+    : `tg:${tgId}`;
 
-  let patientId: string;
-  const { data: existingPatient } = await supabase.from('patients').select('id')
-    .eq('clinic_id', session.clinic_id).eq('telegram_user_id', tgId).maybeSingle();
+  console.log(`📝 [حجز جديد] الاسم="${storedName}" | الهاتف="${storedPhone}" | TG=${tgId}`);
 
-  if (existingPatient) {
-    patientId = existingPatient.id;
-    // ✅ تحديث الاسم والهاتف بالقيم العربية الأصلية
-    await supabase.from('patients').update({
-      name: storedName,
-      phone: storedPhone
-    }).eq('id', patientId);
+  // ✅ [6] المريض - نُنشئ أو نحدّث بحيث الاسم يكون العربي دائماً
+  let patientId: string | null = null;
+  
+  // البحث عن مريض موجود
+  const { data: existingPatients } = await supabase.from('patients')
+    .select('id, name, phone')
+    .eq('clinic_id', session.clinic_id)
+    .eq('telegram_user_id', tgId);
+
+  if (existingPatients && existingPatients.length > 0) {
+    // مريض موجود - نحدّث اسمه بالعربي وهاتفه
+    patientId = existingPatients[0].id;
+    console.log(`♻️ تحديث مريض موجود: ${patientId}`);
+    const { error: upErr } = await supabase.from('patients')
+      .update({ 
+        name: storedName,
+        phone: storedPhone,
+      })
+      .eq('id', patientId);
+    if (upErr) console.error('❌ خطأ تحديث المريض:', upErr);
+    else console.log(`✅ تم تحديث المريض بـ: الاسم="${storedName}"`);
   } else {
-    const { data: np } = await supabase.from('patients')
+    // مريض جديد
+    console.log(`➕ إنشاء مريض جديد بـ: الاسم="${storedName}"`);
+    const { data: np, error: insErr } = await supabase.from('patients')
       .insert({
         clinic_id: session.clinic_id,
         name: storedName,
         phone: storedPhone,
-        telegram_user_id: tgId
+        telegram_user_id: tgId,
       })
       .select('id').single();
+    if (insErr) {
+      console.error('❌ خطأ إنشاء المريض:', insErr);
+      await send(chatId, '❌ تعذّر حفظ بياناتك. حاول مرة أخرى.');
+      return true;
+    }
     patientId = np!.id;
+    console.log(`✅ تم إنشاء المريض: ${patientId}`);
+  }
+
+  // ✅ التأكد بجولة قراءة أن الاسم محفوظ صحيحاً
+  const { data: verifyPatient } = await supabase.from('patients')
+    .select('id, name, phone')
+    .eq('id', patientId)
+    .single();
+  console.log(`🔍 تأكيد المريض في DB: ${JSON.stringify(verifyPatient)}`);
+
+  // إذا لسبب ما الاسم مش محفوظ، نحاول تحديث قسري
+  if (!verifyPatient?.name || verifyPatient.name === 'مريض غير محدد' || verifyPatient.name.trim().length === 0) {
+    console.warn(`⚠️ الاسم لم يُحفظ! محاولة قسرية...`);
+    await supabase.from('patients').update({ name: storedName }).eq('id', patientId);
   }
 
   const { data: service } = await supabase.from('services').select('name, price').eq('id', session.service_id).single();
-  const { data: clinicInfo } = await supabase.from('clinics').select('name, doctor_name, logo_url, receptionist_whatsapp, phone').eq('id', session.clinic_id).single();
-
   const code = `RE-${String(Math.floor(1000 + Math.random() * 9000))}`;
-  const { error } = await supabase.from('appointments').insert({
+
+  // ✅ [7] الحجز - نكتشف الأعمدة المتاحة ونحفظ الاسم في كل مكان ممكن
+  const appointmentCols = await detectTableColumns(supabase, 'appointments');
+  console.log(`📋 أعمدة جدول appointments: ${Array.from(appointmentCols).join(', ')}`);
+
+  const appointmentData: any = {
     clinic_id: session.clinic_id,
     patient_id: patientId,
     service_id: session.service_id,
@@ -1174,24 +1324,61 @@ async function finalizeBooking(supabase: any, send: any, chatId: number, tgId: s
     status: 'pending',
     reservation_code: code,
     customer_telegram_id: tgId,
-    // ✅ الاسم العربي الأصلي في الملاحظات
     notes: `حجز تليجرام - ${storedName} (${storedPhone})`,
-  });
+  };
 
-  if (error) {
-    console.error('Booking insert error:', error);
-    await send(chatId, '❌ تعذّر إكمال الحجز. حاول مرة أخرى.');
-    return true;
+  // ✅ نُضيف كل عمود ممكن للاسم والهاتف بشكل ذكي
+  const possibleNameColumns = ['patient_name', 'customer_name', 'name', 'full_name', 'client_name'];
+  const possiblePhoneColumns = ['patient_phone', 'customer_phone', 'phone', 'mobile', 'client_phone'];
+
+  for (const col of possibleNameColumns) {
+    if (appointmentCols.has(col)) {
+      appointmentData[col] = storedName;
+      console.log(`➕ إضافة ${col} = "${storedName}"`);
+    }
   }
+  for (const col of possiblePhoneColumns) {
+    if (appointmentCols.has(col)) {
+      appointmentData[col] = storedPhone;
+      console.log(`➕ إضافة ${col} = "${storedPhone}"`);
+    }
+  }
+
+  const { error: insertErr } = await supabase.from('appointments').insert(appointmentData);
+
+  if (insertErr) {
+    console.error('❌ فشل إدخال الحجز:', insertErr);
+    // Fallback: أعمدة أساسية فقط
+    const basic = {
+      clinic_id: session.clinic_id,
+      patient_id: patientId,
+      service_id: session.service_id,
+      date: session.preferred_date,
+      time: time + ':00',
+      status: 'pending',
+      reservation_code: code,
+      customer_telegram_id: tgId,
+      notes: `حجز تليجرام - ${storedName} (${storedPhone})`,
+    };
+    const retry = await supabase.from('appointments').insert(basic);
+    if (retry.error) {
+      console.error('❌ فشل نهائي:', retry.error);
+      await send(chatId, '❌ تعذّر إكمال الحجز.');
+      return true;
+    }
+  }
+
+  console.log(`✅ تم حفظ الحجز ${code} بنجاح`);
+
   await clearSession(supabase, tgId);
 
-  const waNum = (clinicInfo?.receptionist_whatsapp || clinicInfo?.phone || '').replace(/[^\d]/g, '');
-  const waTextOther = encodeURIComponent(`مرحباً، أريد حجز باسم شخص آخر في ${clinicInfo?.name || 'العيادة'}`);
+  const waNum = (clinicRow?.receptionist_whatsapp || clinicRow?.phone || '').replace(/[^\d]/g, '');
+  const waTextOther = encodeURIComponent(`مرحباً، أريد حجز باسم شخص آخر في ${clinicRow?.name || 'العيادة'}`);
   const successMarkup = {
     inline_keyboard: waNum ? [[{ text: '👥 حجز باسم شخص آخر', url: `https://wa.me/${waNum}?text=${waTextOther}` }]] : [],
   };
 
-  // ✅ رسالة التأكيد بالاسم العربي الأصلي
+  // ✅ [8] رسالة التأكيد النصية
   const confirmMsg =
     `✅ <b>تم تأكيد حجزك بنجاح!</b>\n\n` +
     `👤 المريض: ${storedName}\n` +
@@ -1204,39 +1391,65 @@ async function finalizeBooking(supabase: any, send: any, chatId: number, tgId: s
 
   await send(chatId, confirmMsg, successMarkup);
 
-  // ✅ البطاقة: الترجمة فقط للعرض المرئي - لا تؤثر على DB
-  const cardPng = await generateLuxuryBookingCard({
-    clinicName: clinicInfo?.name || 'Smart Clinic',
-    doctorName: clinicInfo?.doctor_name || '',
-    logoUrl: clinicInfo?.logo_url || '',
-    patientName: storedName,         // ← الاسم العربي الأصلي يُرسل للبطاقة
-    patientPhone: storedPhone,
-    serviceName: service?.name || 'Medical Consultation',
-    date: session.preferred_date,
-    time: time,
-    code: code,
-  });
+  // ✅ [9] بطاقة الحجز - مضمونة
+  let cardPng: Uint8Array | null = null;
+  try {
+    cardPng = await generateLuxuryBookingCard({
+      clinicName: clinicRow?.name || 'Smart Clinic',
+      doctorName: clinicRow?.doctor_name || '',
+      logoUrl: clinicRow?.logo_url || '',
+      patientName: storedName,
+      patientPhone: storedPhone,
+      serviceName: service?.name || 'Medical Consultation',
+      date: session.preferred_date,
+      time: time,
+      code: code,
+    });
+  } catch (e) { console.error('❌ خطأ satori:', e); }
 
-  if (cardPng) {
-    const fd = new FormData();
-    fd.append('chat_id', String(chatId));
-    fd.append('photo', new Blob([cardPng], { type: 'image/png' }), 'booking_card.png');
-    fd.append('caption', `📋 <b>بطاقة حجز رسمي</b> — ${clinicInfo?.name || ''}\nبرجاء إبراز الكود عند الوصول.`);
-    fd.append('parse_mode', 'HTML');
-    await fetchWithTimeout(`https://api.telegram.org/bot${botToken}/sendPhoto`, { method: 'POST', body: fd }, 20000);
+  if (!cardPng) {
+    try {
+      cardPng = await generateFallbackCard({
+        clinicName: clinicRow?.name || 'Smart Clinic',
+        doctorName: clinicRow?.doctor_name || '',
+        patientName: storedName,
+        patientPhone: storedPhone,
+        serviceName: service?.name || 'Medical Consultation',
+        date: session.preferred_date,
+        time: time,
+        code: code,
+      });
+    } catch (e) { console.error('❌ خطأ fallback:', e); }
   }
 
-  // ✅ إشعار الطبيب بالاسم العربي الأصلي
-  const doctorMessage =
-    `🔔 <b>حجز جديد</b>\n` +
-    `👤 ${storedName}\n` +
-    `📱 ${storedPhone}\n` +
-    `🏷 ${service?.name || ''}\n` +
-    `📅 ${session.preferred_date} ⏰ ${time}\n` +
-    `🔖 ${code}`;
+  if (cardPng) {
+    try {
+      const fd = new FormData();
+      fd.append('chat_id', String(chatId));
+      fd.append('photo', new Blob([cardPng], { type: 'image/png' }), 'booking_card.png');
+      fd.append('caption', `📋 <b>بطاقة حجز رسمي</b> — ${clinicRow?.name || ''}\nبرجاء إبراز الكود عند الوصول.`);
+      fd.append('parse_mode', 'HTML');
+      await fetchWithTimeout(`https://api.telegram.org/bot${botToken}/sendPhoto`, { method: 'POST', body: fd }, 25000);
+    } catch (e) { console.error('❌ إرسال البطاقة:', e); }
+  }
 
+  // ✅ [10] الرسالة الصوتية الاحترافية
+  try {
+    const voiceMessage = 
+      `مرحباً ${storedName}. ` +
+      `تم تأكيد حجزك بنجاح في ${clinicRow?.name || 'العيادة'} ` +
+      `يوم ${session.preferred_date} في تمام الساعة ${time}. ` +
+      `نتمنى لك دوام الصحة والعافية وراحة البال. ` +
+      `فريقنا الطبي في انتظارك لتقديم أفضل خدمة ممكنة. ` +
+      `نراك قريباً، مع أطيب التمنيات.`;
+    await sendVoiceReply(botToken, chatId, voiceMessage, 'رسالة تأكيد الحجز');
+  } catch (_) {}
+
+  // ✅ [11] إشعار الطبيب
+  const doctorMessage =
+    `🔔 <b>حجز جديد</b>\n👤 ${storedName}\n📱 ${storedPhone}\n🏷 ${service?.name || ''}\n📅 ${session.preferred_date} ⏰ ${time}\n🔖 ${code}`;
   await notifyDoctor(supabase, botToken, session.clinic_id, doctorMessage);
-  await sendEmailNotification(supabase, session.clinic_id, `حجز جديد - ${clinicInfo?.name || ''}`, doctorMessage);
+  await sendEmailNotification(supabase, session.clinic_id, `حجز جديد - ${clinicRow?.name || ''}`, doctorMessage);
 
   return true;
 }
@@ -1280,12 +1493,22 @@ async function handleCallbackQuery(supabase: any, query: any, requestClinicId: s
     const { data: service } = await supabase.from('services').select('id, name, clinic_id').eq('id', serviceId).single();
     if (!service) { await send(chatId, '❌ الخدمة غير متوفرة.'); return; }
 
+    // ✅ نبحث عن مريض له اسم حقيقي عربي (ليس اسم تليجرام)
     const { data: existingPatient } = await supabase.from('patients')
-      .select('id, name, phone').eq('clinic_id', service.clinic_id).eq('telegram_user_id', tgId).maybeSingle();
-    const hasRealRegistration = existingPatient && existingPatient.phone && !String(existingPatient.phone).startsWith('tg:');
+      .select('id, name, phone')
+      .eq('clinic_id', service.clinic_id)
+      .eq('telegram_user_id', tgId)
+      .maybeSingle();
+
+    // مريض مكتمل التسجيل = له هاتف حقيقي (ليس tg:) واسم عربي كامل (أكثر من كلمة أو له مسافة)
+    const hasRealRegistration = existingPatient && 
+      existingPatient.phone && 
+      !String(existingPatient.phone).startsWith('tg:') &&
+      existingPatient.name &&
+      existingPatient.name.trim().length >= 2 &&
+      existingPatient.name !== firstName; // ليس مجرد اسم تليجرام
 
     if (hasRealRegistration) {
-      // ✅ استخدام الاسم العربي المحفوظ سابقاً
       await upsertSession(supabase, tgId, {
         clinic_id: service.clinic_id, service_id: service.id, step: 'ask_date',
         full_name: existingPatient!.name, phone: existingPatient!.phone,
@@ -1306,6 +1529,7 @@ async function handleCallbackQuery(supabase: any, query: any, requestClinicId: s
       return;
     }
 
+    // مريض جديد أو غير مكتمل - نطلب الاسم
     await upsertSession(supabase, tgId, {
       clinic_id: service.clinic_id, service_id: service.id, step: 'ask_name',
       full_name: null, phone: null, preferred_date: null, preferred_time: null, phone_attempts: 0
