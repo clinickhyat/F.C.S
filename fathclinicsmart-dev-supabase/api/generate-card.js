@@ -2,7 +2,7 @@ const chromium = require('@sparticuz/chromium');
 const puppeteer = require('puppeteer-core');
 
 module.exports = async (req, res) => {
-  // CORS
+  // إعدادات CORS
   res.setHeader('Access-Control-Allow-Origin', '*');
   res.setHeader('Access-Control-Allow-Methods', 'POST, OPTIONS');
   res.setHeader('Access-Control-Allow-Headers', 'Content-Type');
@@ -35,13 +35,13 @@ module.exports = async (req, res) => {
       });
     } catch (_) {}
 
-    // QR
+    // رابط الـ QR
     const qrData = `RESERVATION:${code}\nPATIENT:${patientName}\nPHONE:${patientPhone}\nDATE:${date}\nTIME:${time}\nCLINIC:${clinicName}`;
     const qrUrl = `https://api.qrserver.com/v1/create-qr-code/?size=300x300&data=${encodeURIComponent(qrData)}&color=0F172A&bgcolor=FFFFFF&margin=2&ecc=H`;
 
     const subTitle = doctorName ? `تحت إشراف د. ${doctorName}` : 'الحجز الرسمي للموعد الطبي';
 
-    // HTML التصميم الزجاجي الفاخر
+    // كود HTML للبطاقة (نفس التصميم السابق)
     const html = `<!DOCTYPE html>
 <html lang="ar" dir="rtl">
 <head>
@@ -182,12 +182,21 @@ module.exports = async (req, res) => {
 </body>
 </html>`;
 
-    // تشغيل Puppeteer
+    // ✅ التهيئة الصحيحة لـ Puppeteer في بيئة Vercel
+    // استخدام `@sparticuz/chromium` بدلاً من Chromium الكامل
     const browser = await puppeteer.launch({
-      args: chromium.args,
+      args: [
+        ...chromium.args,
+        '--no-sandbox',
+        '--disable-setuid-sandbox',
+        '--disable-dev-shm-usage',
+        '--disable-gpu',
+        '--single-process'
+      ],
       defaultViewport: { width: 900, height: 1400, deviceScaleFactor: 2 },
       executablePath: await chromium.executablePath(),
       headless: chromium.headless,
+      ignoreHTTPSErrors: true,
     });
 
     const page = await browser.newPage();
