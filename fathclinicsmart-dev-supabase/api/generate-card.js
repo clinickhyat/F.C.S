@@ -2,13 +2,35 @@ const chromium = require('@sparticuz/chromium');
 const puppeteer = require('puppeteer-core');
 
 module.exports = async (req, res) => {
-  // إعدادات CORS
+  // CORS
   res.setHeader('Access-Control-Allow-Origin', '*');
-  res.setHeader('Access-Control-Allow-Methods', 'POST, OPTIONS');
+  res.setHeader('Access-Control-Allow-Methods', 'POST, GET, OPTIONS');
   res.setHeader('Access-Control-Allow-Headers', 'Content-Type');
 
   if (req.method === 'OPTIONS') return res.status(200).end();
-  if (req.method !== 'POST') return res.status(405).json({ error: 'Method not allowed' });
+
+  // ✅ دعم GET للاختبار (يعرض نموذجاً تجريبياً)
+  if (req.method === 'GET') {
+    return res.status(200).json({
+      message: '✅ API يعمل! استخدم POST لإرسال بيانات الحجز.',
+      example: {
+        method: 'POST',
+        body: {
+          clinicName: 'عيادتي',
+          patientName: 'أحمد محمد',
+          patientPhone: '+966512345678',
+          serviceName: 'فحص عام',
+          date: '2026-07-30',
+          time: '14:30',
+          code: 'RE-1234'
+        }
+      }
+    });
+  }
+
+  if (req.method !== 'POST') {
+    return res.status(405).json({ error: 'Method not allowed' });
+  }
 
   try {
     const {
@@ -35,13 +57,13 @@ module.exports = async (req, res) => {
       });
     } catch (_) {}
 
-    // رابط الـ QR
+    // QR
     const qrData = `RESERVATION:${code}\nPATIENT:${patientName}\nPHONE:${patientPhone}\nDATE:${date}\nTIME:${time}\nCLINIC:${clinicName}`;
     const qrUrl = `https://api.qrserver.com/v1/create-qr-code/?size=300x300&data=${encodeURIComponent(qrData)}&color=0F172A&bgcolor=FFFFFF&margin=2&ecc=H`;
 
     const subTitle = doctorName ? `تحت إشراف د. ${doctorName}` : 'الحجز الرسمي للموعد الطبي';
 
-    // كود HTML للبطاقة (نفس التصميم السابق)
+    // HTML التصميم الزجاجي الفاخر
     const html = `<!DOCTYPE html>
 <html lang="ar" dir="rtl">
 <head>
@@ -182,21 +204,12 @@ module.exports = async (req, res) => {
 </body>
 </html>`;
 
-    // ✅ التهيئة الصحيحة لـ Puppeteer في بيئة Vercel
-    // استخدام `@sparticuz/chromium` بدلاً من Chromium الكامل
+    // تشغيل Puppeteer
     const browser = await puppeteer.launch({
-      args: [
-        ...chromium.args,
-        '--no-sandbox',
-        '--disable-setuid-sandbox',
-        '--disable-dev-shm-usage',
-        '--disable-gpu',
-        '--single-process'
-      ],
+      args: chromium.args,
       defaultViewport: { width: 900, height: 1400, deviceScaleFactor: 2 },
       executablePath: await chromium.executablePath(),
       headless: chromium.headless,
-      ignoreHTTPSErrors: true,
     });
 
     const page = await browser.newPage();
