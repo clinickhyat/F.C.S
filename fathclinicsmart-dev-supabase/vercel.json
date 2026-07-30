@@ -1,8 +1,11 @@
 {
   "rewrites": [
-    {
-      "source": "/(.*)",
-      "destination": "/index.html"
+    { "source": "/(.*)", "destination": "/index.html" }
+  ],
+  "functions": {
+    "api/generate-card.js": {
+      "maxDuration": 30,
+      "memory": 1024
     }
-  ]
+  }
 }
