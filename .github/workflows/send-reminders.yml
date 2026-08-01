@@ -16,3 +16,4 @@ jobs:
             -H "Authorization: Bearer ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}" \
             -d '{"source":"github-actions"}' \
             https://ebuumyqofptnjjaujlyd.supabase.co/functions/v1/send-reminders
+             
