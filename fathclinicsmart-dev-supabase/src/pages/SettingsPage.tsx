@@ -45,15 +45,13 @@ export default function SettingsPage() {
   const [voiceAgentEnabled, setVoiceAgentEnabled] = useState(false);
   const [voiceTone, setVoiceTone] = useState("ودود ومحترم");
   const [voiceMode, setVoiceMode] = useState("auto");
-  const [receptionPin, setReceptionPin] = useState("1234");
-  const [cashierPin, setCashierPin] = useState("5678");
+  // ❌ تم حذف: receptionPin, cashierPin
   const [staffList, setStaffList] = useState<Array<{ id: string; email: string; role: string; approved: boolean; created_at: string }>>([]);
   const [newStaffEmail, setNewStaffEmail] = useState("");
   const [newStaffPassword, setNewStaffPassword] = useState("");
   const [newStaffRole, setNewStaffRole] = useState<"reception" | "cashier">("reception");
   const [staffBusy, setStaffBusy] = useState(false);
   const [receptionistWhatsapp, setReceptionistWhatsapp] = useState("");
-  // ✅ إضافة وقت الدوام
   const [workingHoursStart, setWorkingHoursStart] = useState("08:00");
   const [workingHoursEnd, setWorkingHoursEnd] = useState("16:00");
 
@@ -83,21 +81,14 @@ export default function SettingsPage() {
   useEffect(() => {
     if (clinic) {
       setClinicName(clinic.name || "");
-      setBotToken(clinic.bot_token || "");
-      // @ts-ignore - logo_url will be available after migration
+      setBotToken((clinic as any).bot_token || "");
       setLogoUrl(clinic.logo_url || null);
-      // @ts-ignore - bot_username added in latest migration
-      setBotUsername(clinic.bot_username || null);
-      // @ts-ignore - voice fields added in latest migration
-      setVoiceAgentEnabled(!!clinic.voice_agent_enabled);
-      // @ts-ignore
-      setVoiceTone(clinic.voice_tone || "ودود ومحترم");
-      setVoiceMode(clinic.voice_mode || "auto");
-      setReceptionPin(clinic.reception_pin || "1234");
-      setCashierPin(clinic.cashier_pin || "5678");
-      // @ts-ignore - receptionist_whatsapp added in latest migration
+      setBotUsername((clinic as any).bot_username || null);
+      setVoiceAgentEnabled(!!(clinic as any).voice_agent_enabled);
+      setVoiceTone((clinic as any).voice_tone || "ودود ومحترم");
+      setVoiceMode((clinic as any).voice_mode || "auto");
+      // ❌ تم حذف: setReceptionPin, setCashierPin
       setReceptionistWhatsapp((clinic as any).receptionist_whatsapp || "");
-      // @ts-ignore - working hours added
       setWorkingHoursStart((clinic as any).working_hours_start || "08:00");
       setWorkingHoursEnd((clinic as any).working_hours_end || "16:00");
       fetchServices();
@@ -167,7 +158,6 @@ export default function SettingsPage() {
     fetchStaff();
   };
 
-
   const refreshBotUsername = async () => {
     setLoadingBotInfo(true);
     const r = await invokeBotAction("bot-info");
@@ -206,25 +196,23 @@ export default function SettingsPage() {
       return;
     }
     setSaving(true);
-    // Save secrets to vault (source of truth) — owner only
+    // ❌ تم حذف: _reception_pin, _cashier_pin من استدعاء vault
+    // Save only bot_token to vault (if needed)
     try {
       await supabase.rpc("save_clinic_vault", {
-        _reception_pin: receptionPin || null,
-        _cashier_pin: cashierPin || null,
         _bot_token: botToken || null,
       } as any);
     } catch (e) {
       console.warn("vault save failed", e);
     }
     // ✅ إضافة working_hours_start و working_hours_end
+    // ❌ تم حذف: reception_pin, cashier_pin من updateClinic
     const { error } = await updateClinic({ 
       name: clinicName, 
       bot_token: botToken, 
       voice_agent_enabled: voiceAgentEnabled, 
       voice_tone: voiceTone, 
       voice_mode: voiceMode, 
-      reception_pin: receptionPin, 
-      cashier_pin: cashierPin, 
       receptionist_whatsapp: receptionistWhatsapp || null,
       working_hours_start: workingHoursStart,
       working_hours_end: workingHoursEnd,
@@ -308,7 +296,6 @@ export default function SettingsPage() {
     const fileExt = file.name.split('.').pop();
     const filePath = `${user.id}/logo.${fileExt}`;
 
-    // Upload to storage
     const { error: uploadError } = await supabase.storage
       .from('clinic-logos')
       .upload(filePath, file, { upsert: true });
@@ -319,12 +306,10 @@ export default function SettingsPage() {
       return;
     }
 
-    // Get public URL
     const { data: { publicUrl } } = supabase.storage
       .from('clinic-logos')
       .getPublicUrl(filePath);
 
-    // Update clinic with logo URL
     const { error: updateError } = await supabase
       .from('clinics')
       .update({ logo_url: publicUrl })
@@ -401,7 +386,6 @@ export default function SettingsPage() {
   return (
     <div className="min-h-screen bg-mesh flex flex-col">
       <SubscriptionLock />
-      {/* Header */}
       <header className="glass-strong sticky top-0 z-40">
         <div className="container mx-auto px-4">
           <div className="flex items-center justify-between h-18 py-3">
@@ -433,7 +417,6 @@ export default function SettingsPage() {
         </div>
       </header>
 
-      {/* Main Content */}
       <main className="flex-1 container mx-auto px-4 py-8 max-w-4xl">
         <div className="space-y-6">
           {/* Clinic Settings */}
@@ -448,7 +431,6 @@ export default function SettingsPage() {
               </div>
             </div>
             <div className="grid gap-5">
-              {/* Clinic Logo Upload */}
               <div className="space-y-2">
                 <Label className="text-sm font-medium flex items-center gap-2">
                   <Image className="w-4 h-4" />
@@ -523,20 +505,8 @@ export default function SettingsPage() {
                   بوت تيليجرام مفعّل تلقائياً عبر النظام (محمي من الإدارة).
                 </div>
               )}
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                <div className="space-y-2">
-                  <Label htmlFor="receptionPin" className="text-sm font-medium">رمز PIN للاستقبال</Label>
-                  <Input id="receptionPin" value={receptionPin} onChange={(e) => setReceptionPin(e.target.value)} inputMode="numeric" className="input-modern text-center font-mono" />
-                </div>
-                <div className="space-y-2">
-                  <Label htmlFor="cashierPin" className="text-sm font-medium">رمز PIN للصندوق</Label>
-                  <Input id="cashierPin" value={cashierPin} onChange={(e) => setCashierPin(e.target.value)} inputMode="numeric" className="input-modern text-center font-mono" />
-                </div>
-              </div>
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
-                <Button variant="outline" type="button" onClick={() => navigate("/reception")}>فتح بوابة الاستقبال</Button>
-                <Button variant="outline" type="button" onClick={() => navigate("/cashier")}>فتح بوابة الصندوق</Button>
-              </div>
+              {/* ❌ تم حذف حقلي PIN بالكامل */}
+              {/* ❌ تم حذف أزرار "فتح بوابة الاستقبال/الصندوق" */}
               <Button onClick={handleSaveClinic} disabled={saving} className="w-full sm:w-auto">
                 {saving ? <Loader2 className="w-4 h-4 animate-spin" /> : <Save className="w-4 h-4" />}
                 حفظ الإعدادات
@@ -552,7 +522,7 @@ export default function SettingsPage() {
             </div>
           </section>
 
-          {/* ✅ إضافة وقت الدوام (Working Hours) */}
+          {/* Working Hours */}
           <section className="card-modern p-6 animate-slide-up delay-50">
             <div className="flex items-center gap-3 mb-6">
               <div className="w-12 h-12 rounded-2xl bg-gradient-to-br from-amber-500 to-orange-600 flex items-center justify-center shadow-lg">
@@ -626,7 +596,6 @@ export default function SettingsPage() {
               يمكن للموظف تغيير كلمة المرور لاحقاً.
             </p>
 
-            {/* Receptionist WhatsApp — used for third-party bookings via Telegram */}
             <div className="mb-5 space-y-2 p-4 rounded-xl border border-emerald-500/20 bg-emerald-500/5">
               <Label className="text-sm font-semibold text-foreground">رقم واتساب موظف الاستقبال</Label>
               <Input
@@ -640,7 +609,6 @@ export default function SettingsPage() {
                 يُستخدم عندما يطلب زبون في تيليجرام «حجز باسم شخص آخر» — يُوجَّه للتواصل مع الاستقبال عبر واتساب.
               </p>
             </div>
-
 
             {staffList.length === 0 ? (
               <div className="text-center py-6 text-sm text-muted-foreground border border-dashed border-border rounded-xl">
@@ -715,7 +683,7 @@ export default function SettingsPage() {
             </div>
           </section>
 
-          {/* QR Code for the Telegram booking link */}
+          {/* QR Code */}
           <section className="card-modern p-6 animate-slide-up delay-100">
             <div className="flex items-center gap-3 mb-4">
               <div className="w-12 h-12 rounded-2xl bg-gradient-to-br from-fuchsia-500 to-pink-600 flex items-center justify-center shadow-lg">
@@ -766,10 +734,9 @@ export default function SettingsPage() {
                 </div>
               );
             })()}
-
           </section>
 
-          {/* Voice Agent (gTTS, free, no quota) */}
+          {/* Voice Agent */}
           <section className="card-modern p-6 animate-slide-up delay-150">
             <div className="flex items-center gap-3 mb-4">
               <div className="w-12 h-12 rounded-2xl bg-gradient-to-br from-violet-500 to-purple-600 flex items-center justify-center shadow-lg">
@@ -827,11 +794,7 @@ export default function SettingsPage() {
             </div>
           </section>
 
-
-
-
-
-          {/* Link Doctor to Telegram for Instant Notifications */}
+          {/* Link Doctor */}
           <section className="card-modern p-6 animate-slide-up delay-100">
             <div className="flex items-center gap-3 mb-4">
               <div className="w-12 h-12 rounded-2xl bg-gradient-to-br from-sky-500 to-blue-600 flex items-center justify-center shadow-lg">
@@ -873,7 +836,7 @@ export default function SettingsPage() {
             </div>
           </section>
 
-          {/* Direct integration info - Only for Admin or regular clinic info */}
+          {/* Integration Info */}
           <section className="card-modern p-6 animate-slide-up delay-100">
             <div className="flex items-center gap-3 mb-6">
               <div className="w-12 h-12 rounded-2xl bg-gradient-to-br from-emerald-500 to-teal-600 flex items-center justify-center shadow-lg">
@@ -888,7 +851,6 @@ export default function SettingsPage() {
             </div>
             
             <div className="grid gap-4">
-              {/* Clinic ID - Always visible */}
               <div className="bg-primary/5 rounded-2xl p-5 border border-primary/20">
                 <Label className="flex items-center gap-2 text-primary font-semibold mb-3">
                   <Sparkles className="w-4 h-4" />
@@ -915,7 +877,6 @@ export default function SettingsPage() {
                 </p>
               </div>
 
-              {/* API Details - Only for Admin */}
               {isAdmin && (
                 <>
                   <div className="bg-warning/10 border border-warning/30 rounded-xl p-3 mb-2">
@@ -959,7 +920,6 @@ export default function SettingsPage() {
                     </div>
                   </div>
 
-                  {/* Instructions */}
                   <div className="bg-muted/30 rounded-2xl p-5 border border-border">
                     <h3 className="font-semibold text-foreground mb-3 flex items-center gap-2">
                       <Shield className="w-4 h-4 text-primary" />
@@ -988,7 +948,6 @@ export default function SettingsPage() {
               </div>
             </div>
             
-            {/* Add Service */}
             <div className="flex flex-col sm:flex-row gap-3 mb-6">
               <Input
                 value={newServiceName}
@@ -1012,7 +971,6 @@ export default function SettingsPage() {
               اترك حقل السعر فارغاً ليظهر للزبون كـ <b>«حسب الفحص»</b> ويُحدَّد بعد المعاينة.
             </p>
 
-            {/* Services List */}
             <div className="divide-y divide-border">
               {services.length === 0 ? (
                 <div className="py-12 text-center">
