@@ -10,7 +10,7 @@ import { Footer } from "@/components/layout/Footer";
 import { toast } from "@/hooks/use-toast";
 import { 
   CalendarDays, CheckCircle, Clock, LogOut, QrCode, Search, 
-  ShieldCheck, Stethoscope, Wallet, Users, TrendingUp, Timer, 
+  Stethoscope, Wallet, Users, TrendingUp, Timer, 
   Camera, X, Loader2, AlertCircle, Image as ImageIcon, Upload, RefreshCw
 } from "lucide-react";
 import { BarChart, Bar, PieChart, Pie, Cell, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid, Legend } from "recharts";
@@ -74,8 +74,7 @@ export default function ReceptionPage() {
   const navigate = useNavigate();
   const { user, signOut, loading: authLoading } = useAuth();
   const { clinic, loading: clinicLoading, error: clinicError, role, isTrialExpired } = useClinic();
-  const [pin, setPin] = useState("");
-  const [unlocked, setUnlocked] = useState(false);
+  // ❌ تم حذف: const [pin, setPin] = useState(""); const [unlocked, setUnlocked] = useState(false);
   const [appointments, setAppointments] = useState<Appointment[]>([]);
   const [search, setSearch] = useState("");
   const todayStr = format(new Date(), "yyyy-MM-dd");
@@ -102,15 +101,16 @@ export default function ReceptionPage() {
     if (!authLoading && !user) navigate("/auth");
   }, [authLoading, user, navigate]);
 
+  // ─── التحقق من الدور (بدون PIN) ───
   useEffect(() => {
     if (clinicLoading) return;
-    if (role === "owner" || role === "reception") setUnlocked(true);
+    // ✅ الصفحة تفتح مباشرة إذا كان الدور owner أو reception
     if (role === "cashier") navigate("/cashier", { replace: true });
   }, [role, clinicLoading, navigate]);
 
   // ─── جلب المواعيد (مع الملاحظات) ───
   const fetchAppointments = useCallback(async () => {
-    if (!clinic || !unlocked) return;
+    if (!clinic) return;
     const { data, error } = await supabase
       .from("appointments")
       .select("id,date,time,status,reservation_code,arrived_at,payment_status,entered_at,notes,patients(name,phone),services(name,price)")
@@ -118,17 +118,17 @@ export default function ReceptionPage() {
       .eq("date", today)
       .order("time", { ascending: true });
     if (!error) setAppointments((data || []) as Appointment[]);
-  }, [clinic, unlocked, today]);
+  }, [clinic, today]);
 
   useEffect(() => {
-    if (!clinic || !unlocked) return;
+    if (!clinic) return;
     fetchAppointments();
     const channel = supabase
       .channel(`reception-${clinic.id}-${today}`)
       .on("postgres_changes", { event: "*", schema: "public", table: "appointments", filter: `clinic_id=eq.${clinic.id}` }, fetchAppointments)
       .subscribe();
     return () => { supabase.removeChannel(channel); };
-  }, [clinic, unlocked, today, fetchAppointments]);
+  }, [clinic, today, fetchAppointments]);
 
   // ─── تنظيف الماسح عند الخروج ───
   useEffect(() => {
@@ -395,14 +395,7 @@ export default function ReceptionPage() {
     }
   };
 
-  // ─── دوال التحديث اليدوي ───
-  const unlock = () => {
-    if (pin === (clinic?.reception_pin || "1234")) {
-      setUnlocked(true);
-    } else {
-      toast({ title: "رمز غير صحيح", description: "تحقق من رمز الاستقبال في الإعدادات", variant: "destructive" });
-    }
-  };
+  // ❌ تم حذف دالة unlock بالكامل
 
   const markEntered = async (appointmentId: string) => {
     if (!clinic) return;
@@ -562,17 +555,7 @@ export default function ReceptionPage() {
         </div>
       )}
 
-      {/* قفل PIN */}
-      {!unlocked && (
-        <div className="fixed inset-0 z-50 bg-background/95 backdrop-blur-xl flex items-center justify-center p-4">
-          <div className="card-modern p-8 w-full max-w-sm text-center space-y-5">
-            <ShieldCheck className="w-12 h-12 text-primary mx-auto" />
-            <h1 className="text-2xl font-black text-foreground">بوابة الاستقبال</h1>
-            <Input type="password" inputMode="numeric" value={pin} onChange={(e) => setPin(e.target.value)} onKeyDown={(e) => e.key === "Enter" && unlock()} placeholder="رمز PIN" className="text-center text-xl tracking-widest" />
-            <Button onClick={unlock} className="w-full">دخول</Button>
-          </div>
-        </div>
-      )}
+      {/* ❌ تم حذف قفل PIN بالكامل */}
 
       {/* الهيدر */}
       <header className="glass-strong sticky top-0 z-40">
@@ -610,7 +593,7 @@ export default function ReceptionPage() {
             <option value="completed">تم الدخول</option>
             <option value="cancelled">ملغي/لم يصل</option>
           </select>
-          <Button variant="outline" onClick={fetchAppointments}><CalendarDays className="w-4 h-4" />تحديث</Button>
+          <Button variant="outline" onClick={fetchAppointments}><RefreshCw className="w-4 h-4" />تحديث</Button>
         </div>
 
         <div className="grid gap-3">
