@@ -6,10 +6,8 @@ interface Clinic {
   id: string;
   owner_id: string;
   name: string;
-  bot_token: string | null;
+  // ❌ تم إزالة: bot_token, reception_pin, cashier_pin (غير مستخدمة)
   logo_url?: string | null;
-  reception_pin?: string;
-  cashier_pin?: string;
   departments?: any;
   voice_mode?: string;
   created_at: string;
@@ -118,22 +116,26 @@ export function useClinic() {
           });
         }
 
-        // Merge secrets from vault (owner only)
+        // ✅ Merge secrets from vault (owner only) — BUT we only store them in vault, not in clinic object
+        // We keep the vault logic for future use, but we don't add pins to clinic object
         if (clinicData && resolvedRole === "owner") {
           try {
             const { data: vaultData } = await supabase.rpc("get_clinic_vault");
             const v: any = vaultData;
             if (v?.ok) {
-              clinicData = {
-                ...clinicData,
-                reception_pin: v.reception_pin || clinicData.reception_pin,
-                cashier_pin: v.cashier_pin || clinicData.cashier_pin,
-                bot_token: v.bot_token || clinicData.bot_token,
-              } as any;
+              // We read from vault but we don't add to clinic object (as they are not used)
+              // Just log for debugging
+              console.log("Vault data loaded (not used in clinic object)");
             }
           } catch (e) {
             console.warn("vault fetch failed", e);
           }
+        }
+
+        // ❌ Remove pins from clinicData before setting state (even if they come from DB)
+        if (clinicData) {
+          const { reception_pin, cashier_pin, bot_token, ...cleanClinic } = clinicData as any;
+          clinicData = cleanClinic as Clinic;
         }
 
         setClinic(clinicData);
@@ -192,13 +194,16 @@ export function useClinic() {
     if (!clinic) return { error: new Error("No clinic found") };
     if (role !== "owner") return { error: new Error("صلاحية التعديل مقتصرة على صاحب العيادة") };
 
+    // ❌ Prevent updating old columns (defensive)
+    const { reception_pin, cashier_pin, bot_token, ...safeUpdates } = updates as any;
+
     const { error } = await supabase
       .from("clinics")
-      .update(updates)
+      .update(safeUpdates)
       .eq("id", clinic.id)
       .eq("owner_id", user?.id || "");
 
-    if (!error) setClinic({ ...clinic, ...updates });
+    if (!error) setClinic({ ...clinic, ...safeUpdates });
     return { error };
   };
 
