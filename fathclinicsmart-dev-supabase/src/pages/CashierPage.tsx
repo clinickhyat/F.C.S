@@ -10,7 +10,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/u
 import { Footer } from "@/components/layout/Footer";
 import { toast } from "@/hooks/use-toast";
 import {
-  Banknote, CheckCircle, LogOut, Search, ShieldCheck, Stethoscope, Users,
+  Banknote, CheckCircle, LogOut, Search, Stethoscope, Users,
   Camera, X, Loader2, AlertCircle, Image as ImageIcon, Upload, RefreshCw, Printer, Download, Clock, Plus, UserPlus, DollarSign, TrendingUp, Receipt, MessageCircle, MinusCircle, Wallet, ArrowDownCircle, ArrowUpCircle, Sparkles, Send
 } from "lucide-react";
 import { BarChart, Bar, PieChart, Pie, Cell, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid, Legend } from "recharts";
@@ -131,8 +131,7 @@ export default function CashierPage() {
   const navigate = useNavigate();
   const { user, signOut, loading: authLoading } = useAuth();
   const { clinic, loading: clinicLoading, error: clinicError, role, isTrialExpired } = useClinic();
-  const [pin, setPin] = useState("");
-  const [unlocked, setUnlocked] = useState(false);
+  // ❌ تم حذف: const [pin, setPin] = useState(""); const [unlocked, setUnlocked] = useState(false);
   const [appointments, setAppointments] = useState<Appointment[]>([]);
   const [expenses, setExpenses] = useState<Expense[]>([]);
   const [search, setSearch] = useState("");
@@ -178,14 +177,15 @@ export default function CashierPage() {
     if (!authLoading && !user) navigate("/auth");
   }, [authLoading, user, navigate]);
 
+  // ─── التحقق من الدور (بدون PIN) ───
   useEffect(() => {
     if (clinicLoading) return;
-    if (role === "owner" || role === "cashier") setUnlocked(true);
+    // ✅ الصفحة تفتح مباشرة إذا كان الدور owner أو cashier
     if (role === "reception") navigate("/reception", { replace: true });
   }, [role, clinicLoading, navigate]);
 
   const fetchAppointments = useCallback(async () => {
-    if (!clinic || !unlocked) return;
+    if (!clinic) return;
     const { data, error } = await supabase
       .from("appointments")
       .select("id,patient_id,date,time,status,reservation_code,arrived_at,payment_status,paid_amount,discount_amount,is_walk_in,notes,customer_telegram_id,patients(id,name,phone,telegram_user_id),services(name,price)")
@@ -193,17 +193,17 @@ export default function CashierPage() {
       .eq("date", today)
       .order("time", { ascending: true });
     if (!error) setAppointments((data || []) as Appointment[]);
-  }, [clinic, unlocked, today]);
+  }, [clinic, today]);
 
   useEffect(() => {
-    if (!clinic || !unlocked) return;
+    if (!clinic) return;
     fetchAppointments();
     const channel = supabase
       .channel(`cashier-${clinic.id}-${today}`)
       .on("postgres_changes", { event: "*", schema: "public", table: "appointments", filter: `clinic_id=eq.${clinic.id}` }, fetchAppointments)
       .subscribe();
     return () => { supabase.removeChannel(channel); };
-  }, [clinic, unlocked, today, fetchAppointments]);
+  }, [clinic, today, fetchAppointments]);
 
   useEffect(() => {
     return () => { destroyScanner(); };
@@ -399,10 +399,7 @@ export default function CashierPage() {
     }
   };
 
-  const unlock = () => {
-    if (pin === (clinic?.cashier_pin || "5678")) setUnlocked(true);
-    else toast({ title: "رمز غير صحيح", description: "تحقق من رمز الصندوق في الإعدادات", variant: "destructive" });
-  };
+  // ❌ تم حذف دالة unlock بالكامل
 
   const openPaymentModal = (appointment: Appointment) => {
     const { cleanName, cleanPhone } = extractCleanInfo(appointment);
@@ -783,17 +780,7 @@ export default function CashierPage() {
         </div>
       )}
 
-      {/* قفل PIN */}
-      {!unlocked && (
-        <div className="fixed inset-0 z-50 bg-background/95 backdrop-blur-xl flex items-center justify-center p-4">
-          <div className="card-modern p-8 w-full max-w-sm text-center space-y-5">
-            <ShieldCheck className="w-12 h-12 text-primary mx-auto" />
-            <h1 className="text-2xl font-black text-foreground">بوابة الصندوق</h1>
-            <Input type="password" inputMode="numeric" value={pin} onChange={(e) => setPin(e.target.value)} onKeyDown={(e) => e.key === "Enter" && unlock()} placeholder="رمز PIN" className="text-center text-xl tracking-widest" />
-            <Button onClick={unlock} className="w-full">دخول</Button>
-          </div>
-        </div>
-      )}
+      {/* ❌ تم حذف قفل PIN بالكامل */}
 
       {/* الهيدر */}
       <header className="glass-strong sticky top-0 z-40">
