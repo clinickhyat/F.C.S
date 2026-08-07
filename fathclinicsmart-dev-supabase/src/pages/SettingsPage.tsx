@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useState, useRef } from "react";
 import { useNavigate } from "react-router-dom";
 import { useAuth } from "@/lib/auth";
 import { useClinic } from "@/hooks/useClinic";
@@ -11,7 +11,6 @@ import { Footer } from "@/components/layout/Footer";
 import { useToast } from "@/hooks/use-toast";
 import { QRCodeCanvas } from "qrcode.react";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-// ✅ استيراد Dialog بشكل صحيح
 import {
   Dialog,
   DialogContent,
@@ -48,7 +47,6 @@ import {
   Gift,
   BadgePercent,
   ImagePlus,
-  FileImage,
   X,
   Edit,
   Eye,
@@ -81,6 +79,9 @@ export default function SettingsPage() {
   const { user, signOut, loading: authLoading } = useAuth();
   const { clinic, subscription, loading: clinicLoading, updateClinic } = useClinic();
   const { toast } = useToast();
+
+  // --- Refs ---
+  const promoImageInputRef = useRef<HTMLInputElement>(null);
 
   // --- Existing State ---
   const [clinicName, setClinicName] = useState("");
@@ -447,13 +448,37 @@ export default function SettingsPage() {
     setPromoDialogOpen(true);
   };
 
+  // 🆕 NEW: Handle promo image selection with ref
   const handlePromoImageSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
+    console.log("📷 تم اختيار صورة العرض:", file.name, file.size);
     setPromoImageFile(file);
     const reader = new FileReader();
-    reader.onload = (ev) => setPromoImagePreview(ev.target?.result as string);
+    reader.onload = (ev) => {
+      setPromoImagePreview(ev.target?.result as string);
+      console.log("✅ تم تحميل معاينة الصورة");
+    };
+    reader.onerror = (err) => {
+      console.error("❌ فشل قراءة الصورة:", err);
+      toast({ title: "خطأ", description: "فشل قراءة الصورة", variant: "destructive" });
+    };
     reader.readAsDataURL(file);
+    // إعادة تعيين قيمة الإدخال للسماح باختيار نفس الملف مرة أخرى
+    if (promoImageInputRef.current) {
+      promoImageInputRef.current.value = "";
+    }
+  };
+
+  // Trigger file input click
+  const handlePromoImageUploadClick = () => {
+    console.log("🖱️ زر رفع الصورة تم الضغط عليه");
+    if (promoImageInputRef.current) {
+      promoImageInputRef.current.click();
+    } else {
+      console.error("❌ المرجع غير موجود");
+      toast({ title: "خطأ", description: "حدث خطأ في تهيئة رفع الصورة", variant: "destructive" });
+    }
   };
 
   const handlePromoSubmit = async () => {
@@ -469,17 +494,21 @@ export default function SettingsPage() {
       try {
         const fileExt = promoImageFile.name.split(".").pop();
         const filePath = `${clinic.id}/promo_${Date.now()}.${fileExt}`;
+        console.log("📤 رفع صورة العرض إلى:", filePath);
         const { error: uploadError } = await supabase.storage
           .from("promo-images")
           .upload(filePath, promoImageFile, { upsert: true });
         if (uploadError) {
+          console.error("❌ فشل رفع الصورة:", uploadError);
           toast({ title: "خطأ في رفع الصورة", description: uploadError.message, variant: "destructive" });
           setUploadingPromoImage(false);
           return;
         }
         const { data: { publicUrl } } = supabase.storage.from("promo-images").getPublicUrl(filePath);
         imageUrl = publicUrl;
+        console.log("✅ تم رفع الصورة بنجاح:", imageUrl);
       } catch (err: any) {
+        console.error("❌ استثناء في رفع الصورة:", err);
         toast({ title: "خطأ", description: err.message || "فشل رفع الصورة", variant: "destructive" });
         setUploadingPromoImage(false);
         return;
@@ -512,6 +541,7 @@ export default function SettingsPage() {
 
     setUploadingPromoImage(false);
     if (error) {
+      console.error("❌ فشل حفظ العرض:", error);
       toast({ title: "خطأ", description: "فشل حفظ العرض: " + error.message, variant: "destructive" });
     } else {
       toast({ title: "تم الحفظ ✓", description: "تم حفظ العرض بنجاح" });
@@ -1602,7 +1632,7 @@ export default function SettingsPage() {
                 />
                 <Label className="text-sm font-medium cursor-pointer">العرض نشط</Label>
               </div>
-              {/* Image Upload */}
+              {/* Image Upload - FIXED with ref */}
               <div>
                 <Label className="text-sm font-medium">صورة العرض (اختياري)</Label>
                 <div className="flex items-center gap-3 mt-1">
@@ -1611,13 +1641,19 @@ export default function SettingsPage() {
                     accept="image/*"
                     onChange={handlePromoImageSelect}
                     className="hidden"
-                    id="promo-image-upload"
+                    ref={promoImageInputRef}
+                    id="promo-image-upload-input"
                   />
-                  <label htmlFor="promo-image-upload" className="cursor-pointer">
-                    <Button type="button" variant="outline" size="sm">
-                      <Upload className="w-4 h-4 ml-1" /> رفع صورة
-                    </Button>
-                  </label>
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    onClick={handlePromoImageUploadClick}
+                    disabled={uploadingPromoImage}
+                  >
+                    <Upload className="w-4 h-4 ml-1" />
+                    {uploadingPromoImage ? "جاري الرفع..." : "رفع صورة"}
+                  </Button>
                   {promoImagePreview && (
                     <div className="relative w-16 h-16 rounded-lg overflow-hidden border">
                       <img
@@ -1629,6 +1665,9 @@ export default function SettingsPage() {
                         onClick={() => {
                           setPromoImageFile(null);
                           setPromoImagePreview(null);
+                          if (promoImageInputRef.current) {
+                            promoImageInputRef.current.value = "";
+                          }
                         }}
                         className="absolute -top-1 -right-1 w-5 h-5 rounded-full bg-red-500 text-white flex items-center justify-center text-xs"
                       >
@@ -1654,8 +1693,16 @@ export default function SettingsPage() {
             >
               إلغاء
             </Button>
-            <Button onClick={handlePromoSubmit} className="bg-amber-600 hover:bg-amber-700 text-white">
-              <Save className="w-4 h-4 ml-1" />
+            <Button
+              onClick={handlePromoSubmit}
+              className="bg-amber-600 hover:bg-amber-700 text-white"
+              disabled={uploadingPromoImage}
+            >
+              {uploadingPromoImage ? (
+                <Loader2 className="w-4 h-4 animate-spin ml-1" />
+              ) : (
+                <Save className="w-4 h-4 ml-1" />
+              )}
               {editingPromo ? "تحديث العرض" : "إضافة العرض"}
             </Button>
           </DialogFooter>
