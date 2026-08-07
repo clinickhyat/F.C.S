@@ -448,7 +448,6 @@ export default function SettingsPage() {
     setPromoDialogOpen(true);
   };
 
-  // 🆕 NEW: Handle promo image selection with ref
   const handlePromoImageSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
@@ -464,13 +463,11 @@ export default function SettingsPage() {
       toast({ title: "خطأ", description: "فشل قراءة الصورة", variant: "destructive" });
     };
     reader.readAsDataURL(file);
-    // إعادة تعيين قيمة الإدخال للسماح باختيار نفس الملف مرة أخرى
     if (promoImageInputRef.current) {
       promoImageInputRef.current.value = "";
     }
   };
 
-  // Trigger file input click
   const handlePromoImageUploadClick = () => {
     console.log("🖱️ زر رفع الصورة تم الضغط عليه");
     if (promoImageInputRef.current) {
@@ -583,7 +580,22 @@ export default function SettingsPage() {
     }
   };
 
-  // 🆕 Generate Promotional Image via Edge Function
+  // 🆕 NEW: Detect category from title/description
+  function detectCategory(text: string): string {
+    const lower = text.toLowerCase();
+    if (lower.includes("اسنان") || lower.includes("dental") || lower.includes("سن") || lower.includes("ضرس") || lower.includes("أسنان")) {
+      return "dental";
+    }
+    if (lower.includes("جلد") || lower.includes("dermatology") || lower.includes("بشرة") || lower.includes("حبوب") || lower.includes("جلدية")) {
+      return "dermatology";
+    }
+    if (lower.includes("تجميل") || lower.includes("cosmetic") || lower.includes("فيز") || lower.includes("ليزر")) {
+      return "cosmetic";
+    }
+    return "general";
+  }
+
+  // 🆕 NEW: Generate Promotional Image via Edge Function
   const generatePromoImage = async (promo: Promotion) => {
     if (!clinic) return;
     setGeneratingPromoImage(true);
@@ -595,6 +607,8 @@ export default function SettingsPage() {
         setGeneratingPromoImage(false);
         return;
       }
+
+      const category = detectCategory(promo.title + " " + (promo.description || ""));
 
       const functionUrl = `${supabaseUrl}/functions/v1/telegram-bot?action=generate_promo_image`;
       console.log("🔍 Calling Edge Function:", functionUrl);
@@ -617,6 +631,7 @@ export default function SettingsPage() {
           logo_url: clinic.logo_url,
           clinic_name: clinic.name,
           clinic_id_for_qr: clinic.id,
+          category: category,
         }),
       });
 
@@ -1632,7 +1647,7 @@ export default function SettingsPage() {
                 />
                 <Label className="text-sm font-medium cursor-pointer">العرض نشط</Label>
               </div>
-              {/* Image Upload - FIXED with ref */}
+              {/* Image Upload */}
               <div>
                 <Label className="text-sm font-medium">صورة العرض (اختياري)</Label>
                 <div className="flex items-center gap-3 mt-1">
