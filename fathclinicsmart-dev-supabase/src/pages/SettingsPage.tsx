@@ -11,6 +11,7 @@ import { Footer } from "@/components/layout/Footer";
 import { useToast } from "@/hooks/use-toast";
 import { QRCodeCanvas } from "qrcode.react";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+// ✅ استيراد Dialog بشكل صحيح
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from "@/components/ui/dialog";
 import {
   Stethoscope, LogOut, ArrowRight, Save, Copy, Check,
@@ -25,7 +26,6 @@ interface Service {
   price: number | null;
 }
 
-// 🆕 Promotion Interface
 interface Promotion {
   id: string;
   title: string;
@@ -73,7 +73,7 @@ export default function SettingsPage() {
   const [workingHoursStart, setWorkingHoursStart] = useState("08:00");
   const [workingHoursEnd, setWorkingHoursEnd] = useState("16:00");
 
-  // 🆕 NEW: Promotions State
+  // 🆕 Promotions State
   const [promotions, setPromotions] = useState<Promotion[]>([]);
   const [promoDialogOpen, setPromoDialogOpen] = useState(false);
   const [editingPromo, setEditingPromo] = useState<Promotion | null>(null);
@@ -216,17 +216,6 @@ export default function SettingsPage() {
     setServices(data || []);
   };
 
-  // 🆕 NEW: Fetch Promotions
-  const fetchPromotions = async () => {
-    if (!clinic) return;
-    const { data } = await supabase
-      .from("promotions")
-      .select("*")
-      .eq("clinic_id", clinic.id)
-      .order("created_at", { ascending: false });
-    setPromotions(data || []);
-  };
-
   const handleSaveClinic = async () => {
     if (!clinic) {
       toast({ title: "تعذر تحميل العيادة", description: "أعد تحميل الصفحة.", variant: "destructive" });
@@ -367,7 +356,7 @@ export default function SettingsPage() {
     }
   };
 
-  // 🆕 NEW: Promotion Handlers
+  // 🆕 Promotion Handlers
   const resetPromoForm = () => {
     setPromoForm({
       discount_type: 'percentage',
@@ -427,7 +416,7 @@ export default function SettingsPage() {
         const { data: { publicUrl } } = supabase.storage.from('promo-images').getPublicUrl(filePath);
         imageUrl = publicUrl;
       } else {
-        toast({ title: "خطأ", description: "فشل رفع صورة العرض", variant: "destructive" });
+        toast({ title: "خطأ", description: "فشل رفع صورة العرض: " + uploadError.message, variant: "destructive" });
         return;
       }
     }
@@ -466,6 +455,17 @@ export default function SettingsPage() {
     }
   };
 
+  // 🆕 Fetch Promotions
+  const fetchPromotions = async () => {
+    if (!clinic) return;
+    const { data } = await supabase
+      .from("promotions")
+      .select("*")
+      .eq("clinic_id", clinic.id)
+      .order("created_at", { ascending: false });
+    setPromotions(data || []);
+  };
+
   const togglePromoStatus = async (id: string, currentStatus: boolean) => {
     const { error } = await supabase.from("promotions").update({ is_active: !currentStatus }).eq("id", id);
     if (error) {
@@ -487,7 +487,7 @@ export default function SettingsPage() {
     }
   };
 
-  // 🆕 NEW: Generate Promotional Image via Edge Function
+  // 🆕 Generate Promotional Image via Edge Function
   const generatePromoImage = async (promo: Promotion) => {
     if (!clinic) return;
     setGeneratingPromoImage(true);
@@ -522,8 +522,8 @@ export default function SettingsPage() {
       } else {
         toast({ title: "فشل التوليد", description: data?.error || "خطأ في الخادم", variant: "destructive" });
       }
-    } catch (e) {
-      toast({ title: "خطأ", description: "تعذر الاتصال بالخادم", variant: "destructive" });
+    } catch (e: any) {
+      toast({ title: "خطأ", description: "تعذر الاتصال بالخادم: " + e.message, variant: "destructive" });
     }
     setGeneratingPromoImage(false);
   };
