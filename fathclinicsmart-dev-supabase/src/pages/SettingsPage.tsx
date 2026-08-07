@@ -11,7 +11,6 @@ import { Footer } from "@/components/layout/Footer";
 import { useToast } from "@/hooks/use-toast";
 import { QRCodeCanvas } from "qrcode.react";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-// ✅ استيراد Dialog بشكل صحيح
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from "@/components/ui/dialog";
 import {
   Stethoscope, LogOut, ArrowRight, Save, Copy, Check,
@@ -88,6 +87,10 @@ export default function SettingsPage() {
 
   const supabaseUrl = import.meta.env.VITE_SUPABASE_URL;
   const supabaseAnonKey = import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY;
+
+  // --- Refs for file inputs ---
+  const promoFileInputRef = React.useRef<HTMLInputElement>(null);
+  const logoFileInputRef = React.useRef<HTMLInputElement>(null);
 
   // --- Existing UseEffects ---
   useEffect(() => {
@@ -391,6 +394,7 @@ export default function SettingsPage() {
     setPromoDialogOpen(true);
   };
 
+  // 🆕 Fixed: Handle promo image upload with ref
   const handlePromoImageSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
@@ -398,6 +402,15 @@ export default function SettingsPage() {
     const reader = new FileReader();
     reader.onload = (ev) => setPromoImagePreview(ev.target?.result as string);
     reader.readAsDataURL(file);
+    // Reset input value to allow re-selecting same file
+    if (promoFileInputRef.current) promoFileInputRef.current.value = "";
+  };
+
+  // 🆕 Fixed: Trigger file input click
+  const handlePromoImageButtonClick = () => {
+    if (promoFileInputRef.current) {
+      promoFileInputRef.current.click();
+    }
   };
 
   const handlePromoSubmit = async () => {
@@ -409,14 +422,19 @@ export default function SettingsPage() {
 
     let imageUrl = promoForm.image_url || null;
     if (promoImageFile) {
-      const fileExt = promoImageFile.name.split('.').pop();
-      const filePath = `${clinic.id}/promo_${Date.now()}.${fileExt}`;
-      const { error: uploadError } = await supabase.storage.from('promo-images').upload(filePath, promoImageFile, { upsert: true });
-      if (!uploadError) {
-        const { data: { publicUrl } } = supabase.storage.from('promo-images').getPublicUrl(filePath);
-        imageUrl = publicUrl;
-      } else {
-        toast({ title: "خطأ", description: "فشل رفع صورة العرض: " + uploadError.message, variant: "destructive" });
+      try {
+        const fileExt = promoImageFile.name.split('.').pop();
+        const filePath = `${clinic.id}/promo_${Date.now()}.${fileExt}`;
+        const { error: uploadError } = await supabase.storage.from('promo-images').upload(filePath, promoImageFile, { upsert: true });
+        if (!uploadError) {
+          const { data: { publicUrl } } = supabase.storage.from('promo-images').getPublicUrl(filePath);
+          imageUrl = publicUrl;
+        } else {
+          toast({ title: "خطأ في رفع الصورة", description: uploadError.message, variant: "destructive" });
+          return;
+        }
+      } catch (err: any) {
+        toast({ title: "خطأ", description: err.message || "فشل رفع الصورة", variant: "destructive" });
         return;
       }
     }
@@ -458,12 +476,18 @@ export default function SettingsPage() {
   // 🆕 Fetch Promotions
   const fetchPromotions = async () => {
     if (!clinic) return;
-    const { data } = await supabase
-      .from("promotions")
-      .select("*")
-      .eq("clinic_id", clinic.id)
-      .order("created_at", { ascending: false });
-    setPromotions(data || []);
+    try {
+      const { data, error } = await supabase
+        .from("promotions")
+        .select("*")
+        .eq("clinic_id", clinic.id)
+        .order("created_at", { ascending: false });
+      if (error) throw error;
+      setPromotions(data || []);
+    } catch (err: any) {
+      console.error("Error fetching promotions:", err);
+      setPromotions([]);
+    }
   };
 
   const togglePromoStatus = async (id: string, currentStatus: boolean) => {
@@ -494,6 +518,28 @@ export default function SettingsPage() {
     try {
       const { data: sess } = await supabase.auth.getSession();
       const token = sess?.session?.access_token;
+      if (!token) {
+        toast({ title: "خطأ", description: "لم يتم العثور على جلسة نشطة. يرجى تسجيل الدخول مرة أخرى.", variant: "destructive" });
+        setGeneratingPromoImage(false);
+        return;
+      }
+
+      // Ensure the promo-images bucket exists and is public
+      try {
+        const { data: buckets } = await supabase.storage.listBuckets();
+        const promoBucket = buckets?.find(b => b.name === 'promo-images');
+        if (!promoBucket) {
+          toast({ title: "خطأ", description: "لم يتم العثور على Bucket 'promo-images'. يرجى إنشاؤه في لوحة التحكم.", variant: "destructive" });
+          setGeneratingPromoImage(false);
+          return;
+        }
+        if (!promoBucket.public) {
+          toast({ title: "تنبيه", description: "Bucket 'promo-images' ليس عاماً. سيتم محاولة الرفع، ولكن قد تفشل الصور.", variant: "destructive" });
+        }
+      } catch (bucketErr) {
+        console.warn("Bucket check failed:", bucketErr);
+      }
+
       const res = await fetch(`${supabaseUrl}/functions/v1/telegram-bot?action=generate_promo_image`, {
         method: "POST",
         headers: {
@@ -514,16 +560,27 @@ export default function SettingsPage() {
           clinic_id_for_qr: clinic.id,
         }),
       });
-      const data = await res.json();
-      if (data?.ok && data?.image_url) {
+
+      let data;
+      try {
+        data = await res.json();
+      } catch (parseErr) {
+        toast({ title: "خطأ في الاستجابة", description: "لم يتمكن الخادم من معالجة الطلب.", variant: "destructive" });
+        setGeneratingPromoImage(false);
+        return;
+      }
+
+      if (res.ok && data?.ok && data?.image_url) {
         await supabase.from("promotions").update({ image_url: data.image_url }).eq("id", promo.id);
         toast({ title: "✅ تم توليد الصورة", description: "تم توليد صورة العرض الاحترافية بنجاح" });
         fetchPromotions();
       } else {
-        toast({ title: "فشل التوليد", description: data?.error || "خطأ في الخادم", variant: "destructive" });
+        const errorMsg = data?.error || data?.message || "خطأ غير معروف في الخادم";
+        toast({ title: "فشل التوليد", description: errorMsg, variant: "destructive" });
       }
-    } catch (e: any) {
-      toast({ title: "خطأ", description: "تعذر الاتصال بالخادم: " + e.message, variant: "destructive" });
+    } catch (err: any) {
+      console.error("Generate promo image error:", err);
+      toast({ title: "خطأ في الاتصال", description: err.message || "تعذر الاتصال بالخادم", variant: "destructive" });
     }
     setGeneratingPromoImage(false);
   };
@@ -613,13 +670,11 @@ export default function SettingsPage() {
                     )}
                   </div>
                   <div className="flex-1">
-                    <label className="cursor-pointer">
-                      <input type="file" accept="image/*" onChange={handleLogoUpload} className="hidden" disabled={uploadingLogo} />
-                      <Button type="button" variant="outline" disabled={uploadingLogo} className="pointer-events-none">
-                        {uploadingLogo ? <Loader2 className="w-4 h-4 animate-spin" /> : <Upload className="w-4 h-4" />}
-                        {uploadingLogo ? "جاري الرفع..." : "رفع شعار"}
-                      </Button>
-                    </label>
+                    <input type="file" accept="image/*" onChange={handleLogoUpload} className="hidden" ref={logoFileInputRef} disabled={uploadingLogo} />
+                    <Button type="button" variant="outline" disabled={uploadingLogo} onClick={() => logoFileInputRef.current?.click()}>
+                      {uploadingLogo ? <Loader2 className="w-4 h-4 animate-spin" /> : <Upload className="w-4 h-4" />}
+                      {uploadingLogo ? "جاري الرفع..." : "رفع شعار"}
+                    </Button>
                     <p className="text-xs text-muted-foreground mt-1">يُفضل صورة مربعة بحجم 200x200 بكسل أو أكبر</p>
                   </div>
                 </div>
@@ -1109,6 +1164,9 @@ export default function SettingsPage() {
             <DialogDescription>أدخل تفاصيل العرض الترويجي أو كود الخصم</DialogDescription>
           </DialogHeader>
 
+          {/* Hidden file input for promo image */}
+          <input type="file" accept="image/*" onChange={handlePromoImageSelect} ref={promoFileInputRef} className="hidden" />
+
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4 py-4">
             {/* Left Column */}
             <div className="space-y-4">
@@ -1167,14 +1225,13 @@ export default function SettingsPage() {
                 <input type="checkbox" checked={promoForm.is_active !== false} onChange={(e) => setPromoForm({ ...promoForm, is_active: e.target.checked })} className="w-4 h-4 accent-primary" />
                 <Label className="text-sm font-medium cursor-pointer">العرض نشط</Label>
               </div>
-              {/* Image Upload */}
+              {/* Image Upload - Fixed */}
               <div>
                 <Label className="text-sm font-medium">صورة العرض (اختياري)</Label>
                 <div className="flex items-center gap-3 mt-1">
-                  <input type="file" accept="image/*" onChange={handlePromoImageSelect} className="hidden" id="promo-image-upload" />
-                  <label htmlFor="promo-image-upload" className="cursor-pointer">
-                    <Button type="button" variant="outline" size="sm"><Upload className="w-4 h-4 ml-1" /> رفع صورة</Button>
-                  </label>
+                  <Button type="button" variant="outline" size="sm" onClick={handlePromoImageButtonClick}>
+                    <Upload className="w-4 h-4 ml-1" /> رفع صورة
+                  </Button>
                   {promoImagePreview && (
                     <div className="relative w-16 h-16 rounded-lg overflow-hidden border">
                       <img src={promoImagePreview} alt="معاينة" className="w-full h-full object-cover" />
