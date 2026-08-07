@@ -15,13 +15,35 @@ import {
   Stethoscope, LogOut, ArrowRight, Save, Copy, Check,
   Link2, Key, Plus, Trash2, Loader2, Bot, Building2, 
   CreditCard, Shield, Clock, Activity, Sparkles, Upload, Image, QrCode, Download,
-  CalendarClock
+  CalendarClock, Tag, Gift, BadgePercent, ImagePlus, FileImage, RefreshCw
 } from "lucide-react";
 
 interface Service {
   id: string;
   name: string;
   price: number | null;
+}
+
+// 🆕 NEW: Promotion Interface
+interface Promotion {
+  id: string;
+  title: string;
+  description?: string;
+  discount_type: 'percentage' | 'fixed';
+  discount_value: number;
+  applies_to?: string;
+  service_ids?: string[];
+  min_amount?: number;
+  max_discount?: number;
+  start_date?: string;
+  end_date?: string;
+  usage_limit?: number;
+  usage_count?: number;
+  per_user_limit?: number;
+  is_active: boolean;
+  image_url?: string;
+  code?: string;
+  created_at?: string;
 }
 
 export default function SettingsPage() {
@@ -45,7 +67,6 @@ export default function SettingsPage() {
   const [voiceAgentEnabled, setVoiceAgentEnabled] = useState(false);
   const [voiceTone, setVoiceTone] = useState("ودود ومحترم");
   const [voiceMode, setVoiceMode] = useState("auto");
-  // ❌ تم حذف: receptionPin, cashierPin
   const [staffList, setStaffList] = useState<Array<{ id: string; email: string; role: string; approved: boolean; created_at: string }>>([]);
   const [newStaffEmail, setNewStaffEmail] = useState("");
   const [newStaffPassword, setNewStaffPassword] = useState("");
@@ -54,6 +75,19 @@ export default function SettingsPage() {
   const [receptionistWhatsapp, setReceptionistWhatsapp] = useState("");
   const [workingHoursStart, setWorkingHoursStart] = useState("08:00");
   const [workingHoursEnd, setWorkingHoursEnd] = useState("16:00");
+
+  // 🆕 NEW: Promotions State
+  const [promotions, setPromotions] = useState<Promotion[]>([]);
+  const [showPromoForm, setShowPromoForm] = useState(false);
+  const [editingPromo, setEditingPromo] = useState<Promotion | null>(null);
+  const [promoForm, setPromoForm] = useState<Partial<Promotion>>({
+    discount_type: 'percentage',
+    is_active: true,
+    per_user_limit: 1,
+  });
+  const [promoImageFile, setPromoImageFile] = useState<File | null>(null);
+  const [generatingPromoImage, setGeneratingPromoImage] = useState(false);
+  const [promoImagePreview, setPromoImagePreview] = useState<string | null>(null);
 
   const supabaseUrl = import.meta.env.VITE_SUPABASE_URL;
   const supabaseAnonKey = import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY;
@@ -87,14 +121,26 @@ export default function SettingsPage() {
       setVoiceAgentEnabled(!!(clinic as any).voice_agent_enabled);
       setVoiceTone((clinic as any).voice_tone || "ودود ومحترم");
       setVoiceMode((clinic as any).voice_mode || "auto");
-      // ❌ تم حذف: setReceptionPin, setCashierPin
       setReceptionistWhatsapp((clinic as any).receptionist_whatsapp || "");
       setWorkingHoursStart((clinic as any).working_hours_start || "08:00");
       setWorkingHoursEnd((clinic as any).working_hours_end || "16:00");
       fetchServices();
       fetchStaff();
+      // 🆕 NEW: جلب العروض
+      fetchPromotions();
     }
   }, [clinic]);
+
+  // 🆕 NEW: Fetch Promotions
+  const fetchPromotions = async () => {
+    if (!clinic) return;
+    const { data } = await supabase
+      .from("promotions")
+      .select("*")
+      .eq("clinic_id", clinic.id)
+      .order("created_at", { ascending: false });
+    setPromotions(data || []);
+  };
 
   const fetchStaff = async () => {
     if (!clinic) return;
@@ -190,14 +236,165 @@ export default function SettingsPage() {
     setServices(data || []);
   };
 
+  // 🆕 NEW: Handle Promo Form Submit
+  const handlePromoSubmit = async () => {
+    if (!clinic) return;
+    if (!promoForm.title || !promoForm.discount_type || !promoForm.discount_value) {
+      toast({ title: "بيانات ناقصة", description: "يرجى ملء جميع الحقول الأساسية", variant: "destructive" });
+      return;
+    }
+
+    let imageUrl = promoForm.image_url || null;
+    if (promoImageFile) {
+      const fileExt = promoImageFile.name.split('.').pop();
+      const filePath = `${clinic.id}/promo_${Date.now()}.${fileExt}`;
+      const { error: uploadError } = await supabase.storage
+        .from('promo-images')
+        .upload(filePath, promoImageFile, { upsert: true });
+      if (!uploadError) {
+        const { data: { publicUrl } } = supabase.storage
+          .from('promo-images')
+          .getPublicUrl(filePath);
+        imageUrl = publicUrl;
+      }
+    }
+
+    const payload = {
+      ...promoForm,
+      clinic_id: clinic.id,
+      image_url: imageUrl,
+      is_active: true,
+    };
+
+    let error;
+    if (editingPromo) {
+      const { error: e } = await supabase
+        .from("promotions")
+        .update(payload)
+        .eq("id", editingPromo.id);
+      error = e;
+    } else {
+      const { error: e } = await supabase
+        .from("promotions")
+        .insert(payload);
+      error = e;
+    }
+
+    if (error) {
+      toast({ title: "خطأ", description: "فشل حفظ العرض: " + error.message, variant: "destructive" });
+    } else {
+      toast({ title: "تم الحفظ ✓", description: "تم حفظ العرض بنجاح" });
+      setShowPromoForm(false);
+      setPromoForm({ discount_type: 'percentage', is_active: true, per_user_limit: 1 });
+      setPromoImageFile(null);
+      setPromoImagePreview(null);
+      setEditingPromo(null);
+      fetchPromotions();
+    }
+  };
+
+  // 🆕 NEW: Toggle promo active status
+  const togglePromoStatus = async (promo: Promotion) => {
+    const { error } = await supabase
+      .from("promotions")
+      .update({ is_active: !promo.is_active })
+      .eq("id", promo.id);
+    if (error) {
+      toast({ title: "خطأ", description: "فشل تحديث الحالة", variant: "destructive" });
+    } else {
+      toast({ title: "تم التحديث ✓", description: `تم ${!promo.is_active ? 'تفعيل' : 'إيقاف'} العرض` });
+      fetchPromotions();
+    }
+  };
+
+  // 🆕 NEW: Delete promo
+  const deletePromo = async (id: string) => {
+    const { error } = await supabase
+      .from("promotions")
+      .delete()
+      .eq("id", id);
+    if (error) {
+      toast({ title: "خطأ", description: "فشل حذف العرض", variant: "destructive" });
+    } else {
+      toast({ title: "تم الحذف ✓", description: "تم حذف العرض بنجاح" });
+      fetchPromotions();
+    }
+  };
+
+  // 🆕 NEW: Edit promo - fill form
+  const editPromo = (promo: Promotion) => {
+    setEditingPromo(promo);
+    setPromoForm({
+      title: promo.title,
+      description: promo.description || "",
+      discount_type: promo.discount_type,
+      discount_value: promo.discount_value,
+      applies_to: promo.applies_to || "all",
+      service_ids: promo.service_ids || [],
+      min_amount: promo.min_amount || undefined,
+      max_discount: promo.max_discount || undefined,
+      start_date: promo.start_date || undefined,
+      end_date: promo.end_date || undefined,
+      usage_limit: promo.usage_limit || undefined,
+      per_user_limit: promo.per_user_limit || 1,
+      is_active: promo.is_active,
+      image_url: promo.image_url || undefined,
+      code: promo.code || undefined,
+    });
+    setPromoImagePreview(promo.image_url || null);
+    setShowPromoForm(true);
+  };
+
+  // 🆕 NEW: Generate Promotional Image via Edge Function
+  const generatePromoImage = async (promo: Promotion) => {
+    if (!clinic) return;
+    setGeneratingPromoImage(true);
+    try {
+      const { data: sess } = await supabase.auth.getSession();
+      const token = sess?.session?.access_token;
+      const res = await fetch(`${supabaseUrl}/functions/v1/telegram-bot?action=generate_promo_image`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          "apikey": supabaseAnonKey,
+          Authorization: `Bearer ${token}`,
+        },
+        body: JSON.stringify({
+          clinic_id: clinic.id,
+          promo_id: promo.id,
+          title: promo.title,
+          description: promo.description || "",
+          discount_value: promo.discount_value,
+          discount_type: promo.discount_type,
+          code: promo.code || "N/A",
+          logo_url: clinic.logo_url,
+          clinic_name: clinic.name,
+          bot_username: botUsername || "SmartClinc_bot",
+        }),
+      });
+      const data = await res.json();
+      if (data?.ok && data?.image_url) {
+        await supabase
+          .from("promotions")
+          .update({ image_url: data.image_url })
+          .eq("id", promo.id);
+        toast({ title: "✅ تم توليد الصورة", description: "تم توليد صورة العرض الاحترافية بنجاح" });
+        fetchPromotions();
+      } else {
+        toast({ title: "فشل التوليد", description: data?.error || "خطأ في الخادم", variant: "destructive" });
+      }
+    } catch (e) {
+      toast({ title: "خطأ", description: "تعذر الاتصال بالخادم", variant: "destructive" });
+    }
+    setGeneratingPromoImage(false);
+  };
+
   const handleSaveClinic = async () => {
     if (!clinic) {
       toast({ title: "تعذر تحميل العيادة", description: "أعد تحميل الصفحة. إن استمرت المشكلة سجّل الخروج ثم الدخول مجدداً.", variant: "destructive" });
       return;
     }
     setSaving(true);
-    // ❌ تم حذف: _reception_pin, _cashier_pin من استدعاء vault
-    // Save only bot_token to vault (if needed)
     try {
       await supabase.rpc("save_clinic_vault", {
         _bot_token: botToken || null,
@@ -205,8 +402,6 @@ export default function SettingsPage() {
     } catch (e) {
       console.warn("vault save failed", e);
     }
-    // ✅ إضافة working_hours_start و working_hours_end
-    // ❌ تم حذف: reception_pin, cashier_pin من updateClinic
     const { error } = await updateClinic({ 
       name: clinicName, 
       bot_token: botToken, 
@@ -224,7 +419,6 @@ export default function SettingsPage() {
       return;
     }
 
-    // Auto-configure Telegram webhook with the saved token
     if (botToken && botToken.trim().length > 10) {
       const hookResult = await invokeBotAction("set-webhook");
       if (!hookResult.ok) {
@@ -505,8 +699,6 @@ export default function SettingsPage() {
                   بوت تيليجرام مفعّل تلقائياً عبر النظام (محمي من الإدارة).
                 </div>
               )}
-              {/* ❌ تم حذف حقلي PIN بالكامل */}
-              {/* ❌ تم حذف أزرار "فتح بوابة الاستقبال/الصندوق" */}
               <Button onClick={handleSaveClinic} disabled={saving} className="w-full sm:w-auto">
                 {saving ? <Loader2 className="w-4 h-4 animate-spin" /> : <Save className="w-4 h-4" />}
                 حفظ الإعدادات
@@ -1002,6 +1194,267 @@ export default function SettingsPage() {
                 ))
               )}
             </div>
+          </section>
+
+          {/* 🆕 NEW: Promotions & Discounts Section */}
+          <section className="card-modern p-6 animate-slide-up delay-200">
+            <div className="flex items-center justify-between mb-6">
+              <div className="flex items-center gap-3">
+                <div className="w-12 h-12 rounded-2xl bg-gradient-to-br from-amber-500 to-orange-600 flex items-center justify-center shadow-lg">
+                  <Gift className="w-6 h-6 text-white" />
+                </div>
+                <div>
+                  <h2 className="text-xl font-bold text-foreground">العروض والخصومات</h2>
+                  <p className="text-sm text-muted-foreground">إدارة العروض الترويجية وأكواد الخصم</p>
+                </div>
+              </div>
+              <Button onClick={() => { setShowPromoForm(true); setEditingPromo(null); setPromoForm({ discount_type: 'percentage', is_active: true, per_user_limit: 1 }); setPromoImageFile(null); setPromoImagePreview(null); }} className="gap-2">
+                <Plus className="w-4 h-4" /> إضافة عرض
+              </Button>
+            </div>
+
+            {/* Promo Form Modal */}
+            {showPromoForm && (
+              <div className="fixed inset-0 z-50 bg-black/80 backdrop-blur-md flex items-center justify-center p-4 overflow-y-auto">
+                <div className="bg-background rounded-3xl max-w-2xl w-full shadow-2xl p-6 border border-border max-h-[90vh] overflow-y-auto">
+                  <div className="flex items-center justify-between mb-4">
+                    <h3 className="text-xl font-bold text-foreground">{editingPromo ? 'تعديل العرض' : 'إضافة عرض جديد'}</h3>
+                    <button onClick={() => { setShowPromoForm(false); setEditingPromo(null); }} className="p-2 rounded-full hover:bg-muted/80 transition">
+                      <X className="w-5 h-5" />
+                    </button>
+                  </div>
+
+                  <div className="space-y-4">
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                      <div className="space-y-2">
+                        <Label className="text-sm font-medium">🏷 اسم العرض *</Label>
+                        <Input
+                          value={promoForm.title || ''}
+                          onChange={(e) => setPromoForm({ ...promoForm, title: e.target.value })}
+                          placeholder="مثال: عرض الصيف - خصم 20%"
+                          className="input-modern"
+                        />
+                      </div>
+                      <div className="space-y-2">
+                        <Label className="text-sm font-medium">🔖 كود العرض (اختياري)</Label>
+                        <Input
+                          value={promoForm.code || ''}
+                          onChange={(e) => setPromoForm({ ...promoForm, code: e.target.value.toUpperCase() })}
+                          placeholder="SUMMER25"
+                          className="input-modern font-mono"
+                          dir="ltr"
+                        />
+                      </div>
+                    </div>
+
+                    <div className="space-y-2">
+                      <Label className="text-sm font-medium">📝 وصف العرض</Label>
+                      <Input
+                        value={promoForm.description || ''}
+                        onChange={(e) => setPromoForm({ ...promoForm, description: e.target.value })}
+                        placeholder="وصف مختصر للعرض"
+                        className="input-modern"
+                      />
+                    </div>
+
+                    <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+                      <div className="space-y-2">
+                        <Label className="text-sm font-medium">🎯 نوع الخصم *</Label>
+                        <Select
+                          value={promoForm.discount_type || 'percentage'}
+                          onValueChange={(v: 'percentage' | 'fixed') => setPromoForm({ ...promoForm, discount_type: v })}
+                        >
+                          <SelectTrigger><SelectValue /></SelectTrigger>
+                          <SelectContent>
+                            <SelectItem value="percentage">نسبة مئوية (%)</SelectItem>
+                            <SelectItem value="fixed">مبلغ ثابت (ر.ي)</SelectItem>
+                          </SelectContent>
+                        </Select>
+                      </div>
+                      <div className="space-y-2">
+                        <Label className="text-sm font-medium">💰 قيمة الخصم *</Label>
+                        <Input
+                          type="number"
+                          value={promoForm.discount_value || ''}
+                          onChange={(e) => setPromoForm({ ...promoForm, discount_value: parseFloat(e.target.value) || 0 })}
+                          placeholder={promoForm.discount_type === 'percentage' ? '20' : '50'}
+                          className="input-modern"
+                        />
+                      </div>
+                      <div className="space-y-2">
+                        <Label className="text-sm font-medium">📅 تاريخ الانتهاء</Label>
+                        <Input
+                          type="date"
+                          value={promoForm.end_date || ''}
+                          onChange={(e) => setPromoForm({ ...promoForm, end_date: e.target.value })}
+                          className="input-modern"
+                        />
+                      </div>
+                    </div>
+
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                      <div className="space-y-2">
+                        <Label className="text-sm font-medium">🔢 حد الاستخدام الإجمالي</Label>
+                        <Input
+                          type="number"
+                          value={promoForm.usage_limit || ''}
+                          onChange={(e) => setPromoForm({ ...promoForm, usage_limit: parseInt(e.target.value) || undefined })}
+                          placeholder="غير محدود"
+                          className="input-modern"
+                        />
+                      </div>
+                      <div className="space-y-2">
+                        <Label className="text-sm font-medium">👤 حد الاستخدام لكل مريض</Label>
+                        <Input
+                          type="number"
+                          value={promoForm.per_user_limit || 1}
+                          onChange={(e) => setPromoForm({ ...promoForm, per_user_limit: parseInt(e.target.value) || 1 })}
+                          placeholder="1"
+                          className="input-modern"
+                        />
+                      </div>
+                    </div>
+
+                    {/* صورة العرض */}
+                    <div className="space-y-2">
+                      <Label className="text-sm font-medium">🖼 صورة العرض</Label>
+                      <div className="flex flex-col sm:flex-row items-start gap-4">
+                        <div className="w-40 h-40 rounded-xl border-2 border-dashed border-border bg-muted/20 flex items-center justify-center overflow-hidden">
+                          {promoImagePreview ? (
+                            <img src={promoImagePreview} alt="معاينة العرض" className="w-full h-full object-cover" />
+                          ) : (
+                            <div className="text-center text-muted-foreground text-xs p-2">
+                              <ImagePlus className="w-8 h-8 mx-auto mb-1" />
+                              <span>اختر صورة</span>
+                            </div>
+                          )}
+                        </div>
+                        <div className="flex-1 space-y-2">
+                          <input
+                            type="file"
+                            accept="image/*"
+                            onChange={(e) => {
+                              const file = e.target.files?.[0];
+                              if (file) {
+                                setPromoImageFile(file);
+                                const reader = new FileReader();
+                                reader.onload = (ev) => setPromoImagePreview(ev.target?.result as string);
+                                reader.readAsDataURL(file);
+                              }
+                            }}
+                            className="hidden"
+                            id="promo-image-upload"
+                          />
+                          <div className="flex flex-wrap gap-2">
+                            <Button variant="outline" onClick={() => document.getElementById('promo-image-upload')?.click()} className="gap-2">
+                              <Upload className="w-4 h-4" /> رفع صورة
+                            </Button>
+                            <Button
+                              variant="outline"
+                              className="gap-2 bg-amber-50 border-amber-200 text-amber-700 hover:bg-amber-100"
+                              onClick={() => {
+                                if (!clinic || !promoForm.title) {
+                                  toast({ title: "تنبيه", description: "يرجى إدخال اسم العرض أولاً", variant: "destructive" });
+                                  return;
+                                }
+                                // سيتم استدعاء generatePromoImage بعد الحفظ
+                                toast({ title: "سيتم توليد الصورة بعد حفظ العرض", description: "احفظ العرض أولاً ثم استخدم زر توليد الصورة" });
+                              }}
+                            >
+                              <FileImage className="w-4 h-4" /> توليد صورة احترافية
+                            </Button>
+                          </div>
+                          <p className="text-xs text-muted-foreground">
+                            يمكنك رفع صورة مخصصة أو توليد صورة احترافية تلقائياً بعد الحفظ.
+                          </p>
+                        </div>
+                      </div>
+                    </div>
+
+                    <div className="flex gap-2 pt-4 border-t border-border">
+                      <Button onClick={handlePromoSubmit} className="flex-1 bg-primary">
+                        <Save className="w-4 h-4 ml-1" /> {editingPromo ? 'تحديث العرض' : 'إضافة العرض'}
+                      </Button>
+                      <Button variant="outline" onClick={() => { setShowPromoForm(false); setEditingPromo(null); }}>
+                        إلغاء
+                      </Button>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            )}
+
+            {/* Promotions List */}
+            {promotions.length === 0 ? (
+              <div className="text-center py-10 text-muted-foreground border border-dashed border-border rounded-2xl">
+                <Gift className="w-12 h-12 mx-auto mb-3 opacity-40" />
+                <p>لا توجد عروض مضافة بعد</p>
+                <p className="text-xs mt-1">أضف عرضك الأول لبدء الترويج لخدماتك</p>
+              </div>
+            ) : (
+              <div className="space-y-3">
+                {promotions.map((promo) => (
+                  <div key={promo.id} className="flex flex-col sm:flex-row items-start sm:items-center gap-4 p-4 rounded-xl border border-border bg-muted/20 hover:bg-muted/30 transition">
+                    <div className="w-20 h-20 rounded-xl overflow-hidden bg-muted/30 flex-shrink-0 border border-border">
+                      {promo.image_url ? (
+                        <img src={promo.image_url} alt={promo.title} className="w-full h-full object-cover" />
+                      ) : (
+                        <div className="w-full h-full flex items-center justify-center text-3xl bg-gradient-to-br from-amber-100 to-orange-100">🎁</div>
+                      )}
+                    </div>
+                    <div className="flex-1 min-w-0">
+                      <div className="flex items-center flex-wrap gap-2">
+                        <h4 className="font-bold text-foreground">{promo.title}</h4>
+                        <span className={`px-2 py-0.5 rounded-full text-xs font-bold ${promo.is_active ? 'bg-emerald-500/15 text-emerald-600' : 'bg-muted text-muted-foreground'}`}>
+                          {promo.is_active ? 'نشط' : 'موقف'}
+                        </span>
+                        <span className="px-2 py-0.5 rounded-full bg-primary/10 text-primary text-xs font-bold">
+                          {promo.discount_type === 'percentage' ? `${promo.discount_value}%` : `${promo.discount_value} ر.ي`}
+                        </span>
+                        {promo.code && (
+                          <span className="px-2 py-0.5 rounded-full bg-amber-500/10 text-amber-600 text-xs font-mono font-bold">
+                            {promo.code}
+                          </span>
+                        )}
+                      </div>
+                      {promo.description && <p className="text-xs text-muted-foreground mt-1">{promo.description}</p>}
+                      <div className="flex items-center gap-3 text-xs text-muted-foreground mt-1">
+                        {promo.usage_limit && <span>حد الاستخدام: {promo.usage_count || 0}/{promo.usage_limit}</span>}
+                        {promo.end_date && <span>ينتهي: {new Date(promo.end_date).toLocaleDateString('ar-SA')}</span>}
+                      </div>
+                    </div>
+                    <div className="flex items-center gap-2 flex-wrap">
+                      {!promo.image_url && promo.is_active && (
+                        <Button
+                          size="sm"
+                          variant="outline"
+                          className="text-xs gap-1 border-amber-500/30 text-amber-600"
+                          onClick={() => generatePromoImage(promo)}
+                          disabled={generatingPromoImage}
+                        >
+                          {generatingPromoImage ? <Loader2 className="w-3 h-3 animate-spin" /> : <FileImage className="w-3 h-3" />}
+                          توليد صورة
+                        </Button>
+                      )}
+                      <Button size="sm" variant="ghost" className="text-xs" onClick={() => editPromo(promo)}>
+                        تعديل
+                      </Button>
+                      <Button
+                        size="sm"
+                        variant="ghost"
+                        className={`text-xs ${promo.is_active ? 'text-amber-600' : 'text-emerald-600'}`}
+                        onClick={() => togglePromoStatus(promo)}
+                      >
+                        {promo.is_active ? 'إيقاف' : 'تفعيل'}
+                      </Button>
+                      <Button size="sm" variant="ghost" className="text-xs text-destructive" onClick={() => deletePromo(promo.id)}>
+                        <Trash2 className="w-3 h-3" />
+                      </Button>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
           </section>
 
           {/* Subscription Status */}
