@@ -11,11 +11,12 @@ import { Footer } from "@/components/layout/Footer";
 import { useToast } from "@/hooks/use-toast";
 import { QRCodeCanvas } from "qrcode.react";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from "@/components/ui/dialog";
 import {
   Stethoscope, LogOut, ArrowRight, Save, Copy, Check,
   Link2, Key, Plus, Trash2, Loader2, Bot, Building2, 
   CreditCard, Shield, Clock, Activity, Sparkles, Upload, Image, QrCode, Download,
-  CalendarClock, Tag, Gift, BadgePercent, ImagePlus, FileImage, RefreshCw
+  CalendarClock, Tag, Gift, BadgePercent, ImagePlus, FileImage, X, Edit, Eye
 } from "lucide-react";
 
 interface Service {
@@ -24,26 +25,21 @@ interface Service {
   price: number | null;
 }
 
-// 🆕 NEW: Promotion Interface
+// 🆕 Promotion Interface
 interface Promotion {
   id: string;
   title: string;
   description?: string;
   discount_type: 'percentage' | 'fixed';
   discount_value: number;
-  applies_to?: string;
-  service_ids?: string[];
-  min_amount?: number;
-  max_discount?: number;
+  code?: string;
   start_date?: string;
   end_date?: string;
   usage_limit?: number;
-  usage_count?: number;
   per_user_limit?: number;
   is_active: boolean;
   image_url?: string;
-  code?: string;
-  created_at?: string;
+  created_at: string;
 }
 
 export default function SettingsPage() {
@@ -52,6 +48,7 @@ export default function SettingsPage() {
   const { clinic, subscription, loading: clinicLoading, updateClinic } = useClinic();
   const { toast } = useToast();
 
+  // --- Existing State ---
   const [clinicName, setClinicName] = useState("");
   const [botToken, setBotToken] = useState("");
   const [logoUrl, setLogoUrl] = useState<string | null>(null);
@@ -78,7 +75,7 @@ export default function SettingsPage() {
 
   // 🆕 NEW: Promotions State
   const [promotions, setPromotions] = useState<Promotion[]>([]);
-  const [showPromoForm, setShowPromoForm] = useState(false);
+  const [promoDialogOpen, setPromoDialogOpen] = useState(false);
   const [editingPromo, setEditingPromo] = useState<Promotion | null>(null);
   const [promoForm, setPromoForm] = useState<Partial<Promotion>>({
     discount_type: 'percentage',
@@ -86,27 +83,21 @@ export default function SettingsPage() {
     per_user_limit: 1,
   });
   const [promoImageFile, setPromoImageFile] = useState<File | null>(null);
-  const [generatingPromoImage, setGeneratingPromoImage] = useState(false);
   const [promoImagePreview, setPromoImagePreview] = useState<string | null>(null);
+  const [generatingPromoImage, setGeneratingPromoImage] = useState(false);
 
   const supabaseUrl = import.meta.env.VITE_SUPABASE_URL;
   const supabaseAnonKey = import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY;
 
+  // --- Existing UseEffects ---
   useEffect(() => {
-    if (!authLoading && !user) {
-      navigate("/auth");
-    }
+    if (!authLoading && !user) navigate("/auth");
   }, [user, authLoading, navigate]);
 
   useEffect(() => {
     const checkAdmin = async () => {
       if (!user) return;
-      const { data } = await supabase
-        .from("user_roles")
-        .select("role")
-        .eq("user_id", user.id)
-        .eq("role", "admin")
-        .maybeSingle();
+      const { data } = await supabase.from("user_roles").select("role").eq("user_id", user.id).eq("role", "admin").maybeSingle();
       setIsAdmin(!!data);
     };
     checkAdmin();
@@ -126,22 +117,11 @@ export default function SettingsPage() {
       setWorkingHoursEnd((clinic as any).working_hours_end || "16:00");
       fetchServices();
       fetchStaff();
-      // 🆕 NEW: جلب العروض
       fetchPromotions();
     }
   }, [clinic]);
 
-  // 🆕 NEW: Fetch Promotions
-  const fetchPromotions = async () => {
-    if (!clinic) return;
-    const { data } = await supabase
-      .from("promotions")
-      .select("*")
-      .eq("clinic_id", clinic.id)
-      .order("created_at", { ascending: false });
-    setPromotions(data || []);
-  };
-
+  // --- Existing Functions ---
   const fetchStaff = async () => {
     if (!clinic) return;
     const { data } = await supabase
@@ -236,197 +216,47 @@ export default function SettingsPage() {
     setServices(data || []);
   };
 
-  // 🆕 NEW: Handle Promo Form Submit
-  const handlePromoSubmit = async () => {
+  // 🆕 NEW: Fetch Promotions
+  const fetchPromotions = async () => {
     if (!clinic) return;
-    if (!promoForm.title || !promoForm.discount_type || !promoForm.discount_value) {
-      toast({ title: "بيانات ناقصة", description: "يرجى ملء جميع الحقول الأساسية", variant: "destructive" });
-      return;
-    }
-
-    let imageUrl = promoForm.image_url || null;
-    if (promoImageFile) {
-      const fileExt = promoImageFile.name.split('.').pop();
-      const filePath = `${clinic.id}/promo_${Date.now()}.${fileExt}`;
-      const { error: uploadError } = await supabase.storage
-        .from('promo-images')
-        .upload(filePath, promoImageFile, { upsert: true });
-      if (!uploadError) {
-        const { data: { publicUrl } } = supabase.storage
-          .from('promo-images')
-          .getPublicUrl(filePath);
-        imageUrl = publicUrl;
-      }
-    }
-
-    const payload = {
-      ...promoForm,
-      clinic_id: clinic.id,
-      image_url: imageUrl,
-      is_active: true,
-    };
-
-    let error;
-    if (editingPromo) {
-      const { error: e } = await supabase
-        .from("promotions")
-        .update(payload)
-        .eq("id", editingPromo.id);
-      error = e;
-    } else {
-      const { error: e } = await supabase
-        .from("promotions")
-        .insert(payload);
-      error = e;
-    }
-
-    if (error) {
-      toast({ title: "خطأ", description: "فشل حفظ العرض: " + error.message, variant: "destructive" });
-    } else {
-      toast({ title: "تم الحفظ ✓", description: "تم حفظ العرض بنجاح" });
-      setShowPromoForm(false);
-      setPromoForm({ discount_type: 'percentage', is_active: true, per_user_limit: 1 });
-      setPromoImageFile(null);
-      setPromoImagePreview(null);
-      setEditingPromo(null);
-      fetchPromotions();
-    }
-  };
-
-  // 🆕 NEW: Toggle promo active status
-  const togglePromoStatus = async (promo: Promotion) => {
-    const { error } = await supabase
+    const { data } = await supabase
       .from("promotions")
-      .update({ is_active: !promo.is_active })
-      .eq("id", promo.id);
-    if (error) {
-      toast({ title: "خطأ", description: "فشل تحديث الحالة", variant: "destructive" });
-    } else {
-      toast({ title: "تم التحديث ✓", description: `تم ${!promo.is_active ? 'تفعيل' : 'إيقاف'} العرض` });
-      fetchPromotions();
-    }
-  };
-
-  // 🆕 NEW: Delete promo
-  const deletePromo = async (id: string) => {
-    const { error } = await supabase
-      .from("promotions")
-      .delete()
-      .eq("id", id);
-    if (error) {
-      toast({ title: "خطأ", description: "فشل حذف العرض", variant: "destructive" });
-    } else {
-      toast({ title: "تم الحذف ✓", description: "تم حذف العرض بنجاح" });
-      fetchPromotions();
-    }
-  };
-
-  // 🆕 NEW: Edit promo - fill form
-  const editPromo = (promo: Promotion) => {
-    setEditingPromo(promo);
-    setPromoForm({
-      title: promo.title,
-      description: promo.description || "",
-      discount_type: promo.discount_type,
-      discount_value: promo.discount_value,
-      applies_to: promo.applies_to || "all",
-      service_ids: promo.service_ids || [],
-      min_amount: promo.min_amount || undefined,
-      max_discount: promo.max_discount || undefined,
-      start_date: promo.start_date || undefined,
-      end_date: promo.end_date || undefined,
-      usage_limit: promo.usage_limit || undefined,
-      per_user_limit: promo.per_user_limit || 1,
-      is_active: promo.is_active,
-      image_url: promo.image_url || undefined,
-      code: promo.code || undefined,
-    });
-    setPromoImagePreview(promo.image_url || null);
-    setShowPromoForm(true);
-  };
-
-  // 🆕 NEW: Generate Promotional Image via Edge Function
-  const generatePromoImage = async (promo: Promotion) => {
-    if (!clinic) return;
-    setGeneratingPromoImage(true);
-    try {
-      const { data: sess } = await supabase.auth.getSession();
-      const token = sess?.session?.access_token;
-      const res = await fetch(`${supabaseUrl}/functions/v1/telegram-bot?action=generate_promo_image`, {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          "apikey": supabaseAnonKey,
-          Authorization: `Bearer ${token}`,
-        },
-        body: JSON.stringify({
-          clinic_id: clinic.id,
-          promo_id: promo.id,
-          title: promo.title,
-          description: promo.description || "",
-          discount_value: promo.discount_value,
-          discount_type: promo.discount_type,
-          code: promo.code || "N/A",
-          logo_url: clinic.logo_url,
-          clinic_name: clinic.name,
-          bot_username: botUsername || "SmartClinc_bot",
-        }),
-      });
-      const data = await res.json();
-      if (data?.ok && data?.image_url) {
-        await supabase
-          .from("promotions")
-          .update({ image_url: data.image_url })
-          .eq("id", promo.id);
-        toast({ title: "✅ تم توليد الصورة", description: "تم توليد صورة العرض الاحترافية بنجاح" });
-        fetchPromotions();
-      } else {
-        toast({ title: "فشل التوليد", description: data?.error || "خطأ في الخادم", variant: "destructive" });
-      }
-    } catch (e) {
-      toast({ title: "خطأ", description: "تعذر الاتصال بالخادم", variant: "destructive" });
-    }
-    setGeneratingPromoImage(false);
+      .select("*")
+      .eq("clinic_id", clinic.id)
+      .order("created_at", { ascending: false });
+    setPromotions(data || []);
   };
 
   const handleSaveClinic = async () => {
     if (!clinic) {
-      toast({ title: "تعذر تحميل العيادة", description: "أعد تحميل الصفحة. إن استمرت المشكلة سجّل الخروج ثم الدخول مجدداً.", variant: "destructive" });
+      toast({ title: "تعذر تحميل العيادة", description: "أعد تحميل الصفحة.", variant: "destructive" });
       return;
     }
     setSaving(true);
     try {
-      await supabase.rpc("save_clinic_vault", {
-        _bot_token: botToken || null,
-      } as any);
+      await supabase.rpc("save_clinic_vault", { _bot_token: botToken || null } as any);
     } catch (e) {
       console.warn("vault save failed", e);
     }
-    const { error } = await updateClinic({ 
-      name: clinicName, 
-      bot_token: botToken, 
-      voice_agent_enabled: voiceAgentEnabled, 
-      voice_tone: voiceTone, 
-      voice_mode: voiceMode, 
+    const { error } = await updateClinic({
+      name: clinicName,
+      bot_token: botToken,
+      voice_agent_enabled: voiceAgentEnabled,
+      voice_tone: voiceTone,
+      voice_mode: voiceMode,
       receptionist_whatsapp: receptionistWhatsapp || null,
       working_hours_start: workingHoursStart,
       working_hours_end: workingHoursEnd,
     } as any);
     if (error) {
       setSaving(false);
-      console.error("Save clinic error:", error);
       toast({ title: "خطأ", description: error.message || "فشل في حفظ الإعدادات", variant: "destructive" });
       return;
     }
-
     if (botToken && botToken.trim().length > 10) {
       const hookResult = await invokeBotAction("set-webhook");
       if (!hookResult.ok) {
-        toast({
-          title: "تم الحفظ - تنبيه",
-          description: "تم حفظ التوكن لكن فشل ضبط webhook تلقائياً: " + (hookResult.error || "تحقق أن التوكن صحيح"),
-          variant: "destructive",
-        });
+        toast({ title: "تم الحفظ - تنبيه", description: "تم حفظ التوكن لكن فشل ضبط webhook", variant: "destructive" });
       } else {
         toast({ title: "تم الحفظ ✓", description: "تم حفظ الإعدادات وربط البوت بنجاح" });
       }
@@ -484,39 +314,23 @@ export default function SettingsPage() {
   const handleLogoUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file || !user || !clinic) return;
-
     setUploadingLogo(true);
-    
     const fileExt = file.name.split('.').pop();
     const filePath = `${user.id}/logo.${fileExt}`;
-
-    const { error: uploadError } = await supabase.storage
-      .from('clinic-logos')
-      .upload(filePath, file, { upsert: true });
-
+    const { error: uploadError } = await supabase.storage.from('clinic-logos').upload(filePath, file, { upsert: true });
     if (uploadError) {
       toast({ title: "خطأ", description: "فشل في رفع الشعار", variant: "destructive" });
       setUploadingLogo(false);
       return;
     }
-
-    const { data: { publicUrl } } = supabase.storage
-      .from('clinic-logos')
-      .getPublicUrl(filePath);
-
-    const { error: updateError } = await supabase
-      .from('clinics')
-      .update({ logo_url: publicUrl })
-      .eq('id', clinic.id)
-      .eq('owner_id', user.id);
-
+    const { data: { publicUrl } } = supabase.storage.from('clinic-logos').getPublicUrl(filePath);
+    const { error: updateError } = await supabase.from('clinics').update({ logo_url: publicUrl }).eq('id', clinic.id).eq('owner_id', user.id);
     if (updateError) {
       toast({ title: "خطأ", description: "فشل في حفظ رابط الشعار", variant: "destructive" });
     } else {
       setLogoUrl(publicUrl);
       toast({ title: "تم الرفع ✓", description: "تم رفع شعار العيادة بنجاح" });
     }
-
     setUploadingLogo(false);
   };
 
@@ -534,7 +348,6 @@ export default function SettingsPage() {
       price: priceValue,
     });
     if (error) {
-      console.error("Add service error:", error);
       toast({ title: "خطأ", description: error.message || "فشل في إضافة الخدمة", variant: "destructive" });
     } else {
       setNewServiceName("");
@@ -552,6 +365,167 @@ export default function SettingsPage() {
       fetchServices();
       toast({ title: "تم الحذف", description: "تم حذف الخدمة بنجاح" });
     }
+  };
+
+  // 🆕 NEW: Promotion Handlers
+  const resetPromoForm = () => {
+    setPromoForm({
+      discount_type: 'percentage',
+      is_active: true,
+      per_user_limit: 1,
+    });
+    setPromoImageFile(null);
+    setPromoImagePreview(null);
+    setEditingPromo(null);
+  };
+
+  const openPromoDialog = (promo?: Promotion) => {
+    if (promo) {
+      setEditingPromo(promo);
+      setPromoForm({
+        title: promo.title,
+        description: promo.description || '',
+        discount_type: promo.discount_type,
+        discount_value: promo.discount_value,
+        code: promo.code || '',
+        start_date: promo.start_date || '',
+        end_date: promo.end_date || '',
+        usage_limit: promo.usage_limit || undefined,
+        per_user_limit: promo.per_user_limit || 1,
+        is_active: promo.is_active,
+        image_url: promo.image_url || '',
+      });
+      if (promo.image_url) setPromoImagePreview(promo.image_url);
+    } else {
+      resetPromoForm();
+    }
+    setPromoDialogOpen(true);
+  };
+
+  const handlePromoImageSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    setPromoImageFile(file);
+    const reader = new FileReader();
+    reader.onload = (ev) => setPromoImagePreview(ev.target?.result as string);
+    reader.readAsDataURL(file);
+  };
+
+  const handlePromoSubmit = async () => {
+    if (!clinic) return;
+    if (!promoForm.title || !promoForm.discount_type || !promoForm.discount_value) {
+      toast({ title: "بيانات ناقصة", description: "يرجى ملء جميع الحقول الأساسية", variant: "destructive" });
+      return;
+    }
+
+    let imageUrl = promoForm.image_url || null;
+    if (promoImageFile) {
+      const fileExt = promoImageFile.name.split('.').pop();
+      const filePath = `${clinic.id}/promo_${Date.now()}.${fileExt}`;
+      const { error: uploadError } = await supabase.storage.from('promo-images').upload(filePath, promoImageFile, { upsert: true });
+      if (!uploadError) {
+        const { data: { publicUrl } } = supabase.storage.from('promo-images').getPublicUrl(filePath);
+        imageUrl = publicUrl;
+      } else {
+        toast({ title: "خطأ", description: "فشل رفع صورة العرض", variant: "destructive" });
+        return;
+      }
+    }
+
+    const payload = {
+      clinic_id: clinic.id,
+      title: promoForm.title,
+      description: promoForm.description || null,
+      discount_type: promoForm.discount_type,
+      discount_value: promoForm.discount_value,
+      code: promoForm.code || null,
+      start_date: promoForm.start_date || null,
+      end_date: promoForm.end_date || null,
+      usage_limit: promoForm.usage_limit || null,
+      per_user_limit: promoForm.per_user_limit || 1,
+      is_active: promoForm.is_active !== undefined ? promoForm.is_active : true,
+      image_url: imageUrl,
+    };
+
+    let error;
+    if (editingPromo) {
+      const { error: e } = await supabase.from("promotions").update(payload).eq("id", editingPromo.id);
+      error = e;
+    } else {
+      const { error: e } = await supabase.from("promotions").insert(payload);
+      error = e;
+    }
+
+    if (error) {
+      toast({ title: "خطأ", description: "فشل حفظ العرض: " + error.message, variant: "destructive" });
+    } else {
+      toast({ title: "تم الحفظ ✓", description: "تم حفظ العرض بنجاح" });
+      setPromoDialogOpen(false);
+      resetPromoForm();
+      fetchPromotions();
+    }
+  };
+
+  const togglePromoStatus = async (id: string, currentStatus: boolean) => {
+    const { error } = await supabase.from("promotions").update({ is_active: !currentStatus }).eq("id", id);
+    if (error) {
+      toast({ title: "خطأ", description: "فشل تغيير حالة العرض", variant: "destructive" });
+    } else {
+      toast({ title: "تم التحديث", description: `تم ${!currentStatus ? 'تفعيل' : 'إيقاف'} العرض` });
+      fetchPromotions();
+    }
+  };
+
+  const deletePromo = async (id: string) => {
+    if (!confirm("هل أنت متأكد من حذف هذا العرض؟")) return;
+    const { error } = await supabase.from("promotions").delete().eq("id", id);
+    if (error) {
+      toast({ title: "خطأ", description: "فشل حذف العرض", variant: "destructive" });
+    } else {
+      toast({ title: "تم الحذف", description: "تم حذف العرض بنجاح" });
+      fetchPromotions();
+    }
+  };
+
+  // 🆕 NEW: Generate Promotional Image via Edge Function
+  const generatePromoImage = async (promo: Promotion) => {
+    if (!clinic) return;
+    setGeneratingPromoImage(true);
+    try {
+      const { data: sess } = await supabase.auth.getSession();
+      const token = sess?.session?.access_token;
+      const res = await fetch(`${supabaseUrl}/functions/v1/telegram-bot?action=generate_promo_image`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          "apikey": supabaseAnonKey,
+          Authorization: `Bearer ${token}`,
+        },
+        body: JSON.stringify({
+          clinic_id: clinic.id,
+          promo_id: promo.id,
+          title: promo.title,
+          description: promo.description || "",
+          discount_value: promo.discount_value,
+          discount_type: promo.discount_type,
+          code: promo.code || "N/A",
+          logo_url: clinic.logo_url,
+          clinic_name: clinic.name,
+          clinic_id_for_qr: clinic.id,
+        }),
+      });
+      const data = await res.json();
+      if (data?.ok && data?.image_url) {
+        await supabase.from("promotions").update({ image_url: data.image_url }).eq("id", promo.id);
+        toast({ title: "✅ تم توليد الصورة", description: "تم توليد صورة العرض الاحترافية بنجاح" });
+        fetchPromotions();
+      } else {
+        toast({ title: "فشل التوليد", description: data?.error || "خطأ في الخادم", variant: "destructive" });
+      }
+    } catch (e) {
+      toast({ title: "خطأ", description: "تعذر الاتصال بالخادم", variant: "destructive" });
+    }
+    setGeneratingPromoImage(false);
   };
 
   const copyToClipboard = async (text: string, field: string) => {
@@ -613,7 +587,7 @@ export default function SettingsPage() {
 
       <main className="flex-1 container mx-auto px-4 py-8 max-w-4xl">
         <div className="space-y-6">
-          {/* Clinic Settings */}
+          {/* --- Clinic Settings --- */}
           <section className="card-modern p-6 animate-slide-up">
             <div className="flex items-center gap-3 mb-6">
               <div className="w-12 h-12 rounded-2xl bg-gradient-to-br from-blue-500 to-indigo-600 flex items-center justify-center shadow-lg">
@@ -640,58 +614,27 @@ export default function SettingsPage() {
                   </div>
                   <div className="flex-1">
                     <label className="cursor-pointer">
-                      <input
-                        type="file"
-                        accept="image/*"
-                        onChange={handleLogoUpload}
-                        className="hidden"
-                        disabled={uploadingLogo}
-                      />
-                      <Button
-                        type="button"
-                        variant="outline"
-                        disabled={uploadingLogo}
-                        className="pointer-events-none"
-                      >
-                        {uploadingLogo ? (
-                          <Loader2 className="w-4 h-4 animate-spin" />
-                        ) : (
-                          <Upload className="w-4 h-4" />
-                        )}
+                      <input type="file" accept="image/*" onChange={handleLogoUpload} className="hidden" disabled={uploadingLogo} />
+                      <Button type="button" variant="outline" disabled={uploadingLogo} className="pointer-events-none">
+                        {uploadingLogo ? <Loader2 className="w-4 h-4 animate-spin" /> : <Upload className="w-4 h-4" />}
                         {uploadingLogo ? "جاري الرفع..." : "رفع شعار"}
                       </Button>
                     </label>
-                    <p className="text-xs text-muted-foreground mt-1">
-                      يُفضل صورة مربعة بحجم 200x200 بكسل أو أكبر
-                    </p>
+                    <p className="text-xs text-muted-foreground mt-1">يُفضل صورة مربعة بحجم 200x200 بكسل أو أكبر</p>
                   </div>
                 </div>
               </div>
 
               <div className="space-y-2">
                 <Label htmlFor="clinicName" className="text-sm font-medium">اسم العيادة</Label>
-                <Input
-                  id="clinicName"
-                  value={clinicName}
-                  onChange={(e) => setClinicName(e.target.value)}
-                  placeholder="أدخل اسم العيادة"
-                  className="input-modern"
-                />
+                <Input id="clinicName" value={clinicName} onChange={(e) => setClinicName(e.target.value)} placeholder="أدخل اسم العيادة" className="input-modern" />
               </div>
+
               {isAdmin ? (
                 <div className="space-y-2">
                   <Label htmlFor="botToken" className="text-sm font-medium">رمز البوت الموحّد (للأدمن فقط)</Label>
-                  <Input
-                    id="botToken"
-                    value={botToken}
-                    onChange={(e) => setBotToken(e.target.value)}
-                    placeholder="أدخل رمز البوت الموحّد"
-                    className="input-modern font-mono text-sm"
-                    dir="ltr"
-                  />
-                  <p className="text-xs text-muted-foreground">
-                    هذا التوكن موحّد لجميع العيادات ويُضبط مرة واحدة من حساب الأدمن.
-                  </p>
+                  <Input id="botToken" value={botToken} onChange={(e) => setBotToken(e.target.value)} placeholder="أدخل رمز البوت الموحّد" className="input-modern font-mono text-sm" dir="ltr" />
+                  <p className="text-xs text-muted-foreground">هذا التوكن موحّد لجميع العيادات ويُضبط مرة واحدة من حساب الأدمن.</p>
                 </div>
               ) : (
                 <div className="rounded-xl bg-muted/40 border border-border p-4 text-sm text-muted-foreground flex items-center gap-2">
@@ -699,22 +642,19 @@ export default function SettingsPage() {
                   بوت تيليجرام مفعّل تلقائياً عبر النظام (محمي من الإدارة).
                 </div>
               )}
+
               <Button onClick={handleSaveClinic} disabled={saving} className="w-full sm:w-auto">
                 {saving ? <Loader2 className="w-4 h-4 animate-spin" /> : <Save className="w-4 h-4" />}
                 حفظ الإعدادات
               </Button>
               <div className="flex flex-col sm:flex-row gap-2">
-                <Button variant="outline" onClick={handleCheckWebhook} className="w-full sm:w-auto">
-                  🔎 فحص حالة الـ Webhook
-                </Button>
-                <Button variant="outline" onClick={handleResetWebhook} className="w-full sm:w-auto">
-                  🔁 إعادة ضبط الـ Webhook
-                </Button>
+                <Button variant="outline" onClick={handleCheckWebhook} className="w-full sm:w-auto">🔎 فحص حالة الـ Webhook</Button>
+                <Button variant="outline" onClick={handleResetWebhook} className="w-full sm:w-auto">🔁 إعادة ضبط الـ Webhook</Button>
               </div>
             </div>
           </section>
 
-          {/* Working Hours */}
+          {/* --- Working Hours --- */}
           <section className="card-modern p-6 animate-slide-up delay-50">
             <div className="flex items-center gap-3 mb-6">
               <div className="w-12 h-12 rounded-2xl bg-gradient-to-br from-amber-500 to-orange-600 flex items-center justify-center shadow-lg">
@@ -741,7 +681,7 @@ export default function SettingsPage() {
             </Button>
           </section>
 
-          {/* Staff Management */}
+          {/* --- Staff Management --- */}
           <section className="card-modern p-6 animate-slide-up delay-75">
             <div className="flex items-center gap-3 mb-5">
               <div className="w-12 h-12 rounded-2xl bg-gradient-to-br from-indigo-500 to-purple-600 flex items-center justify-center shadow-lg">
@@ -754,21 +694,8 @@ export default function SettingsPage() {
             </div>
 
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 mb-3">
-              <Input
-                placeholder="بريد الموظف الإلكتروني"
-                value={newStaffEmail}
-                onChange={(e) => setNewStaffEmail(e.target.value)}
-                dir="ltr"
-                className="input-modern"
-              />
-              <Input
-                type="password"
-                placeholder="كلمة مرور مؤقتة (6 أحرف على الأقل)"
-                value={newStaffPassword}
-                onChange={(e) => setNewStaffPassword(e.target.value)}
-                dir="ltr"
-                className="input-modern"
-              />
+              <Input placeholder="بريد الموظف الإلكتروني" value={newStaffEmail} onChange={(e) => setNewStaffEmail(e.target.value)} dir="ltr" className="input-modern" />
+              <Input type="password" placeholder="كلمة مرور مؤقتة (6 أحرف على الأقل)" value={newStaffPassword} onChange={(e) => setNewStaffPassword(e.target.value)} dir="ltr" className="input-modern" />
             </div>
             <div className="grid grid-cols-1 sm:grid-cols-[1fr_auto] gap-2 mb-5">
               <Select value={newStaffRole} onValueChange={(v) => setNewStaffRole(v as any)}>
@@ -785,27 +712,16 @@ export default function SettingsPage() {
             </div>
             <p className="text-xs text-muted-foreground mb-4">
               💡 سيتم إنشاء حساب الموظف واعتماده تلقائياً. أعطه البريد وكلمة المرور ليدخل من تبويب <b>«دخول موظف»</b>.
-              يمكن للموظف تغيير كلمة المرور لاحقاً.
             </p>
 
             <div className="mb-5 space-y-2 p-4 rounded-xl border border-emerald-500/20 bg-emerald-500/5">
               <Label className="text-sm font-semibold text-foreground">رقم واتساب موظف الاستقبال</Label>
-              <Input
-                value={receptionistWhatsapp}
-                onChange={(e) => setReceptionistWhatsapp(e.target.value)}
-                placeholder="مثال: 967771234567 (بدون + أو 00)"
-                dir="ltr"
-                className="input-modern"
-              />
-              <p className="text-xs text-muted-foreground">
-                يُستخدم عندما يطلب زبون في تيليجرام «حجز باسم شخص آخر» — يُوجَّه للتواصل مع الاستقبال عبر واتساب.
-              </p>
+              <Input value={receptionistWhatsapp} onChange={(e) => setReceptionistWhatsapp(e.target.value)} placeholder="مثال: 967771234567 (بدون + أو 00)" dir="ltr" className="input-modern" />
+              <p className="text-xs text-muted-foreground">يُستخدم عندما يطلب زبون في تيليجرام «حجز باسم شخص آخر» — يُوجَّه للتواصل مع الاستقبال عبر واتساب.</p>
             </div>
 
             {staffList.length === 0 ? (
-              <div className="text-center py-6 text-sm text-muted-foreground border border-dashed border-border rounded-xl">
-                لا يوجد موظفون بعد
-              </div>
+              <div className="text-center py-6 text-sm text-muted-foreground border border-dashed border-border rounded-xl">لا يوجد موظفون بعد</div>
             ) : (
               <div className="space-y-2">
                 {staffList.map((s) => (
@@ -815,9 +731,9 @@ export default function SettingsPage() {
                       <div className="text-xs text-muted-foreground flex items-center gap-2 mt-1">
                         <span className="px-2 py-0.5 rounded-md bg-primary/10 text-primary">{s.role === "reception" ? "استقبال" : "صندوق"}</span>
                         {s.approved ? (
-                          <span className="px-2 py-0.5 rounded-md bg-emerald-500/10 text-emerald-600 dark:text-emerald-400">معتمد</span>
+                          <span className="px-2 py-0.5 rounded-md bg-emerald-500/10 text-emerald-600">معتمد</span>
                         ) : (
-                          <span className="px-2 py-0.5 rounded-md bg-amber-500/10 text-amber-600 dark:text-amber-400">بانتظار الاعتماد</span>
+                          <span className="px-2 py-0.5 rounded-md bg-amber-500/10 text-amber-600">بانتظار الاعتماد</span>
                         )}
                       </div>
                     </div>
@@ -837,7 +753,7 @@ export default function SettingsPage() {
             )}
           </section>
 
-          {/* Customer Booking Link */}
+          {/* --- Customer Booking Link --- */}
           <section className="card-modern p-6 animate-slide-up delay-75">
             <div className="flex items-center gap-3 mb-4">
               <div className="w-12 h-12 rounded-2xl bg-gradient-to-br from-emerald-500 to-teal-600 flex items-center justify-center shadow-lg">
@@ -848,34 +764,19 @@ export default function SettingsPage() {
                 <p className="text-sm text-muted-foreground">أرسله للزبائن ليحجزوا داخل هذه العيادة فقط</p>
               </div>
             </div>
-
             <div className="bg-accent/5 border border-accent/20 rounded-2xl p-5 space-y-3">
-              <p className="text-sm text-muted-foreground">
-                هذا هو الرابط/الأمر الخاص بالزبون. عند فتحه سيتعرف البوت على عيادتك ويعرض خدماتك فقط، ولن يطلب من الزبون إدخال ID يدوياً.
-              </p>
+              <p className="text-sm text-muted-foreground">هذا هو الرابط/الأمر الخاص بالزبون. عند فتحه سيتعرف البوت على عيادتك ويعرض خدماتك فقط.</p>
               <div className="flex gap-2">
-                <Input
-                  value={`/start clinic_${clinic?.id || ""}`}
-                  readOnly
-                  className="font-mono text-sm bg-background"
-                  dir="ltr"
-                />
-                <Button
-                  variant="outline"
-                  size="icon"
-                  onClick={() => copyToClipboard(`/start clinic_${clinic?.id || ""}`, "customerLink")}
-                  className="shrink-0"
-                >
+                <Input value={`/start clinic_${clinic?.id || ""}`} readOnly className="font-mono text-sm bg-background" dir="ltr" />
+                <Button variant="outline" size="icon" onClick={() => copyToClipboard(`/start clinic_${clinic?.id || ""}`, "customerLink")} className="shrink-0">
                   {copiedField === "customerLink" ? <Check className="w-4 h-4 text-success" /> : <Copy className="w-4 h-4" />}
                 </Button>
               </div>
-              <p className="text-xs text-muted-foreground">
-                أمر <code className="bg-background px-1.5 py-0.5 rounded">link_</code> خاص بربط حساب الطبيب لاستقبال الإشعارات، وليس للزبائن.
-              </p>
+              <p className="text-xs text-muted-foreground">أمر <code className="bg-background px-1.5 py-0.5 rounded">link_</code> خاص بربط حساب الطبيب لاستقبال الإشعارات، وليس للزبائن.</p>
             </div>
           </section>
 
-          {/* QR Code */}
+          {/* --- QR Code --- */}
           <section className="card-modern p-6 animate-slide-up delay-100">
             <div className="flex items-center gap-3 mb-4">
               <div className="w-12 h-12 rounded-2xl bg-gradient-to-br from-fuchsia-500 to-pink-600 flex items-center justify-center shadow-lg">
@@ -886,7 +787,6 @@ export default function SettingsPage() {
                 <p className="text-sm text-muted-foreground">اطبعه وعلّقه في العيادة — الزبون يمسحه ويُحجز فوراً</p>
               </div>
             </div>
-
             {(() => {
               const effectiveBotUsername = botUsername || "SmartClinc_bot";
               if (!clinic?.id) return null;
@@ -897,9 +797,7 @@ export default function SettingsPage() {
                     <QRCodeCanvas id="clinic-qr" value={link} size={200} level="M" includeMargin={false} />
                   </div>
                   <div className="flex-1 space-y-3 w-full">
-                    <p className="text-sm text-foreground">
-                      عند مسح الرمز يفتح بوت <b dir="ltr">@{effectiveBotUsername}</b> مباشرةً على عيادتك ويبدأ الترحيب بالزبون.
-                    </p>
+                    <p className="text-sm text-foreground">عند مسح الرمز يفتح بوت <b dir="ltr">@{effectiveBotUsername}</b> مباشرةً على عيادتك.</p>
                     <div className="flex gap-2">
                       <Input value={link} readOnly className="font-mono text-xs bg-background" dir="ltr" />
                       <Button variant="outline" size="icon" onClick={() => copyToClipboard(link, "qrLink")} className="shrink-0">
@@ -907,28 +805,18 @@ export default function SettingsPage() {
                       </Button>
                     </div>
                     <div className="flex gap-2">
-                      <Button onClick={downloadQr} className="flex-1">
-                        <Download className="w-4 h-4" />
-                        تنزيل صورة QR
-                      </Button>
-                      {botToken && (
-                        <Button variant="outline" onClick={refreshBotUsername} disabled={loadingBotInfo}>
-                          {loadingBotInfo ? <Loader2 className="w-4 h-4 animate-spin" /> : "تحديث اسم البوت"}
-                        </Button>
-                      )}
+                      <Button onClick={downloadQr} className="flex-1"><Download className="w-4 h-4" /> تنزيل صورة QR</Button>
+                      {botToken && <Button variant="outline" onClick={refreshBotUsername} disabled={loadingBotInfo}>
+                        {loadingBotInfo ? <Loader2 className="w-4 h-4 animate-spin" /> : "تحديث اسم البوت"}
+                      </Button>}
                     </div>
-                    {!botUsername && (
-                      <p className="text-xs text-muted-foreground">
-                        هذا الرمز يعمل تلقائياً باستخدام بوت النظام المركزي. لا حاجة لأي توكن.
-                      </p>
-                    )}
                   </div>
                 </div>
               );
             })()}
           </section>
 
-          {/* Voice Agent */}
+          {/* --- Voice Agent --- */}
           <section className="card-modern p-6 animate-slide-up delay-150">
             <div className="flex items-center gap-3 mb-4">
               <div className="w-12 h-12 rounded-2xl bg-gradient-to-br from-violet-500 to-purple-600 flex items-center justify-center shadow-lg">
@@ -936,57 +824,37 @@ export default function SettingsPage() {
               </div>
               <div>
                 <h2 className="text-xl font-bold text-foreground">الوكيل الصوتي (مجاني)</h2>
-                <p className="text-sm text-muted-foreground">يرسل ردّاً صوتياً عربياً للزبون بعد كل ردّ نصي — بدون استهلاك رصيد الذكاء الصناعي</p>
+                <p className="text-sm text-muted-foreground">يرسل ردّاً صوتياً عربياً للزبون بعد كل ردّ نصي</p>
               </div>
             </div>
-
             <div className="space-y-4 bg-accent/5 border border-accent/20 rounded-2xl p-5">
               <label className="flex items-center justify-between cursor-pointer">
                 <div>
-                  <div className="font-medium">تفعيل الردود الصوتية في تيليجرام</div>
-                  <p className="text-xs text-muted-foreground mt-1">
-                    عند تفعيلها يصل الزبون برد واحد فقط: نص أو صوت حسب الوضع المختار، ولا يتم إرسال الاثنين معاً.
-                  </p>
+                  <div className="font-medium">تفعيل الردود الصوتية</div>
+                  <p className="text-xs text-muted-foreground mt-1">عند تفعيلها يصل الزبون برد واحد فقط: نص أو صوت</p>
                 </div>
-                <input
-                  type="checkbox"
-                  checked={voiceAgentEnabled}
-                  onChange={(e) => setVoiceAgentEnabled(e.target.checked)}
-                  className="w-5 h-5 accent-primary"
-                />
+                <input type="checkbox" checked={voiceAgentEnabled} onChange={(e) => setVoiceAgentEnabled(e.target.checked)} className="w-5 h-5 accent-primary" />
               </label>
-
               <div className="space-y-2">
                 <Label className="text-sm font-medium">طريقة الرد عند تفعيل الصوت</Label>
                 <Select value={voiceMode} onValueChange={setVoiceMode}>
                   <SelectTrigger><SelectValue placeholder="اختر طريقة الرد" /></SelectTrigger>
-                  <SelectContent className="bg-popover z-50">
+                  <SelectContent>
                     <SelectItem value="auto">تلقائي: نص أو صوت بالتبادل</SelectItem>
                     <SelectItem value="text">نص فقط</SelectItem>
                     <SelectItem value="voice">صوت فقط</SelectItem>
                   </SelectContent>
                 </Select>
               </div>
-
               <div className="space-y-2">
                 <Label htmlFor="voiceTone" className="text-sm font-medium">نبرة الرد الأساسية</Label>
-                <Input
-                  id="voiceTone"
-                  value={voiceTone}
-                  onChange={(e) => setVoiceTone(e.target.value)}
-                  placeholder="مثال: ودود ومحترم، مهني وحازم، مرح ومُطمئِن"
-                  className="input-modern"
-                />
-                <p className="text-xs text-muted-foreground">تُستخدم في الردود النصية والصوتية على حدٍ سواء.</p>
+                <Input id="voiceTone" value={voiceTone} onChange={(e) => setVoiceTone(e.target.value)} placeholder="مثال: ودود ومحترم" className="input-modern" />
               </div>
-
-              <p className="text-xs text-muted-foreground">
-                💡 الصوت يُولّد عبر Google Translate TTS المجاني (لا API key، لا حدود تجريبية).
-              </p>
+              <p className="text-xs text-muted-foreground">💡 الصوت يُولّد عبر Google Translate TTS المجاني</p>
             </div>
           </section>
 
-          {/* Link Doctor */}
+          {/* --- Link Doctor --- */}
           <section className="card-modern p-6 animate-slide-up delay-100">
             <div className="flex items-center gap-3 mb-4">
               <div className="w-12 h-12 rounded-2xl bg-gradient-to-br from-sky-500 to-blue-600 flex items-center justify-center shadow-lg">
@@ -997,38 +865,23 @@ export default function SettingsPage() {
                 <p className="text-sm text-muted-foreground">اربط حسابك لاستقبال كل حجز/إلغاء فوراً</p>
               </div>
             </div>
-
             <div className="bg-primary/5 border border-primary/20 rounded-2xl p-5 space-y-3">
-              <p className="text-sm text-foreground">
-                <b>الخطوات:</b>
-              </p>
+              <p className="text-sm text-foreground"><b>الخطوات:</b></p>
               <ol className="text-sm text-muted-foreground space-y-2 list-decimal pr-5">
                 <li>افتح بوت العيادة في تيليجرام</li>
                 <li>انسخ الأمر التالي وأرسله للبوت:</li>
               </ol>
               <div className="flex gap-2">
-                <Input
-                  value={`/start link_${user?.id || ""}`}
-                  readOnly
-                  className="font-mono text-sm bg-background"
-                  dir="ltr"
-                />
-                <Button
-                  variant="outline"
-                  size="icon"
-                  onClick={() => copyToClipboard(`/start link_${user?.id || ""}`, "linkCmd")}
-                  className="shrink-0"
-                >
+                <Input value={`/start link_${user?.id || ""}`} readOnly className="font-mono text-sm bg-background" dir="ltr" />
+                <Button variant="outline" size="icon" onClick={() => copyToClipboard(`/start link_${user?.id || ""}`, "linkCmd")} className="shrink-0">
                   {copiedField === "linkCmd" ? <Check className="w-4 h-4 text-success" /> : <Copy className="w-4 h-4" />}
                 </Button>
               </div>
-              <p className="text-xs text-muted-foreground">
-                بمجرد الإرسال، سيؤكد لك البوت الربط، وستصلك جميع الإشعارات على هذا الحساب.
-              </p>
+              <p className="text-xs text-muted-foreground">بمجرد الإرسال، سيؤكد لك البوت الربط، وستصلك جميع الإشعارات.</p>
             </div>
           </section>
 
-          {/* Integration Info */}
+          {/* --- Integration Info --- */}
           <section className="card-modern p-6 animate-slide-up delay-100">
             <div className="flex items-center gap-3 mb-6">
               <div className="w-12 h-12 rounded-2xl bg-gradient-to-br from-emerald-500 to-teal-600 flex items-center justify-center shadow-lg">
@@ -1036,87 +889,43 @@ export default function SettingsPage() {
               </div>
               <div>
                 <h2 className="text-xl font-bold text-foreground">معلومات الربط</h2>
-                <p className="text-sm text-muted-foreground">
-                  {isAdmin ? "معلومات الربط الكاملة (صلاحيات المدير)" : "معرّف العيادة الخاص بك"}
-                </p>
+                <p className="text-sm text-muted-foreground">{isAdmin ? "معلومات الربط الكاملة (صلاحيات المدير)" : "معرّف العيادة الخاص بك"}</p>
               </div>
             </div>
-            
             <div className="grid gap-4">
               <div className="bg-primary/5 rounded-2xl p-5 border border-primary/20">
-                <Label className="flex items-center gap-2 text-primary font-semibold mb-3">
-                  <Sparkles className="w-4 h-4" />
-                  معرّف العيادة (Clinic ID)
-                </Label>
+                <Label className="flex items-center gap-2 text-primary font-semibold mb-3"><Sparkles className="w-4 h-4" /> معرّف العيادة (Clinic ID)</Label>
                 <div className="flex gap-2">
-                  <Input
-                    value={clinic?.id || ""}
-                    readOnly
-                    className="font-mono text-sm bg-background"
-                    dir="ltr"
-                  />
-                  <Button
-                    variant="outline"
-                    size="icon"
-                    onClick={() => copyToClipboard(clinic?.id || "", "clinicId")}
-                    className="shrink-0"
-                  >
+                  <Input value={clinic?.id || ""} readOnly className="font-mono text-sm bg-background" dir="ltr" />
+                  <Button variant="outline" size="icon" onClick={() => copyToClipboard(clinic?.id || "", "clinicId")} className="shrink-0">
                     {copiedField === "clinicId" ? <Check className="w-4 h-4 text-success" /> : <Copy className="w-4 h-4" />}
                   </Button>
                 </div>
-                <p className="text-xs text-muted-foreground mt-2">
-                  هذا الرقم هو هويتك الفريدة في النظام. يستخدم لربط جميع بياناتك (المرضى، المواعيد، الخدمات) بعيادتك.
-                </p>
+                <p className="text-xs text-muted-foreground mt-2">هذا الرقم هو هويتك الفريدة في النظام.</p>
               </div>
-
               {isAdmin && (
                 <>
                   <div className="bg-warning/10 border border-warning/30 rounded-xl p-3 mb-2">
-                    <p className="text-xs text-warning flex items-center gap-2">
-                      <Shield className="w-4 h-4" />
-                      هذه المعلومات تظهر لك فقط لأنك مدير النظام
-                    </p>
+                    <p className="text-xs text-warning flex items-center gap-2"><Shield className="w-4 h-4" /> هذه المعلومات تظهر لك فقط لأنك مدير النظام</p>
                   </div>
                   <div className="grid gap-3">
                     <div className="flex items-center gap-2 bg-muted/30 rounded-xl p-4">
                       <Link2 className="w-5 h-5 text-muted-foreground shrink-0" />
-                      <Input
-                        value={supabaseUrl}
-                        readOnly
-                        className="font-mono text-xs bg-transparent border-0 focus-visible:ring-0"
-                        dir="ltr"
-                      />
-                      <Button
-                        variant="ghost"
-                        size="icon"
-                        onClick={() => copyToClipboard(supabaseUrl, "url")}
-                      >
+                      <Input value={supabaseUrl} readOnly className="font-mono text-xs bg-transparent border-0" dir="ltr" />
+                      <Button variant="ghost" size="icon" onClick={() => copyToClipboard(supabaseUrl, "url")}>
                         {copiedField === "url" ? <Check className="w-4 h-4 text-success" /> : <Copy className="w-4 h-4" />}
                       </Button>
                     </div>
                     <div className="flex items-center gap-2 bg-muted/30 rounded-xl p-4">
                       <Key className="w-5 h-5 text-muted-foreground shrink-0" />
-                      <Input
-                        value={supabaseAnonKey}
-                        readOnly
-                        className="font-mono text-xs bg-transparent border-0 focus-visible:ring-0"
-                        dir="ltr"
-                      />
-                      <Button
-                        variant="ghost"
-                        size="icon"
-                        onClick={() => copyToClipboard(supabaseAnonKey, "key")}
-                      >
+                      <Input value={supabaseAnonKey} readOnly className="font-mono text-xs bg-transparent border-0" dir="ltr" />
+                      <Button variant="ghost" size="icon" onClick={() => copyToClipboard(supabaseAnonKey, "key")}>
                         {copiedField === "key" ? <Check className="w-4 h-4 text-success" /> : <Copy className="w-4 h-4" />}
                       </Button>
                     </div>
                   </div>
-
                   <div className="bg-muted/30 rounded-2xl p-5 border border-border">
-                    <h3 className="font-semibold text-foreground mb-3 flex items-center gap-2">
-                      <Shield className="w-4 h-4 text-primary" />
-                      ملاحظات التكامل المباشر
-                    </h3>
+                    <h3 className="font-semibold text-foreground mb-3 flex items-center gap-2"><Shield className="w-4 h-4 text-primary" /> ملاحظات التكامل المباشر</h3>
                     <ol className="text-sm text-muted-foreground space-y-2 list-decimal list-inside">
                       <li>استخدم البوت الموحد والـ Webhook المباشر داخل النظام فقط</li>
                       <li><strong className="text-foreground">مهم:</strong> كل عملية بيانات يجب أن تكون مربوطة بـ <code className="bg-background px-1.5 py-0.5 rounded text-primary">clinic_id</code></li>
@@ -1128,7 +937,96 @@ export default function SettingsPage() {
             </div>
           </section>
 
-          {/* Services */}
+          {/* ============================================================
+              🆕 NEW: PROMOTIONS & OFFERS SECTION
+              ============================================================ */}
+          <section className="card-modern p-6 animate-slide-up delay-150">
+            <div className="flex items-center gap-3 mb-6">
+              <div className="w-12 h-12 rounded-2xl bg-gradient-to-br from-amber-500 to-orange-600 flex items-center justify-center shadow-lg">
+                <Tag className="w-6 h-6 text-white" />
+              </div>
+              <div className="flex-1">
+                <h2 className="text-xl font-bold text-foreground">العروض والخصومات</h2>
+                <p className="text-sm text-muted-foreground">إدارة العروض الترويجية وأكواد الخصم</p>
+              </div>
+              <Button onClick={() => openPromoDialog()} className="bg-amber-600 hover:bg-amber-700 text-white">
+                <Plus className="w-4 h-4 ml-1" />
+                إضافة عرض
+              </Button>
+            </div>
+
+            {/* Promotions List */}
+            {promotions.length === 0 ? (
+              <div className="text-center py-12 border-2 border-dashed border-amber-200 rounded-2xl bg-amber-50/30">
+                <Gift className="w-12 h-12 text-amber-300 mx-auto mb-3" />
+                <p className="text-muted-foreground">لا توجد عروض حالياً</p>
+                <p className="text-xs text-muted-foreground">أضف عرضك الأول لترويج خدمات عيادتك</p>
+              </div>
+            ) : (
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                {promotions.map((promo) => (
+                  <div key={promo.id} className="border rounded-xl p-4 hover:shadow-md transition-all bg-card/50 relative">
+                    {promo.image_url && (
+                      <div className="w-full h-32 rounded-lg overflow-hidden mb-3 bg-slate-100">
+                        <img src={promo.image_url} alt={promo.title} className="w-full h-full object-cover" />
+                      </div>
+                    )}
+                    <div className="flex items-start justify-between">
+                      <div>
+                        <h3 className="font-bold text-foreground">{promo.title}</h3>
+                        {promo.description && <p className="text-xs text-muted-foreground mt-1">{promo.description}</p>}
+                        <div className="flex items-center gap-2 mt-2">
+                          <span className="px-2 py-0.5 rounded-lg bg-amber-500/10 text-amber-700 font-bold text-xs">
+                            {promo.discount_type === 'percentage' ? `${promo.discount_value}%` : `${promo.discount_value} ريال`}
+                          </span>
+                          {promo.code && (
+                            <span className="px-2 py-0.5 rounded-lg bg-primary/10 text-primary font-mono text-xs">
+                              {promo.code}
+                            </span>
+                          )}
+                          <span className={`px-2 py-0.5 rounded-lg text-xs font-bold ${promo.is_active ? 'bg-emerald-500/10 text-emerald-600' : 'bg-red-500/10 text-red-600'}`}>
+                            {promo.is_active ? 'نشط' : 'موقف'}
+                          </span>
+                        </div>
+                        {promo.start_date && promo.end_date && (
+                          <p className="text-[10px] text-muted-foreground mt-1">
+                            {promo.start_date} → {promo.end_date}
+                          </p>
+                        )}
+                      </div>
+                      <div className="flex flex-col gap-1">
+                        <Button size="sm" variant="ghost" onClick={() => openPromoDialog(promo)} className="h-7 w-7 p-0">
+                          <Edit className="w-4 h-4" />
+                        </Button>
+                        <Button size="sm" variant="ghost" onClick={() => togglePromoStatus(promo.id, promo.is_active)} className="h-7 w-7 p-0">
+                          {promo.is_active ? <Check className="w-4 h-4 text-emerald-500" /> : <X className="w-4 h-4 text-red-500" />}
+                        </Button>
+                        <Button size="sm" variant="ghost" onClick={() => deletePromo(promo.id)} className="h-7 w-7 p-0 text-destructive hover:text-destructive">
+                          <Trash2 className="w-4 h-4" />
+                        </Button>
+                      </div>
+                    </div>
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      className="mt-3 w-full text-xs border-amber-500/30 text-amber-600 hover:bg-amber-500/10"
+                      onClick={() => generatePromoImage(promo)}
+                      disabled={generatingPromoImage}
+                    >
+                      {generatingPromoImage ? (
+                        <Loader2 className="w-3 h-3 animate-spin ml-1" />
+                      ) : (
+                        <ImagePlus className="w-3 h-3 ml-1" />
+                      )}
+                      توليد صورة عرض احترافية
+                    </Button>
+                  </div>
+                ))}
+              </div>
+            )}
+          </section>
+
+          {/* --- Services --- */}
           <section className="card-modern p-6 animate-slide-up delay-200">
             <div className="flex items-center gap-3 mb-6">
               <div className="w-12 h-12 rounded-2xl bg-gradient-to-br from-violet-500 to-purple-600 flex items-center justify-center shadow-lg">
@@ -1139,29 +1037,12 @@ export default function SettingsPage() {
                 <p className="text-sm text-muted-foreground">قائمة الخدمات المتاحة في عيادتك</p>
               </div>
             </div>
-            
             <div className="flex flex-col sm:flex-row gap-3 mb-6">
-              <Input
-                value={newServiceName}
-                onChange={(e) => setNewServiceName(e.target.value)}
-                placeholder="اسم الخدمة"
-                className="flex-1 input-modern"
-              />
-              <Input
-                type="number"
-                value={newServicePrice}
-                onChange={(e) => setNewServicePrice(e.target.value)}
-                placeholder="السعر (اختياري)"
-                className="w-full sm:w-40 input-modern"
-              />
-              <Button onClick={handleAddService} disabled={!newServiceName}>
-                <Plus className="w-4 h-4" />
-                إضافة
-              </Button>
+              <Input value={newServiceName} onChange={(e) => setNewServiceName(e.target.value)} placeholder="اسم الخدمة" className="flex-1 input-modern" />
+              <Input type="number" value={newServicePrice} onChange={(e) => setNewServicePrice(e.target.value)} placeholder="السعر (اختياري)" className="w-full sm:w-40 input-modern" />
+              <Button onClick={handleAddService} disabled={!newServiceName}><Plus className="w-4 h-4" /> إضافة</Button>
             </div>
-            <p className="text-xs text-muted-foreground -mt-3 mb-4">
-              اترك حقل السعر فارغاً ليظهر للزبون كـ <b>«حسب الفحص»</b> ويُحدَّد بعد المعاينة.
-            </p>
+            <p className="text-xs text-muted-foreground -mt-3 mb-4">اترك حقل السعر فارغاً ليظهر للزبون كـ <b>«حسب الفحص»</b></p>
 
             <div className="divide-y divide-border">
               {services.length === 0 ? (
@@ -1176,18 +1057,9 @@ export default function SettingsPage() {
                   <div key={service.id} className="flex items-center justify-between py-4">
                     <div>
                       <p className="font-semibold text-foreground">{service.name}</p>
-                      <p className="text-sm text-primary font-bold">
-                        {service.price === null || service.price === undefined
-                          ? "حسب الفحص"
-                          : `${Number(service.price).toLocaleString()} ريال`}
-                      </p>
+                      <p className="text-sm text-primary font-bold">{service.price === null ? "حسب الفحص" : `${Number(service.price).toLocaleString()} ريال`}</p>
                     </div>
-                    <Button
-                      variant="ghost"
-                      size="icon"
-                      onClick={() => handleDeleteService(service.id)}
-                      className="text-destructive hover:text-destructive hover:bg-destructive/10"
-                    >
+                    <Button variant="ghost" size="icon" onClick={() => handleDeleteService(service.id)} className="text-destructive hover:text-destructive hover:bg-destructive/10">
                       <Trash2 className="w-4 h-4" />
                     </Button>
                   </div>
@@ -1196,268 +1068,7 @@ export default function SettingsPage() {
             </div>
           </section>
 
-          {/* 🆕 NEW: Promotions & Discounts Section */}
-          <section className="card-modern p-6 animate-slide-up delay-200">
-            <div className="flex items-center justify-between mb-6">
-              <div className="flex items-center gap-3">
-                <div className="w-12 h-12 rounded-2xl bg-gradient-to-br from-amber-500 to-orange-600 flex items-center justify-center shadow-lg">
-                  <Gift className="w-6 h-6 text-white" />
-                </div>
-                <div>
-                  <h2 className="text-xl font-bold text-foreground">العروض والخصومات</h2>
-                  <p className="text-sm text-muted-foreground">إدارة العروض الترويجية وأكواد الخصم</p>
-                </div>
-              </div>
-              <Button onClick={() => { setShowPromoForm(true); setEditingPromo(null); setPromoForm({ discount_type: 'percentage', is_active: true, per_user_limit: 1 }); setPromoImageFile(null); setPromoImagePreview(null); }} className="gap-2">
-                <Plus className="w-4 h-4" /> إضافة عرض
-              </Button>
-            </div>
-
-            {/* Promo Form Modal */}
-            {showPromoForm && (
-              <div className="fixed inset-0 z-50 bg-black/80 backdrop-blur-md flex items-center justify-center p-4 overflow-y-auto">
-                <div className="bg-background rounded-3xl max-w-2xl w-full shadow-2xl p-6 border border-border max-h-[90vh] overflow-y-auto">
-                  <div className="flex items-center justify-between mb-4">
-                    <h3 className="text-xl font-bold text-foreground">{editingPromo ? 'تعديل العرض' : 'إضافة عرض جديد'}</h3>
-                    <button onClick={() => { setShowPromoForm(false); setEditingPromo(null); }} className="p-2 rounded-full hover:bg-muted/80 transition">
-                      <X className="w-5 h-5" />
-                    </button>
-                  </div>
-
-                  <div className="space-y-4">
-                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                      <div className="space-y-2">
-                        <Label className="text-sm font-medium">🏷 اسم العرض *</Label>
-                        <Input
-                          value={promoForm.title || ''}
-                          onChange={(e) => setPromoForm({ ...promoForm, title: e.target.value })}
-                          placeholder="مثال: عرض الصيف - خصم 20%"
-                          className="input-modern"
-                        />
-                      </div>
-                      <div className="space-y-2">
-                        <Label className="text-sm font-medium">🔖 كود العرض (اختياري)</Label>
-                        <Input
-                          value={promoForm.code || ''}
-                          onChange={(e) => setPromoForm({ ...promoForm, code: e.target.value.toUpperCase() })}
-                          placeholder="SUMMER25"
-                          className="input-modern font-mono"
-                          dir="ltr"
-                        />
-                      </div>
-                    </div>
-
-                    <div className="space-y-2">
-                      <Label className="text-sm font-medium">📝 وصف العرض</Label>
-                      <Input
-                        value={promoForm.description || ''}
-                        onChange={(e) => setPromoForm({ ...promoForm, description: e.target.value })}
-                        placeholder="وصف مختصر للعرض"
-                        className="input-modern"
-                      />
-                    </div>
-
-                    <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-                      <div className="space-y-2">
-                        <Label className="text-sm font-medium">🎯 نوع الخصم *</Label>
-                        <Select
-                          value={promoForm.discount_type || 'percentage'}
-                          onValueChange={(v: 'percentage' | 'fixed') => setPromoForm({ ...promoForm, discount_type: v })}
-                        >
-                          <SelectTrigger><SelectValue /></SelectTrigger>
-                          <SelectContent>
-                            <SelectItem value="percentage">نسبة مئوية (%)</SelectItem>
-                            <SelectItem value="fixed">مبلغ ثابت (ر.ي)</SelectItem>
-                          </SelectContent>
-                        </Select>
-                      </div>
-                      <div className="space-y-2">
-                        <Label className="text-sm font-medium">💰 قيمة الخصم *</Label>
-                        <Input
-                          type="number"
-                          value={promoForm.discount_value || ''}
-                          onChange={(e) => setPromoForm({ ...promoForm, discount_value: parseFloat(e.target.value) || 0 })}
-                          placeholder={promoForm.discount_type === 'percentage' ? '20' : '50'}
-                          className="input-modern"
-                        />
-                      </div>
-                      <div className="space-y-2">
-                        <Label className="text-sm font-medium">📅 تاريخ الانتهاء</Label>
-                        <Input
-                          type="date"
-                          value={promoForm.end_date || ''}
-                          onChange={(e) => setPromoForm({ ...promoForm, end_date: e.target.value })}
-                          className="input-modern"
-                        />
-                      </div>
-                    </div>
-
-                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                      <div className="space-y-2">
-                        <Label className="text-sm font-medium">🔢 حد الاستخدام الإجمالي</Label>
-                        <Input
-                          type="number"
-                          value={promoForm.usage_limit || ''}
-                          onChange={(e) => setPromoForm({ ...promoForm, usage_limit: parseInt(e.target.value) || undefined })}
-                          placeholder="غير محدود"
-                          className="input-modern"
-                        />
-                      </div>
-                      <div className="space-y-2">
-                        <Label className="text-sm font-medium">👤 حد الاستخدام لكل مريض</Label>
-                        <Input
-                          type="number"
-                          value={promoForm.per_user_limit || 1}
-                          onChange={(e) => setPromoForm({ ...promoForm, per_user_limit: parseInt(e.target.value) || 1 })}
-                          placeholder="1"
-                          className="input-modern"
-                        />
-                      </div>
-                    </div>
-
-                    {/* صورة العرض */}
-                    <div className="space-y-2">
-                      <Label className="text-sm font-medium">🖼 صورة العرض</Label>
-                      <div className="flex flex-col sm:flex-row items-start gap-4">
-                        <div className="w-40 h-40 rounded-xl border-2 border-dashed border-border bg-muted/20 flex items-center justify-center overflow-hidden">
-                          {promoImagePreview ? (
-                            <img src={promoImagePreview} alt="معاينة العرض" className="w-full h-full object-cover" />
-                          ) : (
-                            <div className="text-center text-muted-foreground text-xs p-2">
-                              <ImagePlus className="w-8 h-8 mx-auto mb-1" />
-                              <span>اختر صورة</span>
-                            </div>
-                          )}
-                        </div>
-                        <div className="flex-1 space-y-2">
-                          <input
-                            type="file"
-                            accept="image/*"
-                            onChange={(e) => {
-                              const file = e.target.files?.[0];
-                              if (file) {
-                                setPromoImageFile(file);
-                                const reader = new FileReader();
-                                reader.onload = (ev) => setPromoImagePreview(ev.target?.result as string);
-                                reader.readAsDataURL(file);
-                              }
-                            }}
-                            className="hidden"
-                            id="promo-image-upload"
-                          />
-                          <div className="flex flex-wrap gap-2">
-                            <Button variant="outline" onClick={() => document.getElementById('promo-image-upload')?.click()} className="gap-2">
-                              <Upload className="w-4 h-4" /> رفع صورة
-                            </Button>
-                            <Button
-                              variant="outline"
-                              className="gap-2 bg-amber-50 border-amber-200 text-amber-700 hover:bg-amber-100"
-                              onClick={() => {
-                                if (!clinic || !promoForm.title) {
-                                  toast({ title: "تنبيه", description: "يرجى إدخال اسم العرض أولاً", variant: "destructive" });
-                                  return;
-                                }
-                                // سيتم استدعاء generatePromoImage بعد الحفظ
-                                toast({ title: "سيتم توليد الصورة بعد حفظ العرض", description: "احفظ العرض أولاً ثم استخدم زر توليد الصورة" });
-                              }}
-                            >
-                              <FileImage className="w-4 h-4" /> توليد صورة احترافية
-                            </Button>
-                          </div>
-                          <p className="text-xs text-muted-foreground">
-                            يمكنك رفع صورة مخصصة أو توليد صورة احترافية تلقائياً بعد الحفظ.
-                          </p>
-                        </div>
-                      </div>
-                    </div>
-
-                    <div className="flex gap-2 pt-4 border-t border-border">
-                      <Button onClick={handlePromoSubmit} className="flex-1 bg-primary">
-                        <Save className="w-4 h-4 ml-1" /> {editingPromo ? 'تحديث العرض' : 'إضافة العرض'}
-                      </Button>
-                      <Button variant="outline" onClick={() => { setShowPromoForm(false); setEditingPromo(null); }}>
-                        إلغاء
-                      </Button>
-                    </div>
-                  </div>
-                </div>
-              </div>
-            )}
-
-            {/* Promotions List */}
-            {promotions.length === 0 ? (
-              <div className="text-center py-10 text-muted-foreground border border-dashed border-border rounded-2xl">
-                <Gift className="w-12 h-12 mx-auto mb-3 opacity-40" />
-                <p>لا توجد عروض مضافة بعد</p>
-                <p className="text-xs mt-1">أضف عرضك الأول لبدء الترويج لخدماتك</p>
-              </div>
-            ) : (
-              <div className="space-y-3">
-                {promotions.map((promo) => (
-                  <div key={promo.id} className="flex flex-col sm:flex-row items-start sm:items-center gap-4 p-4 rounded-xl border border-border bg-muted/20 hover:bg-muted/30 transition">
-                    <div className="w-20 h-20 rounded-xl overflow-hidden bg-muted/30 flex-shrink-0 border border-border">
-                      {promo.image_url ? (
-                        <img src={promo.image_url} alt={promo.title} className="w-full h-full object-cover" />
-                      ) : (
-                        <div className="w-full h-full flex items-center justify-center text-3xl bg-gradient-to-br from-amber-100 to-orange-100">🎁</div>
-                      )}
-                    </div>
-                    <div className="flex-1 min-w-0">
-                      <div className="flex items-center flex-wrap gap-2">
-                        <h4 className="font-bold text-foreground">{promo.title}</h4>
-                        <span className={`px-2 py-0.5 rounded-full text-xs font-bold ${promo.is_active ? 'bg-emerald-500/15 text-emerald-600' : 'bg-muted text-muted-foreground'}`}>
-                          {promo.is_active ? 'نشط' : 'موقف'}
-                        </span>
-                        <span className="px-2 py-0.5 rounded-full bg-primary/10 text-primary text-xs font-bold">
-                          {promo.discount_type === 'percentage' ? `${promo.discount_value}%` : `${promo.discount_value} ر.ي`}
-                        </span>
-                        {promo.code && (
-                          <span className="px-2 py-0.5 rounded-full bg-amber-500/10 text-amber-600 text-xs font-mono font-bold">
-                            {promo.code}
-                          </span>
-                        )}
-                      </div>
-                      {promo.description && <p className="text-xs text-muted-foreground mt-1">{promo.description}</p>}
-                      <div className="flex items-center gap-3 text-xs text-muted-foreground mt-1">
-                        {promo.usage_limit && <span>حد الاستخدام: {promo.usage_count || 0}/{promo.usage_limit}</span>}
-                        {promo.end_date && <span>ينتهي: {new Date(promo.end_date).toLocaleDateString('ar-SA')}</span>}
-                      </div>
-                    </div>
-                    <div className="flex items-center gap-2 flex-wrap">
-                      {!promo.image_url && promo.is_active && (
-                        <Button
-                          size="sm"
-                          variant="outline"
-                          className="text-xs gap-1 border-amber-500/30 text-amber-600"
-                          onClick={() => generatePromoImage(promo)}
-                          disabled={generatingPromoImage}
-                        >
-                          {generatingPromoImage ? <Loader2 className="w-3 h-3 animate-spin" /> : <FileImage className="w-3 h-3" />}
-                          توليد صورة
-                        </Button>
-                      )}
-                      <Button size="sm" variant="ghost" className="text-xs" onClick={() => editPromo(promo)}>
-                        تعديل
-                      </Button>
-                      <Button
-                        size="sm"
-                        variant="ghost"
-                        className={`text-xs ${promo.is_active ? 'text-amber-600' : 'text-emerald-600'}`}
-                        onClick={() => togglePromoStatus(promo)}
-                      >
-                        {promo.is_active ? 'إيقاف' : 'تفعيل'}
-                      </Button>
-                      <Button size="sm" variant="ghost" className="text-xs text-destructive" onClick={() => deletePromo(promo.id)}>
-                        <Trash2 className="w-3 h-3" />
-                      </Button>
-                    </div>
-                  </div>
-                ))}
-              </div>
-            )}
-          </section>
-
-          {/* Subscription Status */}
+          {/* --- Subscription Status --- */}
           <section className="card-modern p-6 animate-slide-up delay-300">
             <div className="flex items-center gap-3 mb-6">
               <div className="w-12 h-12 rounded-2xl bg-gradient-to-br from-amber-500 to-orange-600 flex items-center justify-center shadow-lg">
@@ -1471,21 +1082,15 @@ export default function SettingsPage() {
             <div className="bg-muted/30 rounded-2xl p-5 border border-border">
               <div className="flex items-center justify-between mb-3">
                 <span className="text-muted-foreground">الحالة:</span>
-                <span className={`${
-                  subscription?.status === "trial" ? "badge-pending" : 
-                  subscription?.is_active ? "badge-success" : "badge-destructive"
-                }`}>
-                  {subscription?.status === "trial" ? "فترة تجريبية" : 
-                   subscription?.is_active ? "نشط" : "منتهي"}
+                <span className={`${subscription?.status === "trial" ? "badge-pending" : subscription?.is_active ? "badge-success" : "badge-destructive"}`}>
+                  {subscription?.status === "trial" ? "فترة تجريبية" : subscription?.is_active ? "نشط" : "منتهي"}
                 </span>
               </div>
               {subscription?.trial_ends_at && (
                 <div className="flex items-center justify-between">
                   <span className="text-muted-foreground">تنتهي في:</span>
                   <span className="text-foreground font-semibold">
-                    {new Date(subscription.trial_ends_at).toLocaleDateString("ar-SA", { 
-                      year: 'numeric', month: 'long', day: 'numeric' 
-                    })}
+                    {new Date(subscription.trial_ends_at).toLocaleDateString("ar-SA", { year: 'numeric', month: 'long', day: 'numeric' })}
                   </span>
                 </div>
               )}
@@ -1493,6 +1098,106 @@ export default function SettingsPage() {
           </section>
         </div>
       </main>
+
+      {/* ============================================================
+          🆕 NEW: Promotions Dialog (Add/Edit)
+          ============================================================ */}
+      <Dialog open={promoDialogOpen} onOpenChange={(open) => { if (!open) setPromoDialogOpen(false); }}>
+        <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto" dir="rtl">
+          <DialogHeader>
+            <DialogTitle>{editingPromo ? 'تعديل العرض' : 'إضافة عرض جديد'}</DialogTitle>
+            <DialogDescription>أدخل تفاصيل العرض الترويجي أو كود الخصم</DialogDescription>
+          </DialogHeader>
+
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4 py-4">
+            {/* Left Column */}
+            <div className="space-y-4">
+              <div>
+                <Label className="text-sm font-medium">اسم العرض *</Label>
+                <Input value={promoForm.title || ''} onChange={(e) => setPromoForm({ ...promoForm, title: e.target.value })} placeholder="مثال: عرض الصيف" />
+              </div>
+              <div>
+                <Label className="text-sm font-medium">الوصف</Label>
+                <Input value={promoForm.description || ''} onChange={(e) => setPromoForm({ ...promoForm, description: e.target.value })} placeholder="وصف مختصر للعرض" />
+              </div>
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <Label className="text-sm font-medium">نوع الخصم *</Label>
+                  <Select value={promoForm.discount_type} onValueChange={(v: 'percentage' | 'fixed') => setPromoForm({ ...promoForm, discount_type: v })}>
+                    <SelectTrigger><SelectValue /></SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="percentage">نسبة مئوية (%)</SelectItem>
+                      <SelectItem value="fixed">مبلغ ثابت (ر.ي)</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+                <div>
+                  <Label className="text-sm font-medium">قيمة الخصم *</Label>
+                  <Input type="number" value={promoForm.discount_value || ''} onChange={(e) => setPromoForm({ ...promoForm, discount_value: parseFloat(e.target.value) || 0 })} placeholder="20" />
+                </div>
+              </div>
+              <div>
+                <Label className="text-sm font-medium">كود الخصم (اختياري)</Label>
+                <Input value={promoForm.code || ''} onChange={(e) => setPromoForm({ ...promoForm, code: e.target.value.toUpperCase() })} placeholder="SUMMER25" dir="ltr" />
+                <p className="text-[10px] text-muted-foreground mt-1">اترك فارغاً للتوليد التلقائي</p>
+              </div>
+            </div>
+
+            {/* Right Column */}
+            <div className="space-y-4">
+              <div>
+                <Label className="text-sm font-medium">تاريخ البداية</Label>
+                <Input type="date" value={promoForm.start_date || ''} onChange={(e) => setPromoForm({ ...promoForm, start_date: e.target.value })} />
+              </div>
+              <div>
+                <Label className="text-sm font-medium">تاريخ النهاية</Label>
+                <Input type="date" value={promoForm.end_date || ''} onChange={(e) => setPromoForm({ ...promoForm, end_date: e.target.value })} />
+              </div>
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <Label className="text-sm font-medium">حد الاستخدام الكلي</Label>
+                  <Input type="number" value={promoForm.usage_limit || ''} onChange={(e) => setPromoForm({ ...promoForm, usage_limit: parseInt(e.target.value) || undefined })} placeholder="50" />
+                </div>
+                <div>
+                  <Label className="text-sm font-medium">لكل مريض</Label>
+                  <Input type="number" value={promoForm.per_user_limit || 1} onChange={(e) => setPromoForm({ ...promoForm, per_user_limit: parseInt(e.target.value) || 1 })} placeholder="1" />
+                </div>
+              </div>
+              <div className="flex items-center gap-3">
+                <input type="checkbox" checked={promoForm.is_active !== false} onChange={(e) => setPromoForm({ ...promoForm, is_active: e.target.checked })} className="w-4 h-4 accent-primary" />
+                <Label className="text-sm font-medium cursor-pointer">العرض نشط</Label>
+              </div>
+              {/* Image Upload */}
+              <div>
+                <Label className="text-sm font-medium">صورة العرض (اختياري)</Label>
+                <div className="flex items-center gap-3 mt-1">
+                  <input type="file" accept="image/*" onChange={handlePromoImageSelect} className="hidden" id="promo-image-upload" />
+                  <label htmlFor="promo-image-upload" className="cursor-pointer">
+                    <Button type="button" variant="outline" size="sm"><Upload className="w-4 h-4 ml-1" /> رفع صورة</Button>
+                  </label>
+                  {promoImagePreview && (
+                    <div className="relative w-16 h-16 rounded-lg overflow-hidden border">
+                      <img src={promoImagePreview} alt="معاينة" className="w-full h-full object-cover" />
+                      <button onClick={() => { setPromoImageFile(null); setPromoImagePreview(null); }} className="absolute -top-1 -right-1 w-5 h-5 rounded-full bg-red-500 text-white flex items-center justify-center text-xs">
+                        <X className="w-3 h-3" />
+                      </button>
+                    </div>
+                  )}
+                </div>
+                <p className="text-[10px] text-muted-foreground mt-1">أو استخدم زر "توليد صورة احترافية" بعد الحفظ</p>
+              </div>
+            </div>
+          </div>
+
+          <DialogFooter className="flex gap-2 justify-end">
+            <Button variant="outline" onClick={() => { setPromoDialogOpen(false); resetPromoForm(); }}>إلغاء</Button>
+            <Button onClick={handlePromoSubmit} className="bg-amber-600 hover:bg-amber-700 text-white">
+              <Save className="w-4 h-4 ml-1" />
+              {editingPromo ? 'تحديث العرض' : 'إضافة العرض'}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
 
       <Footer />
     </div>
