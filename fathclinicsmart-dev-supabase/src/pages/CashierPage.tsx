@@ -13,7 +13,7 @@ import {
   Banknote, CheckCircle, LogOut, Search, Stethoscope, Users,
   Camera, X, Loader2, AlertCircle, Image as ImageIcon, Upload, RefreshCw, Printer, Download, Clock, Plus, UserPlus, DollarSign, TrendingUp, Receipt, MessageCircle, MinusCircle, Wallet, ArrowDownCircle, ArrowUpCircle, Sparkles, Send, FileText, Gift, Tag,
 } from "lucide-react";
-import { BarChart, Bar, PieChart, Pie, Cell, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid, Legend, AreaChart, Area } from "recharts";
+import { BarChart, Bar, PieChart, Pie, Cell, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid, Legend } from "recharts";
 import { Html5Qrcode } from "html5-qrcode";
 import html2canvas from "html2canvas";
 
@@ -34,7 +34,6 @@ type Appointment = {
   customer_telegram_id?: string | null;
   promotion_id?: string | null;
   promo_code?: string | null;
-  payment_method?: string | null; // ✅ أضفنا حقل طريقة الدفع
   patients: { id?: string; name: string; phone: string; telegram_user_id?: string } | null;
   services: { name: string; price: number | null } | null;
   promotions?: { id: string; title: string; discount_type: string; discount_value: number; code?: string } | null;
@@ -57,20 +56,6 @@ type InvoiceItem = {
   quantity: number;
   price: number;
   total: number;
-};
-
-type Invoice = {
-  id: string;
-  invoice_number: string;
-  patient_id: string;
-  patient_name: string;
-  items: InvoiceItem[];
-  subtotal: number;
-  discount: number;
-  tax: number;
-  total: number;
-  status: 'paid' | 'unpaid' | 'partial';
-  created_at: string;
 };
 
 const QR_CAMERA_ELEMENT_ID = "qr-camera-container-cashier";
@@ -145,13 +130,18 @@ const extractCleanInfo = (a: Appointment) => {
   return { cleanName, cleanPhone };
 };
 
+// ✅ دالة آمنة لحساب الخصم من العرض (مع التحقق من null)
 const suggestedDiscountFromPromo = (a: Appointment): number => {
-  const promo = a.promotions;
-  if (!promo) return 0;
-  const price = a.services?.price || 0;
-  const val = Number(promo.discount_value) || 0;
-  const d = promo.discount_type === "percentage" ? Math.round((price * val) / 100) : val;
-  return Math.min(d, price || d);
+  try {
+    const promo = a.promotions;
+    if (!promo) return 0;
+    const price = a.services?.price || 0;
+    const val = Number(promo.discount_value) || 0;
+    const d = promo.discount_type === "percentage" ? Math.round((price * val) / 100) : val;
+    return Math.min(d, price || d);
+  } catch {
+    return 0;
+  }
 };
 
 // ─── Main Component ───────────────────────────────────────────────────────────
@@ -183,7 +173,6 @@ export default function CashierPage() {
   const [editPatientPhone, setEditPatientPhone] = useState<string>("");
   const [paidAmountInput, setPaidAmountInput] = useState<string>("");
   const [discountInput, setDiscountInput] = useState<string>("0");
-  const [paymentMethod, setPaymentMethod] = useState<string>("نقدي");
   const [showReceipt, setShowReceipt] = useState(false);
   const [processingPayment, setProcessingPayment] = useState(false);
   const [sendingReceipt, setSendingReceipt] = useState(false);
@@ -231,7 +220,7 @@ export default function CashierPage() {
   // ─── Data Fetching ──────────────────────────────────────────────────────────
   const APPT_SELECT = `
     id,patient_id,date,time,status,reservation_code,arrived_at,
-    payment_status,paid_amount,discount_amount,promotion_id,promo_code,payment_method,
+    payment_status,paid_amount,discount_amount,promotion_id,promo_code,
     is_walk_in,notes,customer_telegram_id,
     patients(id,name,phone,telegram_user_id),
     services(name,price),
@@ -240,31 +229,39 @@ export default function CashierPage() {
 
   const fetchAppointments = useCallback(async () => {
     if (!clinic) return;
-    const { data, error } = await supabase
-      .from("appointments")
-      .select(APPT_SELECT)
-      .eq("clinic_id", clinic.id)
-      .eq("date", today)
-      .order("time", { ascending: true });
-    if (!error) setAppointments((data || []) as Appointment[]);
+    try {
+      const { data, error } = await supabase
+        .from("appointments")
+        .select(APPT_SELECT)
+        .eq("clinic_id", clinic.id)
+        .eq("date", today)
+        .order("time", { ascending: true });
+      if (!error) setAppointments((data || []) as Appointment[]);
+    } catch (e) {
+      console.error("[fetchAppointments] error:", e);
+    }
   }, [clinic, today]);
 
   const fetchExpenses = useCallback(async () => {
     if (!clinic) return;
-    const { data } = await supabase
-      .from("expenses")
-      .select("*")
-      .eq("clinic_id", clinic.id)
-      .eq("expense_date", today)
-      .order("created_at", { ascending: false });
-    setExpenses(((data || []) as any[]).map((e) => ({
-      id: e.id,
-      title: e.title,
-      amount: Number(e.amount),
-      category: e.category,
-      time: e.created_at ? format(new Date(e.created_at), "HH:mm") : "",
-      expense_date: e.expense_date,
-    })));
+    try {
+      const { data } = await supabase
+        .from("expenses")
+        .select("*")
+        .eq("clinic_id", clinic.id)
+        .eq("expense_date", today)
+        .order("created_at", { ascending: false });
+      setExpenses(((data || []) as any[]).map((e) => ({
+        id: e.id,
+        title: e.title,
+        amount: Number(e.amount),
+        category: e.category,
+        time: e.created_at ? format(new Date(e.created_at), "HH:mm") : "",
+        expense_date: e.expense_date,
+      })));
+    } catch (e) {
+      console.error("[fetchExpenses] error:", e);
+    }
   }, [clinic, today]);
 
   useEffect(() => {
@@ -298,75 +295,83 @@ export default function CashierPage() {
 
   const markArrived = async (appointmentId: string) => {
     if (!clinic) return;
-    const { error } = await supabase
-      .from("appointments")
-      .update({ arrived_at: new Date().toISOString(), department: "استقبال" })
-      .eq("id", appointmentId)
-      .eq("clinic_id", clinic.id);
-    if (!error) {
-      toast({ title: "✅ تم تسجيل الحضور", description: "تحول الموعد إلى حالة (وصل)" });
-      fetchAppointments();
+    try {
+      const { error } = await supabase
+        .from("appointments")
+        .update({ arrived_at: new Date().toISOString(), department: "استقبال" })
+        .eq("id", appointmentId)
+        .eq("clinic_id", clinic.id);
+      if (!error) {
+        toast({ title: "✅ تم تسجيل الحضور", description: "تحول الموعد إلى حالة (وصل)" });
+        fetchAppointments();
+      }
+    } catch (e) {
+      console.error("[markArrived] error:", e);
     }
   };
 
   const handleScannedCode = useCallback(async (rawText: string) => {
-    const qrParsed = parseQRText(rawText);
-    const targetCode = qrParsed.code || rawText.trim();
-    let found: Appointment | undefined;
-    const current = appointmentsRef.current;
-    found = current.find(a =>
-      a.id === targetCode ||
-      a.reservation_code.toUpperCase() === targetCode.toUpperCase() ||
-      rawText.toUpperCase().includes(a.reservation_code.toUpperCase())
-    );
-    if (!found && clinic && targetCode) {
-      const { data } = await supabase
-        .from("appointments")
-        .select(APPT_SELECT)
-        .eq("clinic_id", clinic.id)
-        .ilike("reservation_code", `%${targetCode}%`)
-        .maybeSingle();
-      if (data) found = data as Appointment;
-    }
-    if (found) {
-      const { cleanName, cleanPhone } = extractCleanInfo(found);
-      const enriched: Appointment = {
-        ...found,
-        extracted_patient_name: cleanName,
-        extracted_patient_phone: cleanPhone,
-        patients: {
-          id: found.patients?.id,
-          name: cleanName,
-          phone: cleanPhone,
-          telegram_user_id: found.patients?.telegram_user_id,
-        },
-        services: found.services || (qrParsed.service ? { name: qrParsed.service, price: null } : null),
-        promotions: found.promotions || null,
-        payment_method: found.payment_method || null,
-      };
-      if (!enriched.arrived_at) {
-        await markArrived(enriched.id);
-        enriched.arrived_at = new Date().toISOString();
+    try {
+      const qrParsed = parseQRText(rawText);
+      const targetCode = qrParsed.code || rawText.trim();
+      let found: Appointment | undefined;
+      const current = appointmentsRef.current;
+      found = current.find(a =>
+        a.id === targetCode ||
+        a.reservation_code.toUpperCase() === targetCode.toUpperCase() ||
+        rawText.toUpperCase().includes(a.reservation_code.toUpperCase())
+      );
+      if (!found && clinic && targetCode) {
+        const { data } = await supabase
+          .from("appointments")
+          .select(APPT_SELECT)
+          .eq("clinic_id", clinic.id)
+          .ilike("reservation_code", `%${targetCode}%`)
+          .maybeSingle();
+        if (data) found = data as Appointment;
       }
-      setSelectedAppointment(enriched);
-      setEditPatientName(cleanName);
-      setEditPatientPhone(cleanPhone === "حجز عبر تلجرام (بدون رقم)" ? "" : cleanPhone);
-      const defaultPrice = enriched.services?.price || 0;
-      setPaidAmountInput(enriched.paid_amount != null ? String(enriched.paid_amount) : String(defaultPrice));
-      const autoDisc = enriched.discount_amount != null ? Number(enriched.discount_amount) : suggestedDiscountFromPromo(enriched);
-      setDiscountInput(String(autoDisc));
-      setShowReceipt(enriched.payment_status === "paid");
-      if (enriched.payment_status === "paid") toast({ title: "ℹ️ مدفوع مسبقاً", description: cleanName });
-      else if (enriched.promotions) toast({ title: "🎁 عرض مطبَّق", description: `${enriched.promotions.title} — خصم ${autoDisc} ر.ي` });
-      else toast({ title: "✅ جاهز للدفع", description: cleanName });
-      setScannerOpen(false);
-      stopScanner();
-    } else {
-      toast({
-        title: "❌ لم يتم العثور على الموعد",
-        description: `الكود المستخرج: ${targetCode}`,
-        variant: "destructive",
-      });
+      if (found) {
+        const { cleanName, cleanPhone } = extractCleanInfo(found);
+        const enriched: Appointment = {
+          ...found,
+          extracted_patient_name: cleanName,
+          extracted_patient_phone: cleanPhone,
+          patients: {
+            id: found.patients?.id,
+            name: cleanName,
+            phone: cleanPhone,
+            telegram_user_id: found.patients?.telegram_user_id,
+          },
+          services: found.services || (qrParsed.service ? { name: qrParsed.service, price: null } : null),
+          promotions: found.promotions || null,
+        };
+        if (!enriched.arrived_at) {
+          await markArrived(enriched.id);
+          enriched.arrived_at = new Date().toISOString();
+        }
+        setSelectedAppointment(enriched);
+        setEditPatientName(cleanName);
+        setEditPatientPhone(cleanPhone === "حجز عبر تلجرام (بدون رقم)" ? "" : cleanPhone);
+        const defaultPrice = enriched.services?.price || 0;
+        setPaidAmountInput(enriched.paid_amount != null ? String(enriched.paid_amount) : String(defaultPrice));
+        const autoDisc = enriched.discount_amount != null ? Number(enriched.discount_amount) : suggestedDiscountFromPromo(enriched);
+        setDiscountInput(String(autoDisc));
+        setShowReceipt(enriched.payment_status === "paid");
+        if (enriched.payment_status === "paid") toast({ title: "ℹ️ مدفوع مسبقاً", description: cleanName });
+        else if (enriched.promotions) toast({ title: "🎁 عرض مطبَّق", description: `${enriched.promotions.title} — خصم ${autoDisc} ر.ي` });
+        else toast({ title: "✅ جاهز للدفع", description: cleanName });
+        setScannerOpen(false);
+        stopScanner();
+      } else {
+        toast({
+          title: "❌ لم يتم العثور على الموعد",
+          description: `الكود المستخرج: ${targetCode}`,
+          variant: "destructive",
+        });
+      }
+    } catch (e) {
+      console.error("[handleScannedCode] error:", e);
+      toast({ title: "خطأ", description: "حدث خطأ أثناء معالجة الكود", variant: "destructive" });
     }
   }, [clinic]);
 
@@ -458,121 +463,127 @@ export default function CashierPage() {
 
   // ─── Payment Logic ──────────────────────────────────────────────────────────
   const openPaymentModal = (appointment: Appointment) => {
-    const { cleanName, cleanPhone } = extractCleanInfo(appointment);
-    const appEnriched = {
-      ...appointment,
-      extracted_patient_name: cleanName,
-      extracted_patient_phone: cleanPhone,
-    };
-    setSelectedAppointment(appEnriched);
-    setEditPatientName(cleanName !== "مريض غير محدد" ? cleanName : "");
-    setEditPatientPhone(cleanPhone === "حجز عبر تلجرام (بدون رقم)" ? "" : cleanPhone);
-    const defaultPrice = appointment.services?.price || 0;
-    setPaidAmountInput(appointment.paid_amount != null ? String(appointment.paid_amount) : String(defaultPrice));
-    const autoDisc = appointment.discount_amount != null ? Number(appointment.discount_amount) : suggestedDiscountFromPromo(appointment);
-    setDiscountInput(String(autoDisc));
-    setPaymentMethod(appointment.payment_method || "نقدي");
-    setShowReceipt(appointment.payment_status === "paid");
+    try {
+      const { cleanName, cleanPhone } = extractCleanInfo(appointment);
+      const appEnriched = {
+        ...appointment,
+        extracted_patient_name: cleanName,
+        extracted_patient_phone: cleanPhone,
+      };
+      setSelectedAppointment(appEnriched);
+      setEditPatientName(cleanName !== "مريض غير محدد" ? cleanName : "");
+      setEditPatientPhone(cleanPhone === "حجز عبر تلجرام (بدون رقم)" ? "" : cleanPhone);
+      const defaultPrice = appointment.services?.price || 0;
+      setPaidAmountInput(appointment.paid_amount != null ? String(appointment.paid_amount) : String(defaultPrice));
+      const autoDisc = appointment.discount_amount != null ? Number(appointment.discount_amount) : suggestedDiscountFromPromo(appointment);
+      setDiscountInput(String(autoDisc));
+      setShowReceipt(appointment.payment_status === "paid");
+    } catch (e) {
+      console.error("[openPaymentModal] error:", e);
+      toast({ title: "خطأ", description: "حدث خطأ أثناء فتح نافذة الدفع", variant: "destructive" });
+    }
   };
 
   const handlePayNow = async () => {
     if (!selectedAppointment || !clinic) return;
     setProcessingPayment(true);
-    const paidVal = parseFloat(paidAmountInput) || 0;
-    const discountVal = parseFloat(discountInput) || 0;
-    const patientId = selectedAppointment.patients?.id || selectedAppointment.patient_id;
-    if (patientId && (editPatientName.trim() || editPatientPhone.trim())) {
-      const updateData: any = {};
-      if (editPatientName.trim()) updateData.name = editPatientName.trim();
-      if (editPatientPhone.trim() && !editPatientPhone.startsWith("tg:")) updateData.phone = editPatientPhone.trim();
-      await supabase.from("patients").update(updateData).eq("id", patientId);
-    }
+    try {
+      const paidVal = parseFloat(paidAmountInput) || 0;
+      const discountVal = parseFloat(discountInput) || 0;
+      const patientId = selectedAppointment.patients?.id || selectedAppointment.patient_id;
+      if (patientId && (editPatientName.trim() || editPatientPhone.trim())) {
+        const updateData: any = {};
+        if (editPatientName.trim()) updateData.name = editPatientName.trim();
+        if (editPatientPhone.trim() && !editPatientPhone.startsWith("tg:")) updateData.phone = editPatientPhone.trim();
+        await supabase.from("patients").update(updateData).eq("id", patientId);
+      }
 
-    const method = paymentMethod || "نقدي";
-
-    const { error } = await supabase
-      .from("appointments")
-      .update({
+      // ✅ إزالة payment_method مؤقتاً إذا لم يكن العمود موجوداً
+      const updatePayload: any = {
         payment_status: "paid",
         status: "confirmed",
         department: "صندوق",
         paid_amount: paidVal,
         discount_amount: discountVal,
-        payment_method: method,
-      })
-      .eq("id", selectedAppointment.id)
-      .eq("clinic_id", clinic.id);
+      };
 
-    if (error) {
-      toast({ title: "خطأ", description: "فشل تحديث حالة الدفع", variant: "destructive" });
-      setProcessingPayment(false);
-      return;
-    }
+      const { error } = await supabase
+        .from("appointments")
+        .update(updatePayload)
+        .eq("id", selectedAppointment.id)
+        .eq("clinic_id", clinic.id);
 
-    toast({ title: "✅ تم تسجيل الدفع بنجاح", description: "تم تحديث الخزينة وإصدار سند الاستلام" });
+      if (error) throw error;
 
-    if (selectedAppointment.promotion_id && selectedAppointment.promotions) {
-      await supabase.from("promo_usage").insert({
-        clinic_id: clinic.id,
-        patient_id: patientId,
-        appointment_id: selectedAppointment.id,
-        promotion_id: selectedAppointment.promotion_id,
-        promo_code: selectedAppointment.promotions.code || null,
+      toast({ title: "✅ تم تسجيل الدفع بنجاح", description: "تم تحديث الخزينة وإصدار سند الاستلام" });
+
+      // تسجيل استخدام العرض إن وجد
+      if (selectedAppointment.promotion_id && selectedAppointment.promotions) {
+        await supabase.from("promo_usage").insert({
+          clinic_id: clinic.id,
+          patient_id: patientId,
+          appointment_id: selectedAppointment.id,
+          promotion_id: selectedAppointment.promotion_id,
+          promo_code: selectedAppointment.promotions.code || null,
+          discount_amount: discountVal,
+        });
+      }
+
+      setSelectedAppointment({
+        ...selectedAppointment,
+        payment_status: "paid",
+        paid_amount: paidVal,
         discount_amount: discountVal,
+        extracted_patient_name: editPatientName.trim() || selectedAppointment.extracted_patient_name,
+        extracted_patient_phone: editPatientPhone.trim() || selectedAppointment.extracted_patient_phone,
+        patients: {
+          id: patientId || "",
+          name: editPatientName.trim() || selectedAppointment.patients?.name || "",
+          phone: editPatientPhone.trim() || selectedAppointment.patients?.phone || "",
+          telegram_user_id: selectedAppointment.customer_telegram_id || selectedAppointment.patients?.telegram_user_id,
+        },
       });
+
+      setShowReceipt(true);
+      fetchAppointments();
+    } catch (err: any) {
+      toast({ title: "خطأ", description: err.message || "فشل تحديث حالة الدفع", variant: "destructive" });
+    } finally {
+      setProcessingPayment(false);
     }
-
-    setSelectedAppointment({
-      ...selectedAppointment,
-      payment_status: "paid",
-      paid_amount: paidVal,
-      discount_amount: discountVal,
-      payment_method: method,
-      extracted_patient_name: editPatientName.trim() || selectedAppointment.extracted_patient_name,
-      extracted_patient_phone: editPatientPhone.trim() || selectedAppointment.extracted_patient_phone,
-      patients: {
-        id: patientId || "",
-        name: editPatientName.trim() || selectedAppointment.patients?.name || "",
-        phone: editPatientPhone.trim() || selectedAppointment.patients?.phone || "",
-        telegram_user_id: selectedAppointment.customer_telegram_id || selectedAppointment.patients?.telegram_user_id,
-      },
-    });
-
-    setShowReceipt(true);
-    setProcessingPayment(false);
-    fetchAppointments();
   };
 
   // ─── Walk-In ────────────────────────────────────────────────────────────────
   const addWalkIn = async () => {
     if (!clinic || !patientNameInput.trim()) return;
-    const { data: patient, error: patientError } = await supabase
-      .from("patients")
-      .insert({ clinic_id: clinic.id, name: patientNameInput.trim(), phone: patientPhoneInput.trim() || "بدون هاتف" })
-      .select("id")
-      .single();
-    if (patientError || !patient) {
-      toast({ title: "خطأ", description: "فشل إضافة المريض", variant: "destructive" });
-      return;
-    }
-    const code = `WI-${Math.floor(1000 + Math.random() * 9000)}`;
-    const { error } = await supabase.from("appointments").insert({
-      clinic_id: clinic.id,
-      patient_id: patient.id,
-      date: today,
-      time: format(new Date(), "HH:mm"),
-      status: "confirmed",
-      reservation_code: code,
-      arrived_at: new Date().toISOString(),
-      payment_status: "paid",
-      is_walk_in: true,
-      department: "صندوق",
-      payment_method: "نقدي",
-    });
-    if (error) toast({ title: "خطأ", description: "فشل إضافة مريض مباشر", variant: "destructive" });
-    else {
+    try {
+      const { data: patient, error: patientError } = await supabase
+        .from("patients")
+        .insert({ clinic_id: clinic.id, name: patientNameInput.trim(), phone: patientPhoneInput.trim() || "بدون هاتف" })
+        .select("id")
+        .single();
+      if (patientError || !patient) {
+        toast({ title: "خطأ", description: "فشل إضافة المريض", variant: "destructive" });
+        return;
+      }
+      const code = `WI-${Math.floor(1000 + Math.random() * 9000)}`;
+      const { error } = await supabase.from("appointments").insert({
+        clinic_id: clinic.id,
+        patient_id: patient.id,
+        date: today,
+        time: format(new Date(), "HH:mm"),
+        status: "confirmed",
+        reservation_code: code,
+        arrived_at: new Date().toISOString(),
+        payment_status: "paid",
+        is_walk_in: true,
+        department: "صندوق",
+      });
+      if (error) throw error;
       toast({ title: "تمت الإضافة", description: `تم تسجيل المريض المباشر ${code}` });
       setWalkInOpen(false); setPatientNameInput(""); setPatientPhoneInput(""); fetchAppointments();
+    } catch (err: any) {
+      toast({ title: "خطأ", description: err.message, variant: "destructive" });
     }
   };
 
@@ -583,20 +594,21 @@ export default function CashierPage() {
       toast({ title: "بيانات غير مكتملة", description: "يرجى إدخال اسم المصروف والمبلغ بشكل صحيح", variant: "destructive" });
       return;
     }
-    const { error } = await supabase.from("expenses").insert({
-      clinic_id: clinic.id,
-      title: expenseTitle.trim(),
-      amount: parseFloat(expenseAmount),
-      category: expenseCategory,
-      expense_date: expenseDate || today,
-    });
-    if (error) {
-      toast({ title: "خطأ", description: "فشل تسجيل المصروف", variant: "destructive" });
-      return;
+    try {
+      const { error } = await supabase.from("expenses").insert({
+        clinic_id: clinic.id,
+        title: expenseTitle.trim(),
+        amount: parseFloat(expenseAmount),
+        category: expenseCategory,
+        expense_date: expenseDate || today,
+      });
+      if (error) throw error;
+      toast({ title: "✅ تم تسجيل المصروف", description: `تم قيد (${expenseTitle}) بمبلغ ${expenseAmount} ر.ي` });
+      setExpenseTitle(""); setExpenseAmount(""); setExpenseModalOpen(false);
+      fetchExpenses();
+    } catch (err: any) {
+      toast({ title: "خطأ", description: err.message, variant: "destructive" });
     }
-    toast({ title: "✅ تم تسجيل المصروف", description: `تم قيد (${expenseTitle}) بمبلغ ${expenseAmount} ر.ي` });
-    setExpenseTitle(""); setExpenseAmount(""); setExpenseModalOpen(false);
-    fetchExpenses();
   };
 
   // ─── Receipt ────────────────────────────────────────────────────────────────
@@ -655,7 +667,6 @@ export default function CashierPage() {
       const patientName = editPatientName || selectedAppointment.extracted_patient_name || selectedAppointment.patients?.name || "المريض";
       const finalAmt = (selectedAppointment.paid_amount || selectedAppointment.services?.price || 0) - (selectedAppointment.discount_amount || 0);
       const promoLine = selectedAppointment.promotions ? `🎁 العرض: ${selectedAppointment.promotions.title}\n` : "";
-      const methodLine = selectedAppointment.payment_method ? `💳 طريقة الدفع: ${selectedAppointment.payment_method}\n` : "";
       const msg = encodeURIComponent(
         `🧾 سند دفع رسمي - ${clinic?.name || "العيادة الطبية"}\n` +
         `━━━━━━━━━━━━━━━\n` +
@@ -663,7 +674,6 @@ export default function CashierPage() {
         `🔖 كود الحجز: ${selectedAppointment.reservation_code}\n` +
         `💊 الخدمة: ${selectedAppointment.services?.name || "فحص طبي"}\n` +
         promoLine +
-        methodLine +
         `💰 المبلغ الصافي: ${finalAmt} ر.ي\n` +
         `📅 التاريخ: ${format(new Date(), "yyyy/MM/dd - hh:mm a")}\n` +
         `━━━━━━━━━━━━━━━\n` +
@@ -820,19 +830,23 @@ export default function CashierPage() {
 
   // ─── Filters ────────────────────────────────────────────────────────────────
   const filtered = useMemo(() => appointments.filter((a) => {
-    const { cleanName, cleanPhone } = extractCleanInfo(a);
-    const matchesSearch =
-      a.reservation_code.toLowerCase().includes(search.toLowerCase()) ||
-      cleanName.toLowerCase().includes(search.toLowerCase()) ||
-      cleanPhone.includes(search);
-    if (!matchesSearch) return false;
-    if (statusFilter === "all") return true;
-    if (statusFilter === "active") return !["cancelled"].includes(a.status);
-    if (statusFilter === "paid") return a.payment_status === "paid";
-    if (statusFilter === "unpaid") return a.payment_status !== "paid" && a.status !== "cancelled";
-    if (statusFilter === "arrived") return !!a.arrived_at;
-    if (statusFilter === "waiting") return !a.arrived_at && a.status !== "cancelled";
-    return true;
+    try {
+      const { cleanName, cleanPhone } = extractCleanInfo(a);
+      const matchesSearch =
+        a.reservation_code.toLowerCase().includes(search.toLowerCase()) ||
+        cleanName.toLowerCase().includes(search.toLowerCase()) ||
+        cleanPhone.includes(search);
+      if (!matchesSearch) return false;
+      if (statusFilter === "all") return true;
+      if (statusFilter === "active") return !["cancelled"].includes(a.status);
+      if (statusFilter === "paid") return a.payment_status === "paid";
+      if (statusFilter === "unpaid") return a.payment_status !== "paid" && a.status !== "cancelled";
+      if (statusFilter === "arrived") return !!a.arrived_at;
+      if (statusFilter === "waiting") return !a.arrived_at && a.status !== "cancelled";
+      return true;
+    } catch {
+      return false;
+    }
   }), [appointments, search, statusFilter]);
 
   // ─── Guards ────────────────────────────────────────────────────────────────
@@ -1037,20 +1051,6 @@ export default function CashierPage() {
                       )}
                     </div>
                   </div>
-                  <div>
-                    <label className="text-xs font-semibold text-muted-foreground block mb-1">طريقة الدفع</label>
-                    <select
-                      value={paymentMethod}
-                      onChange={(e) => setPaymentMethod(e.target.value)}
-                      className="w-full h-10 rounded-md border border-input bg-background px-3 text-sm"
-                    >
-                      <option value="نقدي">نقدي</option>
-                      <option value="تحويل بنكي">تحويل بنكي</option>
-                      <option value="بطاقة ائتمان">بطاقة ائتمان</option>
-                      <option value="بطاقة خصم">بطاقة خصم</option>
-                      <option value="تطبيق دفع">تطبيق دفع</option>
-                    </select>
-                  </div>
                   <div className="flex justify-between border-b border-border/60 pb-2 pt-1">
                     <span className="text-muted-foreground">كود الحجز</span>
                     <span className="font-mono font-bold text-primary">{selectedAppointment.reservation_code}</span>
@@ -1109,11 +1109,6 @@ export default function CashierPage() {
                     {selectedAppointment.promotions && (
                       <div className="flex justify-between items-center text-amber-600">
                         <span>🎁 العرض المطبَّق: {selectedAppointment.promotions.title}{selectedAppointment.promotions.code ? ` (${selectedAppointment.promotions.code})` : ""}</span>
-                      </div>
-                    )}
-                    {selectedAppointment.payment_method && (
-                      <div className="flex justify-between items-center text-blue-600">
-                        <span>💳 طريقة الدفع: {selectedAppointment.payment_method}</span>
                       </div>
                     )}
                     {(selectedAppointment.discount_amount || 0) > 0 && (
@@ -1332,9 +1327,13 @@ function CashierStats({ appointments, expenses }: { appointments: Appointment[];
   const paid = appointments.filter((a) => a.payment_status === "paid");
 
   const amountFor = (a: Appointment) => {
-    const gross = typeof a.paid_amount === "number" ? a.paid_amount : (a.services?.price || 0);
-    const disc = a.discount_amount || 0;
-    return Math.max(0, gross - disc);
+    try {
+      const gross = typeof a.paid_amount === "number" ? a.paid_amount : (a.services?.price || 0);
+      const disc = a.discount_amount || 0;
+      return Math.max(0, gross - disc);
+    } catch {
+      return 0;
+    }
   };
 
   const totalRevenue = paid.reduce((s, a) => s + amountFor(a), 0);
@@ -1345,50 +1344,66 @@ function CashierStats({ appointments, expenses }: { appointments: Appointment[];
 
   // Chart 1: Financial Flow
   const financialFlow = useMemo(() => {
-    const buckets: Record<number, { revenue: number; expense: number }> = {};
-    for (let h = 8; h <= 20; h++) buckets[h] = { revenue: 0, expense: 0 };
-    paid.forEach((a) => {
-      const h = parseInt(String(a.time).slice(0, 2), 10);
-      if (!Number.isNaN(h) && buckets[h] !== undefined) {
-        buckets[h].revenue += amountFor(a);
-      }
-    });
-    expenses.forEach((e) => {
-      const h = parseInt(String(e.time).slice(0, 2), 10);
-      if (!Number.isNaN(h) && buckets[h] !== undefined) {
-        buckets[h].expense += e.amount;
-      }
-    });
-    return Object.entries(buckets).map(([h, data]) => ({ hour: `${h}:00`, ...data }));
+    try {
+      const buckets: Record<number, { revenue: number; expense: number }> = {};
+      for (let h = 8; h <= 20; h++) buckets[h] = { revenue: 0, expense: 0 };
+      paid.forEach((a) => {
+        const h = parseInt(String(a.time).slice(0, 2), 10);
+        if (!Number.isNaN(h) && buckets[h] !== undefined) {
+          buckets[h].revenue += amountFor(a);
+        }
+      });
+      expenses.forEach((e) => {
+        const h = parseInt(String(e.time).slice(0, 2), 10);
+        if (!Number.isNaN(h) && buckets[h] !== undefined) {
+          buckets[h].expense += e.amount;
+        }
+      });
+      return Object.entries(buckets).map(([h, data]) => ({ hour: `${h}:00`, ...data }));
+    } catch {
+      return [];
+    }
   }, [paid, expenses]);
 
   // Chart 2: Service Distribution
   const byService = useMemo(() => {
-    const map: Record<string, number> = {};
-    paid.forEach((a) => {
-      const key = a.services?.name || "بدون خدمة";
-      map[key] = (map[key] || 0) + amountFor(a);
-    });
-    return Object.entries(map).map(([name, value]) => ({ name, value }));
+    try {
+      const map: Record<string, number> = {};
+      paid.forEach((a) => {
+        const key = a.services?.name || "بدون خدمة";
+        map[key] = (map[key] || 0) + amountFor(a);
+      });
+      return Object.entries(map).map(([name, value]) => ({ name, value }));
+    } catch {
+      return [];
+    }
   }, [paid]);
 
   // Chart 3: Payment Methods
   const paymentMethods = useMemo(() => {
-    const map: Record<string, number> = {};
-    paid.forEach((a) => {
-      const method = (a as any).payment_method || 'نقدي';
-      map[method] = (map[method] || 0) + amountFor(a);
-    });
-    return Object.entries(map).map(([name, value]) => ({ name, value }));
+    try {
+      const map: Record<string, number> = {};
+      paid.forEach((a) => {
+        const method = (a as any).payment_method || 'نقدي';
+        map[method] = (map[method] || 0) + amountFor(a);
+      });
+      return Object.entries(map).map(([name, value]) => ({ name, value }));
+    } catch {
+      return [];
+    }
   }, [paid]);
 
   // Chart 4: Expense Distribution
   const expenseCategories = useMemo(() => {
-    const map: Record<string, number> = {};
-    expenses.forEach(e => {
-      map[e.category] = (map[e.category] || 0) + e.amount;
-    });
-    return Object.entries(map).map(([name, value]) => ({ name, value }));
+    try {
+      const map: Record<string, number> = {};
+      expenses.forEach(e => {
+        map[e.category] = (map[e.category] || 0) + e.amount;
+      });
+      return Object.entries(map).map(([name, value]) => ({ name, value }));
+    } catch {
+      return [];
+    }
   }, [expenses]);
 
   const PIE_COLORS = ["hsl(var(--primary))", "hsl(var(--accent))", "hsl(152 69% 40%)", "hsl(38 92% 50%)"];
