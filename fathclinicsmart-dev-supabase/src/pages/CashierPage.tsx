@@ -11,7 +11,7 @@ import { Footer } from "@/components/layout/Footer";
 import { toast } from "@/hooks/use-toast";
 import {
   Banknote, CheckCircle, LogOut, Search, Stethoscope, Users,
-  Camera, X, Loader2, AlertCircle, Image as ImageIcon, Upload, RefreshCw, Printer, Download, Clock, Plus, UserPlus, DollarSign, TrendingUp, Receipt, MessageCircle, MinusCircle, Wallet, ArrowDownCircle, ArrowUpCircle, Sparkles, Send, FileText, Gift, Tag,
+  Camera, X, Loader2, AlertCircle, Image as ImageIcon, Upload, RefreshCw, Printer, Download, Clock, Plus, UserPlus, DollarSign, TrendingUp, Receipt, MessageCircle, MinusCircle, Wallet, ArrowDownCircle, ArrowUpCircle, Sparkles, Send, FileText, Gift, Tag, Save,
 } from "lucide-react";
 import { BarChart, Bar, PieChart, Pie, Cell, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid, Legend, AreaChart, Area, LineChart, Line, RadarChart, Radar, PolarGrid, PolarAngleAxis, PolarRadiusAxis } from "recharts";
 import { Html5Qrcode } from "html5-qrcode";
@@ -485,8 +485,7 @@ export default function CashierPage() {
       await supabase.from("patients").update(updateData).eq("id", patientId);
     }
 
-    // تسجيل طريقة الدفع (افتراضية)
-    const paymentMethod = "نقدي"; // يمكن جعلها اختيارية
+    const paymentMethod = "نقدي";
 
     const { error } = await supabase
       .from("appointments")
@@ -509,7 +508,6 @@ export default function CashierPage() {
 
     toast({ title: "✅ تم تسجيل الدفع بنجاح", description: "تم تحديث الخزينة وإصدار سند الاستلام" });
 
-    // تسجيل استخدام العرض إن وجد
     if (selectedAppointment.promotion_id && selectedAppointment.promotions) {
       await supabase.from("promo_usage").insert({
         clinic_id: clinic.id,
@@ -765,7 +763,6 @@ export default function CashierPage() {
     try {
       const { subtotal, discountAmount, taxAmount, total } = calculateInvoiceTotals();
 
-      // توليد رقم فاتورة تسلسلي
       const year = new Date().getFullYear();
       const { data: lastInvoice } = await supabase
         .from("invoices")
@@ -784,7 +781,6 @@ export default function CashierPage() {
       }
       const invoiceNumber = `INV-${year}-${String(seq).padStart(4, '0')}`;
 
-      // حفظ الفاتورة
       const { data: invoice, error } = await supabase
         .from("invoices")
         .insert({
@@ -854,7 +850,7 @@ export default function CashierPage() {
       <div id={QR_FILE_ELEMENT_ID} className="hidden" />
       <input type="file" ref={fileInputRef} accept="image/*" className="hidden" onChange={handleFileUpload} />
 
-      {/* Scanner Modal */}
+      {/* Scanner Modal - حجم أكبر */}
       {scannerOpen && (
         <div className="fixed inset-0 z-50 bg-black/90 backdrop-blur-lg flex items-center justify-center p-4">
           <div className="bg-white dark:bg-gray-900 rounded-3xl max-w-lg w-full shadow-2xl overflow-hidden border border-border">
@@ -1157,7 +1153,7 @@ export default function CashierPage() {
         </DialogContent>
       </Dialog>
 
-      {/* Expense Modal */}
+      {/* Expense Modal - مع تاريخ المصروف */}
       <Dialog open={expenseModalOpen} onOpenChange={setExpenseModalOpen}>
         <DialogContent dir="rtl" className="max-w-md">
           <DialogHeader><DialogTitle className="text-red-600 flex items-center gap-1"><MinusCircle className="w-5 h-5" /> تسجـيل مصروف جديد</DialogTitle></DialogHeader>
@@ -1181,6 +1177,7 @@ export default function CashierPage() {
             <div>
               <label className="text-xs font-semibold text-muted-foreground block mb-1">تاريخ المصروف</label>
               <Input type="date" value={expenseDate} onChange={(e) => setExpenseDate(e.target.value)} className="input-modern" />
+              <p className="text-[10px] text-muted-foreground mt-1">يمكنك اختيار تاريخ سابق لتسجيل المصروفات المتأخرة</p>
             </div>
             <Button onClick={handleAddExpense} className="w-full bg-red-600 hover:bg-red-700 text-white font-bold"><MinusCircle className="w-4 h-4 ml-1" />قيد المصروف في الخزينة</Button>
           </div>
@@ -1350,7 +1347,7 @@ function CashierStats({ appointments, expenses }: { appointments: Appointment[];
     return Object.entries(map).map(([name, value]) => ({ name, value }));
   }, [paid]);
 
-  // Chart 3: Payment Methods (افتراضي)
+  // Chart 3: Payment Methods
   const paymentMethods = useMemo(() => {
     const map: Record<string, number> = {};
     paid.forEach((a) => {
@@ -1369,7 +1366,7 @@ function CashierStats({ appointments, expenses }: { appointments: Appointment[];
     return Object.entries(map).map(([name, value]) => ({ name, value }));
   }, [expenses]);
 
-  // Chart 5: AI Insight - Performance Radar (مقارنة الأداء)
+  // Chart 5: AI Insight - Performance Radar
   const performanceData = useMemo(() => {
     const total = appointments.length || 1;
     const arrived = appointments.filter(a => a.arrived_at).length || 0;
@@ -1472,7 +1469,7 @@ function CashierStats({ appointments, expenses }: { appointments: Appointment[];
         </div>
       </div>
 
-      {/* Chart 5: AI Insight Radar (يظهر فقط في الشاشات الكبيرة) */}
+      {/* Chart 5: AI Insight Radar */}
       <div className="card-modern p-5 hidden lg:block">
         <div className="flex items-center gap-2 mb-4"><Sparkles className="w-4 h-4 text-violet-500" /><h3 className="font-bold text-foreground">تحليل الأداء الذكي (AI Insight)</h3></div>
         <ResponsiveContainer width="100%" height={250}>
