@@ -34,12 +34,12 @@ type Appointment = {
   customer_telegram_id?: string | null;
   promotion_id?: string | null;
   promo_code?: string | null;
+  payment_method?: string | null; // ✅ أضفنا حقل طريقة الدفع
   patients: { id?: string; name: string; phone: string; telegram_user_id?: string } | null;
   services: { name: string; price: number | null } | null;
   promotions?: { id: string; title: string; discount_type: string; discount_value: number; code?: string } | null;
   extracted_patient_name?: string;
   extracted_patient_phone?: string;
-  payment_method?: string;
 };
 
 type Expense = {
@@ -183,6 +183,7 @@ export default function CashierPage() {
   const [editPatientPhone, setEditPatientPhone] = useState<string>("");
   const [paidAmountInput, setPaidAmountInput] = useState<string>("");
   const [discountInput, setDiscountInput] = useState<string>("0");
+  const [paymentMethod, setPaymentMethod] = useState<string>("نقدي");
   const [showReceipt, setShowReceipt] = useState(false);
   const [processingPayment, setProcessingPayment] = useState(false);
   const [sendingReceipt, setSendingReceipt] = useState(false);
@@ -230,7 +231,7 @@ export default function CashierPage() {
   // ─── Data Fetching ──────────────────────────────────────────────────────────
   const APPT_SELECT = `
     id,patient_id,date,time,status,reservation_code,arrived_at,
-    payment_status,paid_amount,discount_amount,promotion_id,promo_code,
+    payment_status,paid_amount,discount_amount,promotion_id,promo_code,payment_method,
     is_walk_in,notes,customer_telegram_id,
     patients(id,name,phone,telegram_user_id),
     services(name,price),
@@ -341,6 +342,7 @@ export default function CashierPage() {
         },
         services: found.services || (qrParsed.service ? { name: qrParsed.service, price: null } : null),
         promotions: found.promotions || null,
+        payment_method: found.payment_method || null,
       };
       if (!enriched.arrived_at) {
         await markArrived(enriched.id);
@@ -469,6 +471,7 @@ export default function CashierPage() {
     setPaidAmountInput(appointment.paid_amount != null ? String(appointment.paid_amount) : String(defaultPrice));
     const autoDisc = appointment.discount_amount != null ? Number(appointment.discount_amount) : suggestedDiscountFromPromo(appointment);
     setDiscountInput(String(autoDisc));
+    setPaymentMethod(appointment.payment_method || "نقدي");
     setShowReceipt(appointment.payment_status === "paid");
   };
 
@@ -485,8 +488,7 @@ export default function CashierPage() {
       await supabase.from("patients").update(updateData).eq("id", patientId);
     }
 
-    // تسجيل طريقة الدفع (افتراضية)
-    const paymentMethod = "نقدي"; // يمكن جعلها اختيارية
+    const method = paymentMethod || "نقدي";
 
     const { error } = await supabase
       .from("appointments")
@@ -496,7 +498,7 @@ export default function CashierPage() {
         department: "صندوق",
         paid_amount: paidVal,
         discount_amount: discountVal,
-        payment_method: paymentMethod,
+        payment_method: method,
       })
       .eq("id", selectedAppointment.id)
       .eq("clinic_id", clinic.id);
@@ -509,7 +511,6 @@ export default function CashierPage() {
 
     toast({ title: "✅ تم تسجيل الدفع بنجاح", description: "تم تحديث الخزينة وإصدار سند الاستلام" });
 
-    // تسجيل استخدام العرض إن وجد
     if (selectedAppointment.promotion_id && selectedAppointment.promotions) {
       await supabase.from("promo_usage").insert({
         clinic_id: clinic.id,
@@ -526,6 +527,7 @@ export default function CashierPage() {
       payment_status: "paid",
       paid_amount: paidVal,
       discount_amount: discountVal,
+      payment_method: method,
       extracted_patient_name: editPatientName.trim() || selectedAppointment.extracted_patient_name,
       extracted_patient_phone: editPatientPhone.trim() || selectedAppointment.extracted_patient_phone,
       patients: {
@@ -565,6 +567,7 @@ export default function CashierPage() {
       payment_status: "paid",
       is_walk_in: true,
       department: "صندوق",
+      payment_method: "نقدي",
     });
     if (error) toast({ title: "خطأ", description: "فشل إضافة مريض مباشر", variant: "destructive" });
     else {
@@ -652,6 +655,7 @@ export default function CashierPage() {
       const patientName = editPatientName || selectedAppointment.extracted_patient_name || selectedAppointment.patients?.name || "المريض";
       const finalAmt = (selectedAppointment.paid_amount || selectedAppointment.services?.price || 0) - (selectedAppointment.discount_amount || 0);
       const promoLine = selectedAppointment.promotions ? `🎁 العرض: ${selectedAppointment.promotions.title}\n` : "";
+      const methodLine = selectedAppointment.payment_method ? `💳 طريقة الدفع: ${selectedAppointment.payment_method}\n` : "";
       const msg = encodeURIComponent(
         `🧾 سند دفع رسمي - ${clinic?.name || "العيادة الطبية"}\n` +
         `━━━━━━━━━━━━━━━\n` +
@@ -659,6 +663,7 @@ export default function CashierPage() {
         `🔖 كود الحجز: ${selectedAppointment.reservation_code}\n` +
         `💊 الخدمة: ${selectedAppointment.services?.name || "فحص طبي"}\n` +
         promoLine +
+        methodLine +
         `💰 المبلغ الصافي: ${finalAmt} ر.ي\n` +
         `📅 التاريخ: ${format(new Date(), "yyyy/MM/dd - hh:mm a")}\n` +
         `━━━━━━━━━━━━━━━\n` +
@@ -765,7 +770,6 @@ export default function CashierPage() {
     try {
       const { subtotal, discountAmount, taxAmount, total } = calculateInvoiceTotals();
 
-      // توليد رقم فاتورة تسلسلي
       const year = new Date().getFullYear();
       const { data: lastInvoice } = await supabase
         .from("invoices")
@@ -784,7 +788,6 @@ export default function CashierPage() {
       }
       const invoiceNumber = `INV-${year}-${String(seq).padStart(4, '0')}`;
 
-      // حفظ الفاتورة
       const { data: invoice, error } = await supabase
         .from("invoices")
         .insert({
@@ -1034,6 +1037,20 @@ export default function CashierPage() {
                       )}
                     </div>
                   </div>
+                  <div>
+                    <label className="text-xs font-semibold text-muted-foreground block mb-1">طريقة الدفع</label>
+                    <select
+                      value={paymentMethod}
+                      onChange={(e) => setPaymentMethod(e.target.value)}
+                      className="w-full h-10 rounded-md border border-input bg-background px-3 text-sm"
+                    >
+                      <option value="نقدي">نقدي</option>
+                      <option value="تحويل بنكي">تحويل بنكي</option>
+                      <option value="بطاقة ائتمان">بطاقة ائتمان</option>
+                      <option value="بطاقة خصم">بطاقة خصم</option>
+                      <option value="تطبيق دفع">تطبيق دفع</option>
+                    </select>
+                  </div>
                   <div className="flex justify-between border-b border-border/60 pb-2 pt-1">
                     <span className="text-muted-foreground">كود الحجز</span>
                     <span className="font-mono font-bold text-primary">{selectedAppointment.reservation_code}</span>
@@ -1092,6 +1109,11 @@ export default function CashierPage() {
                     {selectedAppointment.promotions && (
                       <div className="flex justify-between items-center text-amber-600">
                         <span>🎁 العرض المطبَّق: {selectedAppointment.promotions.title}{selectedAppointment.promotions.code ? ` (${selectedAppointment.promotions.code})` : ""}</span>
+                      </div>
+                    )}
+                    {selectedAppointment.payment_method && (
+                      <div className="flex justify-between items-center text-blue-600">
+                        <span>💳 طريقة الدفع: {selectedAppointment.payment_method}</span>
                       </div>
                     )}
                     {(selectedAppointment.discount_amount || 0) > 0 && (
@@ -1350,7 +1372,7 @@ function CashierStats({ appointments, expenses }: { appointments: Appointment[];
     return Object.entries(map).map(([name, value]) => ({ name, value }));
   }, [paid]);
 
-  // Chart 3: Payment Methods (افتراضي)
+  // Chart 3: Payment Methods
   const paymentMethods = useMemo(() => {
     const map: Record<string, number> = {};
     paid.forEach((a) => {
