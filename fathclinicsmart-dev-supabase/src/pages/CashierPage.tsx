@@ -6,14 +6,14 @@ import { useClinic } from "@/hooks/useClinic";
 import { supabase } from "@/integrations/supabase/client";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from "@/components/ui/dialog";
+import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Footer } from "@/components/layout/Footer";
 import { toast } from "@/hooks/use-toast";
 import {
   Banknote, CheckCircle, LogOut, Search, Stethoscope, Users,
   Camera, X, Loader2, AlertCircle, Image as ImageIcon, Upload, RefreshCw, Printer, Download, Clock, Plus, UserPlus, DollarSign, TrendingUp, Receipt, MessageCircle, MinusCircle, Wallet, ArrowDownCircle, ArrowUpCircle, Sparkles, Send, FileText, Gift, Tag, Save,
 } from "lucide-react";
-import { BarChart, Bar, PieChart, Pie, Cell, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid, Legend, AreaChart, Area, LineChart, Line, RadarChart, Radar, PolarGrid, PolarAngleAxis, PolarRadiusAxis } from "recharts";
+import { BarChart, Bar, PieChart, Pie, Cell, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid, Legend, AreaChart, Area } from "recharts";
 import { Html5Qrcode } from "html5-qrcode";
 import html2canvas from "html2canvas";
 
@@ -34,6 +34,7 @@ type Appointment = {
   customer_telegram_id?: string | null;
   promotion_id?: string | null;
   promo_code?: string | null;
+  discount_applied?: number | null;
   patients: { id?: string; name: string; phone: string; telegram_user_id?: string } | null;
   services: { name: string; price: number | null } | null;
   promotions?: { id: string; title: string; discount_type: string; discount_value: number; code?: string } | null;
@@ -145,9 +146,17 @@ const extractCleanInfo = (a: Appointment) => {
   return { cleanName, cleanPhone };
 };
 
+// 🆕 حساب الخصم من العرض التلقائي
 const suggestedDiscountFromPromo = (a: Appointment): number => {
+  // إذا كان هناك خصم محدد مسبقاً في appointment
+  if (a.discount_applied && a.discount_applied > 0) {
+    return Number(a.discount_applied);
+  }
+  
+  // إذا كان هناك عرض مرتبط
   const promo = a.promotions;
   if (!promo) return 0;
+  
   const price = a.services?.price || 0;
   const val = Number(promo.discount_value) || 0;
   const d = promo.discount_type === "percentage" ? Math.round((price * val) / 100) : val;
@@ -230,7 +239,7 @@ export default function CashierPage() {
   // ─── Data Fetching ──────────────────────────────────────────────────────────
   const APPT_SELECT = `
     id,patient_id,date,time,status,reservation_code,arrived_at,
-    payment_status,paid_amount,discount_amount,promotion_id,promo_code,
+    payment_status,paid_amount,discount_amount,promotion_id,promo_code,discount_applied,
     is_walk_in,notes,customer_telegram_id,
     patients(id,name,phone,telegram_user_id),
     services(name,price),
@@ -351,9 +360,12 @@ export default function CashierPage() {
       setEditPatientPhone(cleanPhone === "حجز عبر تلجرام (بدون رقم)" ? "" : cleanPhone);
       const defaultPrice = enriched.services?.price || 0;
       setPaidAmountInput(enriched.paid_amount != null ? String(enriched.paid_amount) : String(defaultPrice));
+      
+      // 🆕 حساب الخصم التلقائي من العرض
       const autoDisc = enriched.discount_amount != null ? Number(enriched.discount_amount) : suggestedDiscountFromPromo(enriched);
       setDiscountInput(String(autoDisc));
       setShowReceipt(enriched.payment_status === "paid");
+      
       if (enriched.payment_status === "paid") toast({ title: "ℹ️ مدفوع مسبقاً", description: cleanName });
       else if (enriched.promotions) toast({ title: "🎁 عرض مطبَّق", description: `${enriched.promotions.title} — خصم ${autoDisc} ر.ي` });
       else toast({ title: "✅ جاهز للدفع", description: cleanName });
@@ -508,15 +520,19 @@ export default function CashierPage() {
 
     toast({ title: "✅ تم تسجيل الدفع بنجاح", description: "تم تحديث الخزينة وإصدار سند الاستلام" });
 
-    if (selectedAppointment.promotion_id && selectedAppointment.promotions) {
+    // 🆕 تسجيل استخدام العرض في promo_usage
+    if (selectedAppointment.promotion_id && discountVal > 0) {
       await supabase.from("promo_usage").insert({
         clinic_id: clinic.id,
         patient_id: patientId,
         appointment_id: selectedAppointment.id,
         promotion_id: selectedAppointment.promotion_id,
-        promo_code: selectedAppointment.promotions.code || null,
+        promo_code: selectedAppointment.promo_code || null,
         discount_amount: discountVal,
       });
+      
+      // تحديث عدد استخدامات العرض
+      await supabase.rpc('increment_promo_usage', { promo_id: selectedAppointment.promotion_id });
     }
 
     setSelectedAppointment({
@@ -850,7 +866,7 @@ export default function CashierPage() {
       <div id={QR_FILE_ELEMENT_ID} className="hidden" />
       <input type="file" ref={fileInputRef} accept="image/*" className="hidden" onChange={handleFileUpload} />
 
-      {/* Scanner Modal - حجم أكبر */}
+      {/* Scanner Modal - مكبر max-w-lg */}
       {scannerOpen && (
         <div className="fixed inset-0 z-50 bg-black/90 backdrop-blur-lg flex items-center justify-center p-4">
           <div className="bg-white dark:bg-gray-900 rounded-3xl max-w-lg w-full shadow-2xl overflow-hidden border border-border">
@@ -886,7 +902,12 @@ export default function CashierPage() {
               )}
             </div>
             <div className="px-5 pb-3">
-              <Button variant="outline" className="w-full gap-2 border-dashed border-primary/50 text-primary text-xs h-10" onClick={() => fileInputRef.current?.click()} disabled={uploadingImage}>
+              <Button 
+                variant="outline" 
+                className="w-full gap-2 border-dashed border-primary/50 text-primary text-xs h-10"
+                onClick={() => fileInputRef.current?.click()}
+                disabled={uploadingImage}
+              >
                 <ImageIcon className="w-4 h-4" /> اختيار صورة من المعرض (لقطة شاشة)
               </Button>
             </div>
@@ -1008,7 +1029,7 @@ export default function CashierPage() {
                   <div className="rounded-xl border-2 border-amber-400/60 bg-amber-500/10 p-3 text-sm flex items-center gap-2">
                     <Gift className="w-5 h-5 text-amber-500 shrink-0" />
                     <div className="flex-1">
-                      <p className="font-bold text-amber-600">عرض مطبَّق تلقائياً: {selectedAppointment.promotions.title}</p>
+                      <p className="font-bold text-amber-600">🎁 عرض مطبَّق تلقائياً: {selectedAppointment.promotions.title}</p>
                       <p className="text-xs text-muted-foreground">
                         {selectedAppointment.promotions.code ? `الكود: ${selectedAppointment.promotions.code} — ` : ""}
                         خصم {selectedAppointment.promotions.discount_type === "percentage" ? `${selectedAppointment.promotions.discount_value}%` : `${selectedAppointment.promotions.discount_value} ر.ي`}
@@ -1088,6 +1109,7 @@ export default function CashierPage() {
                     {selectedAppointment.promotions && (
                       <div className="flex justify-between items-center text-amber-600">
                         <span>🎁 العرض المطبَّق: {selectedAppointment.promotions.title}{selectedAppointment.promotions.code ? ` (${selectedAppointment.promotions.code})` : ""}</span>
+                        <span className="font-bold">-{selectedAppointment.discount_amount || 0} ر.ي</span>
                       </div>
                     )}
                     {(selectedAppointment.discount_amount || 0) > 0 && (
@@ -1153,7 +1175,7 @@ export default function CashierPage() {
         </DialogContent>
       </Dialog>
 
-      {/* Expense Modal - مع تاريخ المصروف */}
+      {/* Expense Modal */}
       <Dialog open={expenseModalOpen} onOpenChange={setExpenseModalOpen}>
         <DialogContent dir="rtl" className="max-w-md">
           <DialogHeader><DialogTitle className="text-red-600 flex items-center gap-1"><MinusCircle className="w-5 h-5" /> تسجـيل مصروف جديد</DialogTitle></DialogHeader>
@@ -1177,7 +1199,6 @@ export default function CashierPage() {
             <div>
               <label className="text-xs font-semibold text-muted-foreground block mb-1">تاريخ المصروف</label>
               <Input type="date" value={expenseDate} onChange={(e) => setExpenseDate(e.target.value)} className="input-modern" />
-              <p className="text-[10px] text-muted-foreground mt-1">يمكنك اختيار تاريخ سابق لتسجيل المصروفات المتأخرة</p>
             </div>
             <Button onClick={handleAddExpense} className="w-full bg-red-600 hover:bg-red-700 text-white font-bold"><MinusCircle className="w-4 h-4 ml-1" />قيد المصروف في الخزينة</Button>
           </div>
@@ -1193,7 +1214,6 @@ export default function CashierPage() {
           </DialogHeader>
 
           <div className="space-y-4 py-4">
-            {/* Patient Selection */}
             <div className="flex gap-3 items-center">
               <Label className="shrink-0">المريض:</Label>
               <Input
@@ -1210,7 +1230,6 @@ export default function CashierPage() {
               />
             </div>
 
-            {/* Invoice Items */}
             <div className="border rounded-lg p-4 space-y-2">
               <div className="flex justify-between items-center">
                 <Label className="font-bold">البنود والخدمات</Label>
@@ -1251,7 +1270,6 @@ export default function CashierPage() {
                 </div>
               ))}
 
-              {/* Invoice Summary */}
               <div className="border-t pt-3 space-y-1">
                 <div className="flex justify-between text-sm">
                   <span>المجموع الفرعي:</span>
@@ -1318,7 +1336,6 @@ function CashierStats({ appointments, expenses }: { appointments: Appointment[];
   const netInDrawer = totalRevenue - totalDiscount - totalExpenses;
   const avgTicket = paid.length ? Math.round((totalRevenue - totalDiscount) / paid.length) : 0;
 
-  // Chart 1: Financial Flow
   const financialFlow = useMemo(() => {
     const buckets: Record<number, { revenue: number; expense: number }> = {};
     for (let h = 8; h <= 20; h++) buckets[h] = { revenue: 0, expense: 0 };
@@ -1337,7 +1354,6 @@ function CashierStats({ appointments, expenses }: { appointments: Appointment[];
     return Object.entries(buckets).map(([h, data]) => ({ hour: `${h}:00`, ...data }));
   }, [paid, expenses]);
 
-  // Chart 2: Service Distribution
   const byService = useMemo(() => {
     const map: Record<string, number> = {};
     paid.forEach((a) => {
@@ -1347,7 +1363,6 @@ function CashierStats({ appointments, expenses }: { appointments: Appointment[];
     return Object.entries(map).map(([name, value]) => ({ name, value }));
   }, [paid]);
 
-  // Chart 3: Payment Methods
   const paymentMethods = useMemo(() => {
     const map: Record<string, number> = {};
     paid.forEach((a) => {
@@ -1357,7 +1372,6 @@ function CashierStats({ appointments, expenses }: { appointments: Appointment[];
     return Object.entries(map).map(([name, value]) => ({ name, value }));
   }, [paid]);
 
-  // Chart 4: Expense Distribution
   const expenseCategories = useMemo(() => {
     const map: Record<string, number> = {};
     expenses.forEach(e => {
@@ -1366,23 +1380,7 @@ function CashierStats({ appointments, expenses }: { appointments: Appointment[];
     return Object.entries(map).map(([name, value]) => ({ name, value }));
   }, [expenses]);
 
-  // Chart 5: AI Insight - Performance Radar
-  const performanceData = useMemo(() => {
-    const total = appointments.length || 1;
-    const arrived = appointments.filter(a => a.arrived_at).length || 0;
-    const paidCount = appointments.filter(a => a.payment_status === 'paid').length || 0;
-    const cancelled = appointments.filter(a => a.status === 'cancelled').length || 0;
-    const walkIn = appointments.filter(a => a.is_walk_in).length || 0;
-    return [
-      { subject: 'الحضور', value: Math.round((arrived / total) * 100) },
-      { subject: 'الدفع', value: Math.round((paidCount / total) * 100) },
-      { subject: 'الالتزام', value: Math.round(((total - cancelled) / total) * 100) },
-      { subject: 'المباشر', value: Math.round((walkIn / total) * 100) },
-      { subject: 'الخصم', value: Math.min(100, Math.round((totalDiscount / (totalRevenue || 1)) * 100)) },
-    ];
-  }, [appointments, totalDiscount, totalRevenue]);
-
-  const PIE_COLORS = ["hsl(var(--primary))", "hsl(var(--accent))", "hsl(152 69% 40%)", "hsl(38 92% 50%)", "hsl(250 90% 60%)"];
+  const PIE_COLORS = ["hsl(var(--primary))", "hsl(var(--accent))", "hsl(152 69% 40%)", "hsl(38 92% 50%)"];
 
   const stats = [
     { label: "إجمالي المقبوضات", value: `${totalRevenue.toLocaleString()} ر.ي`, icon: ArrowUpCircle, tint: "from-emerald-500/20 to-emerald-500/5", iconClass: "text-emerald-500" },
@@ -1467,20 +1465,6 @@ function CashierStats({ appointments, expenses }: { appointments: Appointment[];
             </BarChart>
           </ResponsiveContainer>
         </div>
-      </div>
-
-      {/* Chart 5: AI Insight Radar */}
-      <div className="card-modern p-5 hidden lg:block">
-        <div className="flex items-center gap-2 mb-4"><Sparkles className="w-4 h-4 text-violet-500" /><h3 className="font-bold text-foreground">تحليل الأداء الذكي (AI Insight)</h3></div>
-        <ResponsiveContainer width="100%" height={250}>
-          <RadarChart data={performanceData}>
-            <PolarGrid stroke="hsl(var(--border))" />
-            <PolarAngleAxis dataKey="subject" tick={{ fill: "hsl(var(--muted-foreground))", fontSize: 11 }} />
-            <PolarRadiusAxis angle={30} domain={[0, 100]} tick={{ fill: "hsl(var(--muted-foreground))", fontSize: 10 }} />
-            <Radar name="الأداء" dataKey="value" stroke="hsl(250 90% 60%)" fill="hsl(250 90% 60%)" fillOpacity={0.3} />
-            <Tooltip contentStyle={{ background: "hsl(var(--popover))", border: "1px solid hsl(var(--border))", borderRadius: 12, color: "hsl(var(--foreground))" }} />
-          </RadarChart>
-        </ResponsiveContainer>
       </div>
     </div>
   );
