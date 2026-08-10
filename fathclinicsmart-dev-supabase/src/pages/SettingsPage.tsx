@@ -21,9 +21,6 @@ import {
 } from "lucide-react";
 import html2canvas from "html2canvas";
 
-// ============================================================
-// Interfaces
-// ============================================================
 interface Service {
   id: string;
   name: string;
@@ -50,53 +47,69 @@ interface Promotion {
 }
 
 // ============================================================
-// Theme configurations per specialty — SVG PRO EDITION v4
+// Theme configurations — PROFESSIONAL CANVAS EDITION v5
+// Layout: Vertical (like reference lab image)
 // ============================================================
 const SPECIALTY_THEMES: Record<string, any> = {
   dental: {
-    bg1: "#0EA5E9", bg2: "#075985", bg3: "#0C4A6E",
-    accent: "#FCD34D",
-    chipBg: "#0F4C6B", chipBorder: "#38BDF8",
+    bg1: "#7DD3C0", bg2: "#5FBFAB", bg3: "#3FA893",
+    accent: "#F59E0B",
+    accentDark: "#B45309",
+    chipBg: "#B8E4D8",
+    chipText: "#0F4C6B",
+    doctorImg: "https://images.pexels.com/photos/5327585/pexels-photo-5327585.jpeg?auto=compress&cs=tinysrgb&w=800",
     icon: "🦷",
     tagline: "ابتسامة صحية تدوم",
-    doctorEmoji: "🧑‍⚕️",
     label: "طب الأسنان",
+    fallbackBg: "#7DD3C0",
   },
   dermatology: {
-    bg1: "#A855F7", bg2: "#7E22CE", bg3: "#581C87",
-    accent: "#FDE68A",
-    chipBg: "#4A1D6E", chipBorder: "#C084FC",
+    bg1: "#D8B4F8", bg2: "#B57BE0", bg3: "#8B4FC7",
+    accent: "#F59E0B",
+    accentDark: "#B45309",
+    chipBg: "#E9D5F5",
+    chipText: "#4A1D6E",
+    doctorImg: "https://images.pexels.com/photos/5327580/pexels-photo-5327580.jpeg?auto=compress&cs=tinysrgb&w=800",
     icon: "✨",
     tagline: "بشرة نضرة وإشراقة طبيعية",
-    doctorEmoji: "👩‍⚕️",
     label: "الجلدية والتجميل",
+    fallbackBg: "#D8B4F8",
   },
   gynecology: {
-    bg1: "#EC4899", bg2: "#BE185D", bg3: "#831843",
-    accent: "#FDE68A",
-    chipBg: "#6B1839", chipBorder: "#F472B6",
+    bg1: "#F9A8D4", bg2: "#EC4899", bg3: "#BE185D",
+    accent: "#F59E0B",
+    accentDark: "#B45309",
+    chipBg: "#FBCFE8",
+    chipText: "#6B1839",
+    doctorImg: "https://images.pexels.com/photos/5407206/pexels-photo-5407206.jpeg?auto=compress&cs=tinysrgb&w=800",
     icon: "🌸",
     tagline: "رعاية متكاملة للأم والطفل",
-    doctorEmoji: "👩‍⚕️",
     label: "النساء والولادة",
+    fallbackBg: "#F9A8D4",
   },
   ophthalmology: {
-    bg1: "#06B6D4", bg2: "#0E7490", bg3: "#164E63",
-    accent: "#FDE68A",
-    chipBg: "#0B4F5F", chipBorder: "#22D3EE",
+    bg1: "#7DD3E8", bg2: "#22B8D9", bg3: "#0E7490",
+    accent: "#F59E0B",
+    accentDark: "#B45309",
+    chipBg: "#BAE6FD",
+    chipText: "#0B4F5F",
+    doctorImg: "https://images.pexels.com/photos/5407234/pexels-photo-5407234.jpeg?auto=compress&cs=tinysrgb&w=800",
     icon: "👁️",
     tagline: "رؤية أوضح لحياة أفضل",
-    doctorEmoji: "🧑‍⚕️",
     label: "طب العيون",
+    fallbackBg: "#7DD3E8",
   },
   general: {
-    bg1: "#14B8A6", bg2: "#0F766E", bg3: "#134E4A",
-    accent: "#FDE68A",
-    chipBg: "#0D4A45", chipBorder: "#2DD4BF",
+    bg1: "#7DD3C0", bg2: "#4FB8A2", bg3: "#2A9D87",
+    accent: "#F59E0B",
+    accentDark: "#B45309",
+    chipBg: "#B8E4D8",
+    chipText: "#0D4A45",
+    doctorImg: "https://images.pexels.com/photos/5327656/pexels-photo-5327656.jpeg?auto=compress&cs=tinysrgb&w=800",
     icon: "🏥",
     tagline: "صحتك أولويتنا القصوى",
-    doctorEmoji: "🧑‍⚕️",
     label: "الطب العام",
+    fallbackBg: "#7DD3C0",
   },
 };
 
@@ -565,7 +578,13 @@ export default function SettingsPage() {
   };
 
   // ============================================================
-  // 🎨 GENERATE PROFESSIONAL PROMO IMAGE — SVG-BASED v4 (No CORS issues)
+  // 🎨 GENERATE PROFESSIONAL PROMO IMAGE — CANVAS API v5
+  // Layout: Vertical (like reference lab image)
+  // - Header: Logo + Clinic name (top center)
+  // - Doctor image (center-left, large)
+  // - Golden discount number (center-right, 3D)
+  // - Service chips grid (bottom, 3 columns rounded pills)
+  // - Phone footer (very bottom)
   // ============================================================
   const generatePromoImage = async (promo: Promotion) => {
     if (!clinic) {
@@ -578,6 +597,7 @@ export default function SettingsPage() {
       const specialty = (clinic as any).specialty || "general";
       const theme = SPECIALTY_THEMES[specialty] || SPECIALTY_THEMES.general;
 
+      // Prepare items
       const itemsList = (promo as any).items
         ? String((promo as any).items)
             .split(/[,،\n]/)
@@ -585,258 +605,457 @@ export default function SettingsPage() {
             .filter(Boolean)
         : [];
       const serviceNames = services.map((s) => s.name);
-      const finalItems = (itemsList.length > 0 ? itemsList : serviceNames).slice(0, 6);
+      const finalItems = (itemsList.length > 0 ? itemsList : serviceNames).slice(0, 9);
 
-      const effectiveBotUsername = botUsername || "SmartClinc_bot";
-      const qrLink = `https://t.me/${effectiveBotUsername}?start=clinic_${clinic.id}`;
+      // Canvas setup — Portrait A4-like ratio
+      const W = 1200;
+      const H = 1500;
+      const canvas = document.createElement("canvas");
+      canvas.width = W;
+      canvas.height = H;
+      const ctx = canvas.getContext("2d")!;
+      ctx.imageSmoothingEnabled = true;
+      ctx.imageSmoothingQuality = "high";
 
-      // Load QR as base64 (avoids CORS)
-      const qrCanvas = document.createElement("canvas");
-      const qrSize = 200;
-      qrCanvas.width = qrSize;
-      qrCanvas.height = qrSize;
-      const { QRCodeCanvas: QRC } = await import("qrcode.react");
-      // Fallback: generate QR via API and convert to base64
-      const qrApiUrl = `https://api.qrserver.com/v1/create-qr-code/?size=${qrSize}x${qrSize}&data=${encodeURIComponent(qrLink)}&color=0F172A&bgcolor=FFFFFF&margin=1&qzone=1&format=png`;
-      let qrDataUrl = "";
-      try {
-        const qrResp = await fetch(qrApiUrl);
-        const qrBlob = await qrResp.blob();
-        qrDataUrl = await new Promise<string>((resolve) => {
-          const reader = new FileReader();
-          reader.onloadend = () => resolve(reader.result as string);
-          reader.readAsDataURL(qrBlob);
+      // ============================================================
+      // Helper functions
+      // ============================================================
+      const loadImage = (url: string): Promise<HTMLImageElement | null> => {
+        return new Promise((resolve) => {
+          const img = new window.Image();
+          img.crossOrigin = "anonymous";
+          img.onload = () => resolve(img);
+          img.onerror = () => resolve(null);
+          setTimeout(() => resolve(null), 10000);
+          img.src = url;
         });
-      } catch (e) {
-        console.warn("QR fetch failed, using inline");
-      }
+      };
 
-      // Load clinic logo as base64 (if exists)
-      let logoDataUrl = "";
-      if (clinic.logo_url) {
-        try {
-          const logoResp = await fetch(clinic.logo_url);
-          const logoBlob = await logoResp.blob();
-          logoDataUrl = await new Promise<string>((resolve) => {
-            const reader = new FileReader();
-            reader.onloadend = () => resolve(reader.result as string);
-            reader.readAsDataURL(logoBlob);
-          });
-        } catch (e) {
-          console.warn("Logo fetch failed");
+      const roundRect = (x: number, y: number, w: number, h: number, r: number) => {
+        ctx.beginPath();
+        ctx.moveTo(x + r, y);
+        ctx.lineTo(x + w - r, y);
+        ctx.quadraticCurveTo(x + w, y, x + w, y + r);
+        ctx.lineTo(x + w, y + h - r);
+        ctx.quadraticCurveTo(x + w, y + h, x + w - r, y + h);
+        ctx.lineTo(x + r, y + h);
+        ctx.quadraticCurveTo(x, y + h, x, y + h - r);
+        ctx.lineTo(x, y + r);
+        ctx.quadraticCurveTo(x, y, x + r, y);
+        ctx.closePath();
+      };
+
+      // ============================================================
+      // STEP 1: Background gradient
+      // ============================================================
+      const bgGrad = ctx.createLinearGradient(0, 0, 0, H);
+      bgGrad.addColorStop(0, theme.bg1);
+      bgGrad.addColorStop(0.5, theme.bg2);
+      bgGrad.addColorStop(1, theme.bg3);
+      ctx.fillStyle = bgGrad;
+      ctx.fillRect(0, 0, W, H);
+
+      // Soft overlay pattern
+      ctx.fillStyle = "rgba(255, 255, 255, 0.03)";
+      for (let i = 0; i < W; i += 80) {
+        for (let j = 0; j < H; j += 80) {
+          ctx.beginPath();
+          ctx.arc(i, j, 2, 0, Math.PI * 2);
+          ctx.fill();
         }
       }
 
-      const W = 1080;
-      const H = 1440;
-      const discountNum = promo.discount_value;
-      const discountUnit = promo.discount_type === "percentage" ? "%" : "ريال";
+      // Decorative glow circles
+      const glowGrad1 = ctx.createRadialGradient(W - 100, 100, 0, W - 100, 100, 400);
+      glowGrad1.addColorStop(0, "rgba(255, 255, 255, 0.25)");
+      glowGrad1.addColorStop(1, "rgba(255, 255, 255, 0)");
+      ctx.fillStyle = glowGrad1;
+      ctx.fillRect(0, 0, W, H);
+
+      const glowGrad2 = ctx.createRadialGradient(100, H - 200, 0, 100, H - 200, 350);
+      glowGrad2.addColorStop(0, "rgba(255, 255, 255, 0.15)");
+      glowGrad2.addColorStop(1, "rgba(255, 255, 255, 0)");
+      ctx.fillStyle = glowGrad2;
+      ctx.fillRect(0, 0, W, H);
 
       // ============================================================
-      // BUILD PURE SVG (100% reliable, no CORS, perfect Arabic)
+      // STEP 2: HEADER — Logo + Clinic Name (top center)
       // ============================================================
-      const svgString = `
-<svg xmlns="http://www.w3.org/2000/svg" width="${W}" height="${H}" viewBox="0 0 ${W} ${H}">
-  <defs>
-    <!-- Main background gradient -->
-    <linearGradient id="bgGrad" x1="0%" y1="0%" x2="100%" y2="100%">
-      <stop offset="0%" stop-color="${theme.bg1}"/>
-      <stop offset="50%" stop-color="${theme.bg2}"/>
-      <stop offset="100%" stop-color="${theme.bg3}"/>
-    </linearGradient>
-    
-    <!-- Gold gradient for discount -->
-    <linearGradient id="goldGrad" x1="0%" y1="0%" x2="0%" y2="100%">
-      <stop offset="0%" stop-color="#FEF3C7"/>
-      <stop offset="30%" stop-color="#FDE68A"/>
-      <stop offset="60%" stop-color="#F59E0B"/>
-      <stop offset="100%" stop-color="#B45309"/>
-    </linearGradient>
-    
-    <!-- Radial glow -->
-    <radialGradient id="glowGrad" cx="50%" cy="50%" r="50%">
-      <stop offset="0%" stop-color="${theme.accent}" stop-opacity="0.5"/>
-      <stop offset="100%" stop-color="${theme.accent}" stop-opacity="0"/>
-    </radialGradient>
-    
-    <!-- Card gradient -->
-    <linearGradient id="cardGrad" x1="0%" y1="0%" x2="100%" y2="100%">
-      <stop offset="0%" stop-color="rgba(255,255,255,0.15)"/>
-      <stop offset="100%" stop-color="rgba(255,255,255,0.05)"/>
-    </linearGradient>
-    
-    <!-- Shadow filter -->
-    <filter id="dropShadow" x="-50%" y="-50%" width="200%" height="200%">
-      <feGaussianBlur in="SourceAlpha" stdDeviation="8"/>
-      <feOffset dx="0" dy="6" result="offsetblur"/>
-      <feComponentTransfer><feFuncA type="linear" slope="0.5"/></feComponentTransfer>
-      <feMerge><feMergeNode/><feMergeNode in="SourceGraphic"/></feMerge>
-    </filter>
-    
-    <filter id="glow" x="-50%" y="-50%" width="200%" height="200%">
-      <feGaussianBlur stdDeviation="15" result="coloredBlur"/>
-      <feMerge><feMergeNode in="coloredBlur"/><feMergeNode in="SourceGraphic"/></feMerge>
-    </filter>
-    
-    <!-- Medical cross pattern -->
-    <pattern id="medPattern" x="0" y="0" width="140" height="140" patternUnits="userSpaceOnUse">
-      <g opacity="0.06">
-        <path d="M60 40 L80 40 L80 60 L100 60 L100 80 L80 80 L80 100 L60 100 L60 80 L40 80 L40 60 L60 60 Z" fill="white"/>
-        <circle cx="70" cy="70" r="4" fill="${theme.accent}"/>
-      </g>
-    </pattern>
-  </defs>
-  
-  <!-- Background -->
-  <rect width="${W}" height="${H}" fill="url(#bgGrad)"/>
-  <rect width="${W}" height="${H}" fill="url(#medPattern)"/>
-  
-  <!-- Decorative glowing orbs -->
-  <circle cx="${W - 100}" cy="150" r="280" fill="url(#glowGrad)" opacity="0.7"/>
-  <circle cx="120" cy="${H - 350}" r="240" fill="url(#glowGrad)" opacity="0.5"/>
-  <circle cx="${W / 2}" cy="${H / 2}" r="200" fill="${theme.bg1}" opacity="0.15"/>
-  
-  <!-- Top wave decoration -->
-  <path d="M0,0 Q${W / 2},80 ${W},0 L${W},120 Q${W / 2},200 0,120 Z" fill="rgba(255,255,255,0.05)"/>
-  
-  <!-- Bottom wave -->
-  <path d="M0,${H - 100} Q${W / 3},${H - 180} ${W * 0.66},${H - 60} T${W},${H - 100} L${W},${H} L0,${H} Z" fill="rgba(0,0,0,0.25)"/>
-  <path d="M0,${H - 60} Q${W / 3},${H - 140} ${W * 0.66},${H - 20} T${W},${H - 60} L${W},${H} L0,${H} Z" fill="${theme.bg3}" opacity="0.6"/>
-  
-  <!-- ============ HEADER (Right side in RTL = displayed on right) ============ -->
-  <!-- Logo (top right) -->
-  ${logoDataUrl 
-    ? `<clipPath id="logoClip"><rect x="${W - 190}" y="60" width="120" height="120" rx="24"/></clipPath>
-       <image href="${logoDataUrl}" x="${W - 190}" y="60" width="120" height="120" clip-path="url(#logoClip)" preserveAspectRatio="xMidYMid slice"/>
-       <rect x="${W - 190}" y="60" width="120" height="120" rx="24" fill="none" stroke="rgba(255,255,255,0.4)" stroke-width="4"/>`
-    : `<rect x="${W - 190}" y="60" width="120" height="120" rx="24" fill="rgba(255,255,255,0.15)" stroke="rgba(255,255,255,0.4)" stroke-width="3"/>
-       <text x="${W - 130}" y="145" font-size="70" text-anchor="middle" font-family="Segoe UI Emoji, Apple Color Emoji">${theme.icon}</text>`
-  }
-  
-  <!-- Clinic name & tagline (right of logo, RTL aligned right) -->
-  <text x="${W - 220}" y="110" font-family="Cairo, Tajawal, Arial" font-size="52" font-weight="900" fill="#FFFFFF" text-anchor="end" direction="rtl">${escapeXml(clinic.name)}</text>
-  <text x="${W - 220}" y="160" font-family="Cairo, Tajawal, Arial" font-size="26" font-weight="600" fill="rgba(255,255,255,0.85)" text-anchor="end" direction="rtl">${theme.label} ${theme.icon}</text>
-  
-  <!-- Divider glow line -->
-  <line x1="60" y1="220" x2="${W - 60}" y2="220" stroke="${theme.accent}" stroke-width="3" opacity="0.6" filter="url(#glow)"/>
-  <line x1="60" y1="220" x2="${W - 60}" y2="220" stroke="url(#bgGrad)" stroke-width="1" opacity="0.9"/>
-  
-  <!-- End date badge (top left) -->
-  ${promo.end_date ? `
-    <g transform="translate(60, 90)">
-      <rect x="0" y="0" width="360" height="60" rx="30" fill="#DC2626" stroke="rgba(255,255,255,0.4)" stroke-width="2" filter="url(#dropShadow)"/>
-      <text x="180" y="40" font-family="Cairo, Arial" font-size="24" font-weight="800" fill="white" text-anchor="middle" direction="rtl">⏰ صالح حتى ${promo.end_date}</text>
-    </g>
-  ` : ""}
-  
-  <!-- ============ HERO TITLE SECTION ============ -->
-  <!-- "عرض حصري" badge -->
-  <g transform="translate(${W - 320}, 280) rotate(-3)">
-    <rect x="0" y="0" width="260" height="56" rx="12" fill="#DC2626" filter="url(#dropShadow)"/>
-    <text x="130" y="38" font-family="Cairo, Arial" font-size="24" font-weight="900" fill="white" text-anchor="middle" direction="rtl">🔥 عرض حصري</text>
-  </g>
-  
-  <!-- Main title (large, RTL) -->
-  <text x="${W - 60}" y="420" font-family="Cairo, Tajawal, Arial" font-size="82" font-weight="900" fill="#FFFFFF" text-anchor="end" direction="rtl" filter="url(#dropShadow)">${escapeXml(promo.title)}</text>
-  
-  <!-- Description -->
-  ${promo.description ? `
-    <text x="${W - 60}" y="475" font-family="Cairo, Arial" font-size="28" font-weight="500" fill="rgba(255,255,255,0.9)" text-anchor="end" direction="rtl">${escapeXml(truncate(promo.description, 55))}</text>
-  ` : ""}
-  
-  <!-- ============ DOCTOR EMOJI (Left side, large) ============ -->
-  <g transform="translate(120, 480)">
-    <!-- Glowing circle behind doctor -->
-    <circle cx="140" cy="180" r="180" fill="url(#glowGrad)" opacity="0.6"/>
-    <circle cx="140" cy="180" r="160" fill="rgba(255,255,255,0.08)" stroke="${theme.accent}" stroke-width="3" opacity="0.5"/>
-    <!-- Doctor emoji (huge) -->
-    <text x="140" y="270" font-size="240" text-anchor="middle" font-family="Segoe UI Emoji, Apple Color Emoji, Noto Color Emoji">${theme.doctorEmoji}</text>
-    <!-- Stethoscope emoji floating -->
-    <text x="60" y="120" font-size="60" opacity="0.7">🩺</text>
-    <text x="220" y="360" font-size="55" opacity="0.7">💊</text>
-  </g>
-  
-  <!-- ============ GOLDEN DISCOUNT (Right side, large 3D) ============ -->
-  <g transform="translate(${W - 400}, 560)">
-    <!-- "وفّر" label -->
-    <text x="200" y="0" font-family="Cairo, Arial" font-size="30" font-weight="700" fill="rgba(255,255,255,0.85)" text-anchor="middle" letter-spacing="8">وفّـــر</text>
-    
-    <!-- Big golden number -->
-    <text x="200" y="200" font-family="Cairo, Arial Black, Arial" font-size="240" font-weight="900" fill="url(#goldGrad)" text-anchor="middle" filter="url(#dropShadow)" stroke="#78350F" stroke-width="2">${discountNum}</text>
-    
-    <!-- Unit (% or ريال) -->
-    <text x="200" y="260" font-family="Cairo, Arial" font-size="48" font-weight="900" fill="url(#goldGrad)" text-anchor="middle" filter="url(#dropShadow)">${discountUnit}</text>
-    
-    <!-- Label below -->
-    <text x="200" y="310" font-family="Cairo, Arial" font-size="26" font-weight="800" fill="${theme.accent}" text-anchor="middle" letter-spacing="4">خصم فوري</text>
-  </g>
-  
-  <!-- ============ SERVICE CHIPS (Grid at bottom center) ============ -->
-  ${renderChips(finalItems, W, theme)}
-  
-  <!-- ============ BOTTOM CARD (QR + Contact) ============ -->
-  <g transform="translate(60, ${H - 340})">
-    <!-- Card background -->
-    <rect x="0" y="0" width="${W - 120}" height="240" rx="30" fill="url(#cardGrad)" stroke="rgba(255,255,255,0.2)" stroke-width="2" filter="url(#dropShadow)"/>
-    
-    <!-- QR container (left side) -->
-    <rect x="30" y="30" width="180" height="180" rx="16" fill="white" stroke="${theme.accent}" stroke-width="4"/>
-    ${qrDataUrl ? `<image href="${qrDataUrl}" x="40" y="40" width="160" height="160"/>` : `<text x="120" y="130" font-size="80" text-anchor="middle">📱</text>`}
-    <text x="120" y="230" font-family="Cairo, Arial" font-size="16" font-weight="700" fill="${theme.accent}" text-anchor="middle">📱 امسح واحجز</text>
-    
-    <!-- Contact info (right side, RTL) -->
-    ${promo.code ? `
-      <g transform="translate(${W - 180}, 55)">
-        <rect x="-330" y="0" width="330" height="60" rx="14" fill="rgba(251, 191, 36, 0.15)" stroke="${theme.accent}" stroke-width="2"/>
-        <text x="-20" y="25" font-family="Cairo, Arial" font-size="16" font-weight="600" fill="rgba(255,255,255,0.7)" text-anchor="end" direction="rtl">كود الخصم</text>
-        <text x="-20" y="52" font-family="Courier New, monospace" font-size="30" font-weight="900" fill="${theme.accent}" text-anchor="end" letter-spacing="4">${escapeXml(promo.code)}</text>
-      </g>
-    ` : ""}
-    
-    ${(promo as any).phone_text ? `
-      <g transform="translate(${W - 180}, ${promo.code ? 135 : 75})">
-        <rect x="-330" y="0" width="330" height="55" rx="14" fill="rgba(16, 185, 129, 0.15)" stroke="#10B981" stroke-width="2"/>
-        <circle cx="-30" cy="27" r="18" fill="#10B981"/>
-        <text x="-30" y="35" font-size="20" text-anchor="middle">📞</text>
-        <text x="-70" y="37" font-family="Cairo, Arial" font-size="28" font-weight="800" fill="white" text-anchor="end" direction="ltr">${escapeXml((promo as any).phone_text)}</text>
-      </g>
-    ` : ""}
-    
-    ${!promo.code && !(promo as any).phone_text ? `
-      <text x="${(W - 120) / 2 + 100}" y="125" font-family="Cairo, Arial" font-size="26" font-weight="800" fill="white" text-anchor="middle" direction="rtl">احجز موعدك الآن</text>
-      <text x="${(W - 120) / 2 + 100}" y="165" font-family="Cairo, Arial" font-size="22" font-weight="600" fill="${theme.accent}" text-anchor="middle" direction="rtl">عن طريق موظفنا الآلي الذكي 🤖</text>
-    ` : ""}
-  </g>
-  
-  <!-- ============ FOOTER ============ -->
-  <text x="${W / 2}" y="${H - 40}" font-family="Cairo, Arial" font-size="18" font-weight="500" fill="rgba(255,255,255,0.4)" text-anchor="middle" letter-spacing="1" direction="rtl">© ${new Date().getFullYear()} ${escapeXml(clinic.name)} — نظام العيادة الذكي</text>
-</svg>
-      `.trim();
+      let logoImg: HTMLImageElement | null = null;
+      if (clinic.logo_url) {
+        logoImg = await loadImage(clinic.logo_url);
+      }
 
-      // Convert SVG string to canvas via Image
-      const svgBlob = new Blob([svgString], { type: "image/svg+xml;charset=utf-8" });
-      const svgUrl = URL.createObjectURL(svgBlob);
+      const headerY = 70;
+      const logoSize = 110;
 
-      const img = new window.Image();
-      img.crossOrigin = "anonymous";
-      
-      await new Promise<void>((resolve, reject) => {
-        img.onload = () => resolve();
-        img.onerror = (e) => reject(new Error("فشل تحميل SVG"));
-        img.src = svgUrl;
+      // Center logo horizontally
+      if (logoImg) {
+        // White background for logo
+        ctx.save();
+        ctx.shadowColor = "rgba(0, 0, 0, 0.2)";
+        ctx.shadowBlur = 15;
+        ctx.shadowOffsetY = 5;
+        ctx.fillStyle = "white";
+        roundRect(W / 2 - logoSize / 2 - 8, headerY - 8, logoSize + 16, logoSize + 16, 20);
+        ctx.fill();
+        ctx.restore();
+
+        // Clip and draw logo
+        ctx.save();
+        roundRect(W / 2 - logoSize / 2, headerY, logoSize, logoSize, 16);
+        ctx.clip();
+        ctx.drawImage(logoImg, W / 2 - logoSize / 2, headerY, logoSize, logoSize);
+        ctx.restore();
+      } else {
+        // Fallback: colored circle with icon
+        ctx.save();
+        ctx.shadowColor = "rgba(0, 0, 0, 0.2)";
+        ctx.shadowBlur = 15;
+        ctx.fillStyle = "white";
+        ctx.beginPath();
+        ctx.arc(W / 2, headerY + logoSize / 2, logoSize / 2, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.restore();
+
+        ctx.font = "70px 'Segoe UI Emoji', 'Apple Color Emoji', Arial";
+        ctx.textAlign = "center";
+        ctx.textBaseline = "middle";
+        ctx.fillText(theme.icon, W / 2, headerY + logoSize / 2 + 5);
+      }
+
+      // Clinic name (Arabic, centered)
+      ctx.font = "bold 56px 'Cairo', 'Tajawal', 'Segoe UI', Arial";
+      ctx.fillStyle = "#FFFFFF";
+      ctx.textAlign = "center";
+      ctx.textBaseline = "top";
+      ctx.direction = "rtl";
+      ctx.shadowColor = "rgba(0, 0, 0, 0.3)";
+      ctx.shadowBlur = 8;
+      ctx.shadowOffsetY = 3;
+      ctx.fillText(clinic.name, W / 2, headerY + logoSize + 20);
+      ctx.shadowColor = "transparent";
+
+      // English/Label subtitle
+      ctx.font = "500 26px 'Cairo', 'Tajawal', Arial";
+      ctx.fillStyle = "rgba(255, 255, 255, 0.9)";
+      ctx.fillText(theme.label, W / 2, headerY + logoSize + 90);
+
+      // ============================================================
+      // STEP 3: End date badge (top right corner)
+      // ============================================================
+      if (promo.end_date) {
+        ctx.save();
+        const badgeW = 320;
+        const badgeH = 55;
+        const badgeX = 40;
+        const badgeY = 40;
+
+        ctx.shadowColor = "rgba(220, 38, 38, 0.4)";
+        ctx.shadowBlur = 15;
+        ctx.fillStyle = "#DC2626";
+        roundRect(badgeX, badgeY, badgeW, badgeH, 27);
+        ctx.fill();
+        ctx.shadowColor = "transparent";
+
+        ctx.font = "bold 22px 'Cairo', 'Tajawal', Arial";
+        ctx.fillStyle = "white";
+        ctx.textAlign = "center";
+        ctx.textBaseline = "middle";
+        ctx.direction = "rtl";
+        ctx.fillText(`⏰ صالح حتى ${promo.end_date}`, badgeX + badgeW / 2, badgeY + badgeH / 2);
+        ctx.restore();
+      }
+
+      // ============================================================
+      // STEP 4: Load doctor image (center-left of canvas)
+      // ============================================================
+      const doctorImg = await loadImage(theme.doctorImg);
+      const doctorX = 80;
+      const doctorY = 350;
+      const doctorW = 520;
+      const doctorH = 780;
+
+      if (doctorImg) {
+        // Draw doctor with soft edge fade
+        ctx.save();
+
+        // Create soft rounded mask
+        const grad = ctx.createLinearGradient(doctorX, doctorY, doctorX, doctorY + doctorH);
+        grad.addColorStop(0, "rgba(0,0,0,1)");
+        grad.addColorStop(0.85, "rgba(0,0,0,1)");
+        grad.addColorStop(1, "rgba(0,0,0,0)");
+
+        // Draw image
+        const aspectRatio = doctorImg.width / doctorImg.height;
+        let drawW = doctorW;
+        let drawH = doctorW / aspectRatio;
+        if (drawH < doctorH) {
+          drawH = doctorH;
+          drawW = doctorH * aspectRatio;
+        }
+        const offsetX = doctorX - (drawW - doctorW) / 2;
+        const offsetY = doctorY - (drawH - doctorH) / 2;
+
+        ctx.drawImage(doctorImg, offsetX, offsetY, drawW, drawH);
+
+        // Apply gradient fade at bottom
+        ctx.globalCompositeOperation = "destination-in";
+        ctx.fillStyle = grad;
+        ctx.fillRect(doctorX - 100, doctorY, doctorW + 200, doctorH + 100);
+
+        ctx.restore();
+      } else {
+        // Fallback: colored placeholder with icon
+        ctx.save();
+        ctx.fillStyle = "rgba(255, 255, 255, 0.1)";
+        roundRect(doctorX, doctorY, doctorW, doctorH, 40);
+        ctx.fill();
+
+        ctx.font = "300px 'Segoe UI Emoji', 'Apple Color Emoji', Arial";
+        ctx.textAlign = "center";
+        ctx.textBaseline = "middle";
+        ctx.fillStyle = "rgba(255,255,255,0.8)";
+        ctx.fillText("👩‍⚕️", doctorX + doctorW / 2, doctorY + doctorH / 2);
+        ctx.restore();
+      }
+
+      // ============================================================
+      // STEP 5: Title on left side (above doctor)
+      // ============================================================
+      ctx.save();
+      ctx.font = "bold 62px 'Cairo', 'Tajawal', Arial";
+      ctx.fillStyle = "#FFFFFF";
+      ctx.textAlign = "right";
+      ctx.textBaseline = "top";
+      ctx.direction = "rtl";
+      ctx.shadowColor = "rgba(0, 0, 0, 0.3)";
+      ctx.shadowBlur = 10;
+      ctx.shadowOffsetY = 4;
+
+      // Break long title into lines (max 2 lines)
+      const titleLines = wrapText(ctx, promo.title, 500);
+      titleLines.slice(0, 2).forEach((line, idx) => {
+        ctx.fillText(line, W - 80, 400 + idx * 75);
+      });
+      ctx.restore();
+
+      // Description (below title, right side)
+      if (promo.description) {
+        ctx.save();
+        ctx.font = "500 26px 'Cairo', 'Tajawal', Arial";
+        ctx.fillStyle = "rgba(255, 255, 255, 0.95)";
+        ctx.textAlign = "right";
+        ctx.textBaseline = "top";
+        ctx.direction = "rtl";
+        const descLines = wrapText(ctx, promo.description, 480);
+        descLines.slice(0, 2).forEach((line, idx) => {
+          ctx.fillText(line, W - 80, 555 + idx * 38);
+        });
+        ctx.restore();
+      }
+
+      // ============================================================
+      // STEP 6: GOLDEN 3D DISCOUNT NUMBER (right side, huge)
+      // ============================================================
+      const discountX = W - 280;
+      const discountY = 720;
+
+      // "خصم" small label
+      ctx.save();
+      ctx.font = "bold 32px 'Cairo', 'Tajawal', Arial";
+      ctx.fillStyle = "rgba(255, 255, 255, 0.9)";
+      ctx.textAlign = "center";
+      ctx.textBaseline = "top";
+      ctx.direction = "rtl";
+      ctx.fillText("خصم يصل إلى", discountX, discountY - 60);
+      ctx.restore();
+
+      // The BIG golden number
+      const numStr = String(promo.discount_value);
+      const unitStr = promo.discount_type === "percentage" ? "%" : "ريال";
+
+      ctx.save();
+      // Shadow behind number (3D depth)
+      ctx.font = "900 260px 'Cairo', 'Arial Black', Arial";
+      ctx.textAlign = "center";
+      ctx.textBaseline = "top";
+      ctx.fillStyle = theme.accentDark;
+      ctx.fillText(numStr, discountX + 6, discountY + 6);
+
+      // Golden gradient number (main)
+      const goldGrad = ctx.createLinearGradient(discountX - 100, discountY, discountX - 100, discountY + 260);
+      goldGrad.addColorStop(0, "#FEF3C7");
+      goldGrad.addColorStop(0.3, "#FDE68A");
+      goldGrad.addColorStop(0.6, "#F59E0B");
+      goldGrad.addColorStop(1, "#B45309");
+      ctx.fillStyle = goldGrad;
+      ctx.fillText(numStr, discountX, discountY);
+
+      // Golden outline
+      ctx.strokeStyle = "#78350F";
+      ctx.lineWidth = 3;
+      ctx.strokeText(numStr, discountX, discountY);
+      ctx.restore();
+
+      // Unit (% or ريال) — in a golden pill below
+      ctx.save();
+      const unitW = 130;
+      const unitH = 60;
+      const unitPillX = discountX - unitW / 2;
+      const unitPillY = discountY + 280;
+
+      ctx.shadowColor = "rgba(180, 83, 9, 0.4)";
+      ctx.shadowBlur = 15;
+      const unitGrad = ctx.createLinearGradient(0, unitPillY, 0, unitPillY + unitH);
+      unitGrad.addColorStop(0, "#FDE68A");
+      unitGrad.addColorStop(1, "#B45309");
+      ctx.fillStyle = unitGrad;
+      roundRect(unitPillX, unitPillY, unitW, unitH, 30);
+      ctx.fill();
+      ctx.shadowColor = "transparent";
+
+      ctx.font = "bold 34px 'Cairo', 'Tajawal', Arial";
+      ctx.fillStyle = "#78350F";
+      ctx.textAlign = "center";
+      ctx.textBaseline = "middle";
+      ctx.direction = "rtl";
+      ctx.fillText(unitStr, discountX, unitPillY + unitH / 2);
+      ctx.restore();
+
+      // ============================================================
+      // STEP 7: SERVICE CHIPS GRID (bottom, 3 columns)
+      // ============================================================
+      const chipsStartY = 1120;
+      const chipsAreaW = W - 120;
+      const chipsAreaX = 60;
+      const chipCols = 3;
+      const chipRows = Math.min(3, Math.ceil(finalItems.length / chipCols));
+      const chipGap = 16;
+      const chipW = (chipsAreaW - (chipCols - 1) * chipGap) / chipCols;
+      const chipH = 75;
+
+      finalItems.slice(0, chipCols * chipRows).forEach((item, idx) => {
+        const row = Math.floor(idx / chipCols);
+        const col = idx % chipCols;
+        const chipX = chipsAreaX + col * (chipW + chipGap);
+        const chipY = chipsAreaY(chipsStartY, row, chipH, chipGap);
+
+        ctx.save();
+        // Chip shadow
+        ctx.shadowColor = "rgba(0, 0, 0, 0.15)";
+        ctx.shadowBlur = 10;
+        ctx.shadowOffsetY = 4;
+
+        // Chip background
+        ctx.fillStyle = theme.chipBg;
+        roundRect(chipX, chipY, chipW, chipH, 40);
+        ctx.fill();
+        ctx.shadowColor = "transparent";
+
+        // Chip border (subtle)
+        ctx.strokeStyle = "rgba(255, 255, 255, 0.5)";
+        ctx.lineWidth = 2;
+        roundRect(chipX, chipY, chipW, chipH, 40);
+        ctx.stroke();
+
+        // Chip text
+        ctx.font = "bold 26px 'Cairo', 'Tajawal', Arial";
+        ctx.fillStyle = theme.chipText;
+        ctx.textAlign = "center";
+        ctx.textBaseline = "middle";
+        ctx.direction = "rtl";
+        const displayText = truncateText(ctx, item, chipW - 30);
+        ctx.fillText(displayText, chipX + chipW / 2, chipY + chipH / 2);
+        ctx.restore();
       });
 
-      const canvas = document.createElement("canvas");
-      const scale = 2;
-      canvas.width = W * scale;
-      canvas.height = H * scale;
-      const ctx = canvas.getContext("2d")!;
-      ctx.scale(scale, scale);
-      ctx.drawImage(img, 0, 0, W, H);
+      function chipsAreaY(startY: number, row: number, h: number, gap: number) {
+        return startY + row * (h + gap);
+      }
 
-      URL.revokeObjectURL(svgUrl);
+      // ============================================================
+      // STEP 8: PHONE FOOTER (very bottom, centered pill)
+      // ============================================================
+      const phoneText = (promo as any).phone_text || "";
+      if (phoneText) {
+        const phoneY = H - 100;
+        const phoneW = 380;
+        const phoneH = 65;
+        const phoneX = W / 2 - phoneW / 2;
 
-      // Convert to bytes
+        ctx.save();
+        ctx.shadowColor = "rgba(0, 0, 0, 0.3)";
+        ctx.shadowBlur = 20;
+        ctx.shadowOffsetY = 5;
+        ctx.fillStyle = "rgba(255, 255, 255, 0.95)";
+        roundRect(phoneX, phoneY, phoneW, phoneH, 32);
+        ctx.fill();
+        ctx.shadowColor = "transparent";
+
+        // Green phone circle
+        ctx.fillStyle = "#10B981";
+        ctx.beginPath();
+        ctx.arc(phoneX + 40, phoneY + phoneH / 2, 22, 0, Math.PI * 2);
+        ctx.fill();
+
+        // Phone icon
+        ctx.font = "24px 'Segoe UI Emoji', Arial";
+        ctx.fillStyle = "white";
+        ctx.textAlign = "center";
+        ctx.textBaseline = "middle";
+        ctx.fillText("📞", phoneX + 40, phoneY + phoneH / 2 + 2);
+
+        // Phone number
+        ctx.font = "bold 34px 'Cairo', Arial";
+        ctx.fillStyle = "#0F172A";
+        ctx.textAlign = "center";
+        ctx.textBaseline = "middle";
+        ctx.direction = "ltr";
+        ctx.fillText(phoneText, phoneX + phoneW / 2 + 20, phoneY + phoneH / 2);
+        ctx.restore();
+      } else if (promo.code) {
+        // Show code instead
+        const codeY = H - 100;
+        const codeW = 380;
+        const codeH = 65;
+        const codeX = W / 2 - codeW / 2;
+
+        ctx.save();
+        ctx.shadowColor = "rgba(0, 0, 0, 0.3)";
+        ctx.shadowBlur = 20;
+        ctx.fillStyle = "rgba(255, 255, 255, 0.95)";
+        roundRect(codeX, codeY, codeW, codeH, 32);
+        ctx.fill();
+        ctx.shadowColor = "transparent";
+
+        ctx.font = "bold 22px 'Cairo', Arial";
+        ctx.fillStyle = "#6B7280";
+        ctx.textAlign = "right";
+        ctx.textBaseline = "middle";
+        ctx.direction = "rtl";
+        ctx.fillText("كود الخصم:", codeX + codeW - 20, codeY + codeH / 2);
+
+        ctx.font = "bold 34px 'Courier New', monospace";
+        ctx.fillStyle = theme.accentDark;
+        ctx.textAlign = "left";
+        ctx.fillText(promo.code, codeX + 20, codeY + codeH / 2);
+        ctx.restore();
+      } else {
+        // Generic footer
+        ctx.save();
+        ctx.font = "bold 28px 'Cairo', Arial";
+        ctx.fillStyle = "rgba(255, 255, 255, 0.95)";
+        ctx.textAlign = "center";
+        ctx.textBaseline = "middle";
+        ctx.direction = "rtl";
+        ctx.fillText("احجز الآن عن طريق موظفنا الآلي الذكي 🤖", W / 2, H - 80);
+        ctx.restore();
+      }
+
+      // ============================================================
+      // STEP 9: Convert canvas to bytes
+      // ============================================================
       const imageDataUrl = canvas.toDataURL("image/png", 1.0);
       const base64Data = imageDataUrl.split(",")[1];
       const binaryString = atob(base64Data);
@@ -845,7 +1064,9 @@ export default function SettingsPage() {
         bytes[i] = binaryString.charCodeAt(i);
       }
 
-      // Upload
+      // ============================================================
+      // STEP 10: Upload to Supabase
+      // ============================================================
       const filePath = `${clinic.id}/promo_${promo.id}.png`;
       const supabaseUrl2 = import.meta.env.VITE_SUPABASE_URL;
       const supabaseServiceKey = import.meta.env.VITE_SUPABASE_SERVICE_ROLE_KEY;
@@ -864,12 +1085,8 @@ export default function SettingsPage() {
             },
             body: bytes,
           });
-          if (uploadResponse.ok) {
-            uploadSuccess = true;
-          }
-        } catch (e) {
-          console.log("Service role upload error:", e);
-        }
+          if (uploadResponse.ok) uploadSuccess = true;
+        } catch (e) {}
       }
 
       if (!uploadSuccess) {
@@ -890,9 +1107,7 @@ export default function SettingsPage() {
             });
             if (uploadResponse.ok) uploadSuccess = true;
           }
-        } catch (e) {
-          console.log("Session upload error:", e);
-        }
+        } catch (e) {}
       }
 
       if (!uploadSuccess) {
@@ -901,9 +1116,7 @@ export default function SettingsPage() {
             .from("promo-images")
             .upload(filePath, bytes, { contentType: "image/png", upsert: true });
           if (!uploadError) uploadSuccess = true;
-        } catch (e) {
-          console.log("Client upload error:", e);
-        }
+        } catch (e) {}
       }
 
       if (!uploadSuccess) {
@@ -2047,64 +2260,36 @@ export default function SettingsPage() {
 }
 
 // ============================================================
-// HELPER FUNCTIONS (for SVG generation)
+// HELPER FUNCTIONS
 // ============================================================
-function escapeXml(unsafe: string): string {
-  if (!unsafe) return "";
-  return String(unsafe)
-    .replace(/&/g, "&amp;")
-    .replace(/</g, "&lt;")
-    .replace(/>/g, "&gt;")
-    .replace(/"/g, "&quot;")
-    .replace(/'/g, "&apos;");
+function wrapText(ctx: CanvasRenderingContext2D, text: string, maxWidth: number): string[] {
+  if (!text) return [];
+  const words = text.split(" ");
+  const lines: string[] = [];
+  let currentLine = words[0] || "";
+
+  for (let i = 1; i < words.length; i++) {
+    const testLine = currentLine + " " + words[i];
+    const metrics = ctx.measureText(testLine);
+    if (metrics.width > maxWidth && currentLine) {
+      lines.push(currentLine);
+      currentLine = words[i];
+    } else {
+      currentLine = testLine;
+    }
+  }
+  if (currentLine) lines.push(currentLine);
+  return lines;
 }
 
-function truncate(str: string, max: number): string {
-  if (!str) return "";
-  return str.length > max ? str.substring(0, max) + "..." : str;
-}
-
-function renderChips(items: string[], W: number, theme: any): string {
-  if (!items || items.length === 0) return "";
-  
-  const chipsCount = items.length;
-  const chipsPerRow = chipsCount <= 3 ? chipsCount : 3;
-  const rows = Math.ceil(chipsCount / chipsPerRow);
-  
-  const chipWidth = 280;
-  const chipHeight = 70;
-  const gap = 20;
-  const totalWidth = chipsPerRow * chipWidth + (chipsPerRow - 1) * gap;
-  const startX = (W - totalWidth) / 2;
-  const startY = 990;
-  
-  let chipsHtml = "";
-  
-  items.forEach((item, idx) => {
-    const row = Math.floor(idx / chipsPerRow);
-    const col = idx % chipsPerRow;
-    const x = startX + col * (chipWidth + gap);
-    const y = startY + row * (chipHeight + gap);
-    
-    chipsHtml += `
-      <g transform="translate(${x}, ${y})">
-        <rect x="0" y="0" width="${chipWidth}" height="${chipHeight}" rx="35" 
-              fill="${theme.chipBg}" 
-              stroke="${theme.chipBorder}" 
-              stroke-width="2.5"
-              opacity="0.95"
-              filter="url(#dropShadow)"/>
-        <circle cx="30" cy="${chipHeight / 2}" r="8" fill="${theme.accent}" opacity="0.9"/>
-        <text x="${chipWidth / 2 + 15}" y="${chipHeight / 2 + 9}" 
-              font-family="Cairo, Tajawal, Arial" 
-              font-size="24" 
-              font-weight="700" 
-              fill="white" 
-              text-anchor="middle" 
-              direction="rtl">${escapeXml(truncate(item, 20))}</text>
-      </g>
-    `;
-  });
-  
-  return chipsHtml;
+function truncateText(ctx: CanvasRenderingContext2D, text: string, maxWidth: number): string {
+  if (!text) return "";
+  let result = text;
+  while (ctx.measureText(result).width > maxWidth && result.length > 0) {
+    result = result.substring(0, result.length - 1);
+  }
+  if (result.length < text.length) {
+    result = result.substring(0, result.length - 1) + "…";
+  }
+  return result;
 }
