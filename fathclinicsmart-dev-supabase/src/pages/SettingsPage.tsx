@@ -17,11 +17,15 @@ import {
 import {
   Stethoscope, LogOut, ArrowRight, Save, Copy, Check, Link2, Key, Plus, Trash2, Loader2,
   Bot, Building2, CreditCard, Shield, Clock, Activity, Sparkles, Upload, Image, QrCode,
-  Download, CalendarClock, Tag, Gift, BadgePercent, ImagePlus, X, Edit, Eye,
+  Download, CalendarClock, Tag, Gift, BadgePercent, ImagePlus, X, Edit,
 } from "lucide-react";
 import html2canvas from "html2canvas";
 
-interface Service { id: string; name: string; price: number | null; }
+interface Service {
+  id: string;
+  name: string;
+  price: number | null;
+}
 
 interface Promotion {
   id: string;
@@ -51,9 +55,9 @@ export default function SettingsPage() {
   const promoImageInputRef = useRef<HTMLInputElement>(null);
 
   const [clinicName, setClinicName] = useState("");
+  const [clinicSpecialty, setClinicSpecialty] = useState<string>("general");
   const [botToken, setBotToken] = useState("");
   const [logoUrl, setLogoUrl] = useState<string | null>(null);
-  const [clinicSpecialty, setClinicSpecialty] = useState<string>("general");
   const [services, setServices] = useState<Service[]>([]);
   const [newServiceName, setNewServiceName] = useState("");
   const [newServicePrice, setNewServicePrice] = useState("");
@@ -95,8 +99,9 @@ export default function SettingsPage() {
   const supabaseUrl = import.meta.env.VITE_SUPABASE_URL;
   const supabaseAnonKey = import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY;
 
-  // --- UseEffects ---
-  useEffect(() => { if (!authLoading && !user) navigate("/auth"); }, [user, authLoading, navigate]);
+  useEffect(() => {
+    if (!authLoading && !user) navigate("/auth");
+  }, [user, authLoading, navigate]);
 
   useEffect(() => {
     const checkAdmin = async () => {
@@ -110,10 +115,10 @@ export default function SettingsPage() {
   useEffect(() => {
     if (clinic) {
       setClinicName(clinic.name || "");
+      setClinicSpecialty((clinic as any).specialty || "general");
       setBotToken((clinic as any).bot_token || "");
       setLogoUrl(clinic.logo_url || null);
       setBotUsername((clinic as any).bot_username || null);
-      setClinicSpecialty((clinic as any).specialty || "general");
       setVoiceAgentEnabled(!!(clinic as any).voice_agent_enabled);
       setVoiceTone((clinic as any).voice_tone || "ودود ومحترم");
       setVoiceMode((clinic as any).voice_mode || "auto");
@@ -126,7 +131,6 @@ export default function SettingsPage() {
     }
   }, [clinic]);
 
-  // --- Existing Functions ---
   const fetchStaff = async () => {
     if (!clinic) return;
     const { data } = await supabase.from("clinic_staff").select("id,email,role,approved,created_at")
@@ -159,16 +163,32 @@ export default function SettingsPage() {
     } finally { setStaffBusy(false); }
   };
 
-  const approveStaff = async (id: string) => { await supabase.rpc("approve_clinic_staff", { staff_id: id } as any); toast({ title: "تم الاعتماد ✓" }); fetchStaff(); };
-  const revokeStaff = async (id: string) => { await supabase.rpc("revoke_clinic_staff", { staff_id: id } as any); toast({ title: "تم التعليق" }); fetchStaff(); };
-  const removeStaff = async (id: string) => { await supabase.rpc("remove_clinic_staff", { staff_id: id } as any); toast({ title: "تم الحذف" }); fetchStaff(); };
+  const approveStaff = async (id: string) => {
+    await supabase.rpc("approve_clinic_staff", { staff_id: id } as any);
+    toast({ title: "تم الاعتماد ✓" });
+    fetchStaff();
+  };
+  const revokeStaff = async (id: string) => {
+    await supabase.rpc("revoke_clinic_staff", { staff_id: id } as any);
+    toast({ title: "تم التعليق" });
+    fetchStaff();
+  };
+  const removeStaff = async (id: string) => {
+    await supabase.rpc("remove_clinic_staff", { staff_id: id } as any);
+    toast({ title: "تم الحذف" });
+    fetchStaff();
+  };
 
   const refreshBotUsername = async () => {
     setLoadingBotInfo(true);
     const r = await invokeBotAction("bot-info");
     setLoadingBotInfo(false);
-    if (r.ok && r.data?.username) { setBotUsername(r.data.username); toast({ title: "تم جلب اسم البوت ✓", description: `@${r.data.username}` }); }
-    else toast({ title: "تعذّر جلب اسم البوت", description: r.error || "احفظ توكن البوت أولاً", variant: "destructive" });
+    if (r.ok && r.data?.username) {
+      setBotUsername(r.data.username);
+      toast({ title: "تم جلب اسم البوت ✓", description: `@${r.data.username}` });
+    } else {
+      toast({ title: "تعذّر جلب اسم البوت", description: r.error || "احفظ توكن البوت أولاً", variant: "destructive" });
+    }
   };
 
   const downloadQr = () => {
@@ -188,22 +208,42 @@ export default function SettingsPage() {
   };
 
   const handleSaveClinic = async () => {
-    if (!clinic) { toast({ title: "تعذر تحميل العيادة", description: "أعد تحميل الصفحة.", variant: "destructive" }); return; }
+    if (!clinic) {
+      toast({ title: "تعذر تحميل العيادة", description: "أعد تحميل الصفحة.", variant: "destructive" });
+      return;
+    }
     setSaving(true);
-    try { await supabase.rpc("save_clinic_vault", { bot_token: botToken || null } as any); } catch (e) { console.warn("vault save failed", e); }
+    try {
+      await supabase.rpc("save_clinic_vault", { bot_token: botToken || null } as any);
+    } catch (e) {
+      console.warn("vault save failed", e);
+    }
     const { error } = await updateClinic({
-      name: clinicName, bot_token: botToken,
+      name: clinicName,
       specialty: clinicSpecialty,
-      voice_agent_enabled: voiceAgentEnabled, voice_tone: voiceTone, voice_mode: voiceMode,
+      bot_token: botToken,
+      voice_agent_enabled: voiceAgentEnabled,
+      voice_tone: voiceTone,
+      voice_mode: voiceMode,
       receptionist_whatsapp: receptionistWhatsapp || null,
-      working_hours_start: workingHoursStart, working_hours_end: workingHoursEnd,
+      working_hours_start: workingHoursStart,
+      working_hours_end: workingHoursEnd,
     } as any);
-    if (error) { setSaving(false); toast({ title: "خطأ", description: error.message || "فشل في حفظ الإعدادات", variant: "destructive" }); return; }
+    if (error) {
+      setSaving(false);
+      toast({ title: "خطأ", description: error.message || "فشل في حفظ الإعدادات", variant: "destructive" });
+      return;
+    }
     if (botToken && botToken.trim().length > 10) {
       const hookResult = await invokeBotAction("set-webhook");
-      if (!hookResult.ok) toast({ title: "تم الحفظ - تنبيه", description: "تم حفظ التوكن لكن فشل ضبط webhook", variant: "destructive" });
-      else toast({ title: "تم الحفظ ✓", description: "تم حفظ الإعدادات وربط البوت بنجاح" });
-    } else toast({ title: "تم الحفظ ✓", description: "تم حفظ إعدادات العيادة بنجاح" });
+      if (!hookResult.ok) {
+        toast({ title: "تم الحفظ - تنبيه", description: "تم حفظ التوكن لكن فشل ضبط webhook", variant: "destructive" });
+      } else {
+        toast({ title: "تم الحفظ ✓", description: "تم حفظ الإعدادات وربط البوت بنجاح" });
+      }
+    } else {
+      toast({ title: "تم الحفظ ✓", description: "تم حفظ إعدادات العيادة بنجاح" });
+    }
     setSaving(false);
   };
 
@@ -224,7 +264,10 @@ export default function SettingsPage() {
 
   const handleCheckWebhook = async () => {
     const r = await invokeBotAction("webhook-info");
-    if (!r.ok) { toast({ title: "تعذّر فحص الـ Webhook", description: r.error, variant: "destructive" }); return; }
+    if (!r.ok) {
+      toast({ title: "تعذّر فحص الـ Webhook", description: r.error, variant: "destructive" });
+      return;
+    }
     const info = r.data?.info?.result || {};
     const desc = info.url
       ? `✓ مرتبط بـ: ${info.url}\nآخر خطأ: ${info.last_error_message || "لا يوجد"}\nمعلق: ${info.pending_update_count ?? 0}`
@@ -244,56 +287,88 @@ export default function SettingsPage() {
     const fileExt = file.name.split(".").pop();
     const filePath = `${user.id}/logo.${fileExt}`;
     const { error: uploadError } = await supabase.storage.from("clinic-logos").upload(filePath, file, { upsert: true });
-    if (uploadError) { toast({ title: "خطأ", description: friendlyStorageError(uploadError.message), variant: "destructive" }); setUploadingLogo(false); return; }
+    if (uploadError) {
+      toast({ title: "خطأ", description: "فشل في رفع الشعار", variant: "destructive" });
+      setUploadingLogo(false);
+      return;
+    }
     const { data: { publicUrl } } = supabase.storage.from("clinic-logos").getPublicUrl(filePath);
     const { error: updateError } = await supabase.from("clinics").update({ logo_url: publicUrl }).eq("id", clinic.id).eq("owner_id", user.id);
-    if (updateError) toast({ title: "خطأ", description: "فشل في حفظ رابط الشعار", variant: "destructive" });
-    else { setLogoUrl(publicUrl); toast({ title: "تم الرفع ✓", description: "تم رفع شعار العيادة بنجاح" }); }
-    setUploadingLogo(false);
-  };
-
-  const friendlyStorageError = (msg: string): string => {
-    if (msg.includes("row-level security") || msg.includes("security policy")) {
-      return "سياسات الرفع غير مفعّلة بعد: نفّذ ملف SQL الخاص بإصلاح RLS في Supabase ثم أعد المحاولة.";
+    if (updateError) {
+      toast({ title: "خطأ", description: "فشل في حفظ رابط الشعار", variant: "destructive" });
+    } else {
+      setLogoUrl(publicUrl);
+      toast({ title: "تم الرفع ✓", description: "تم رفع شعار العيادة بنجاح" });
     }
-    return msg || "فشل الرفع";
+    setUploadingLogo(false);
   };
 
   const handleAddService = async () => {
     if (!clinic || !newServiceName.trim()) return;
     const trimmedPrice = newServicePrice.trim();
     const priceValue = trimmedPrice === "" ? null : parseFloat(trimmedPrice);
-    if (trimmedPrice !== "" && (Number.isNaN(priceValue) || (priceValue as number) < 0)) { toast({ title: "خطأ", description: "السعر غير صالح", variant: "destructive" }); return; }
+    if (trimmedPrice !== "" && (Number.isNaN(priceValue) || (priceValue as number) < 0)) {
+      toast({ title: "خطأ", description: "السعر غير صالح", variant: "destructive" });
+      return;
+    }
     const { error } = await supabase.from("services").insert({ clinic_id: clinic.id, name: newServiceName.trim(), price: priceValue });
-    if (error) toast({ title: "خطأ", description: error.message || "فشل في إضافة الخدمة", variant: "destructive" });
-    else { setNewServiceName(""); setNewServicePrice(""); fetchServices(); toast({ title: "تمت الإضافة ✓", description: "تمت إضافة الخدمة بنجاح" }); }
+    if (error) {
+      toast({ title: "خطأ", description: error.message || "فشل في إضافة الخدمة", variant: "destructive" });
+    } else {
+      setNewServiceName(""); setNewServicePrice("");
+      fetchServices();
+      toast({ title: "تمت الإضافة ✓", description: "تمت إضافة الخدمة بنجاح" });
+    }
   };
 
   const handleDeleteService = async (id: string) => {
     const { error } = await supabase.from("services").delete().eq("id", id).eq("clinic_id", clinic?.id || "");
-    if (error) toast({ title: "خطأ", description: "فشل في حذف الخدمة", variant: "destructive" });
-    else { fetchServices(); toast({ title: "تم الحذف", description: "تم حذف الخدمة بنجاح" }); }
+    if (error) {
+      toast({ title: "خطأ", description: "فشل في حذف الخدمة", variant: "destructive" });
+    } else {
+      fetchServices();
+      toast({ title: "تم الحذف", description: "تم حذف الخدمة بنجاح" });
+    }
   };
 
-  // 🆕 Promotion Handlers
+  // ─── Promotion Handlers ───
   const resetPromoForm = () => {
-    setPromoForm({ discount_type: "percentage", is_active: true, per_user_limit: 1, template: "auto", items: "", phone_text: "" });
-    setPromoImageFile(null); setPromoImagePreview(null); setEditingPromo(null);
+    setPromoForm({
+      discount_type: "percentage",
+      is_active: true,
+      per_user_limit: 1,
+      template: "auto",
+      items: "",
+      phone_text: "",
+    });
+    setPromoImageFile(null);
+    setPromoImagePreview(null);
+    setEditingPromo(null);
   };
 
   const openPromoDialog = (promo?: Promotion) => {
     if (promo) {
       setEditingPromo(promo);
       setPromoForm({
-        title: promo.title, description: promo.description || "",
-        discount_type: promo.discount_type, discount_value: promo.discount_value,
-        code: promo.code || "", start_date: promo.start_date || "", end_date: promo.end_date || "",
-        usage_limit: promo.usage_limit || undefined, per_user_limit: promo.per_user_limit || 1,
-        is_active: promo.is_active, image_url: promo.image_url || "",
-        template: promo.template || "auto", items: promo.items || "", phone_text: promo.phone_text || "",
+        title: promo.title,
+        description: promo.description || "",
+        discount_type: promo.discount_type,
+        discount_value: promo.discount_value,
+        code: promo.code || "",
+        start_date: promo.start_date || "",
+        end_date: promo.end_date || "",
+        usage_limit: promo.usage_limit || undefined,
+        per_user_limit: promo.per_user_limit || 1,
+        is_active: promo.is_active,
+        image_url: promo.image_url || "",
+        template: promo.template || "auto",
+        items: promo.items || "",
+        phone_text: promo.phone_text || "",
       });
       if (promo.image_url) setPromoImagePreview(promo.image_url);
-    } else resetPromoForm();
+    } else {
+      resetPromoForm();
+    }
     setPromoDialogOpen(true);
   };
 
@@ -326,20 +401,35 @@ export default function SettingsPage() {
         const fileExt = promoImageFile.name.split(".").pop();
         const filePath = `${clinic.id}/promo_${Date.now()}.${fileExt}`;
         const { error: uploadError } = await supabase.storage.from("promo-images").upload(filePath, promoImageFile, { upsert: true });
-        if (uploadError) { toast({ title: "خطأ في رفع الصورة", description: friendlyStorageError(uploadError.message), variant: "destructive" }); setUploadingPromoImage(false); return; }
+        if (uploadError) {
+          toast({ title: "خطأ في رفع الصورة", description: uploadError.message, variant: "destructive" });
+          setUploadingPromoImage(false);
+          return;
+        }
         const { data: { publicUrl } } = supabase.storage.from("promo-images").getPublicUrl(filePath);
         imageUrl = publicUrl;
-      } catch (err: any) { toast({ title: "خطأ", description: friendlyStorageError(err.message), variant: "destructive" }); setUploadingPromoImage(false); return; }
+      } catch (err: any) {
+        toast({ title: "خطأ", description: err.message || "فشل رفع الصورة", variant: "destructive" });
+        setUploadingPromoImage(false);
+        return;
+      }
     }
     const payload = {
       clinic_id: clinic.id,
-      title: promoForm.title, description: promoForm.description || null,
-      discount_type: promoForm.discount_type, discount_value: promoForm.discount_value,
-      code: promoForm.code || null, start_date: promoForm.start_date || null, end_date: promoForm.end_date || null,
-      usage_limit: promoForm.usage_limit || null, per_user_limit: promoForm.per_user_limit || 1,
+      title: promoForm.title,
+      description: promoForm.description || null,
+      discount_type: promoForm.discount_type,
+      discount_value: promoForm.discount_value,
+      code: promoForm.code || null,
+      start_date: promoForm.start_date || null,
+      end_date: promoForm.end_date || null,
+      usage_limit: promoForm.usage_limit || null,
+      per_user_limit: promoForm.per_user_limit || 1,
       is_active: promoForm.is_active !== undefined ? promoForm.is_active : true,
       image_url: imageUrl,
-      template: promoForm.template || "auto", items: promoForm.items || null, phone_text: promoForm.phone_text || null,
+      template: promoForm.template || "auto",
+      items: promoForm.items || null,
+      phone_text: promoForm.phone_text || null,
     };
     let error;
     if (editingPromo) {
@@ -351,10 +441,12 @@ export default function SettingsPage() {
     }
     setUploadingPromoImage(false);
     if (error) {
-      toast({ title: "خطأ", description: error.message?.includes("row-level security") ? friendlyStorageError(error.message) : "فشل حفظ العرض: " + error.message, variant: "destructive" });
+      toast({ title: "خطأ", description: "فشل حفظ العرض: " + error.message, variant: "destructive" });
     } else {
       toast({ title: "تم الحفظ ✓", description: "تم حفظ العرض بنجاح — يمكنك الآن توليد صورة إعلانية احترافية" });
-      setPromoDialogOpen(false); resetPromoForm(); fetchPromotions();
+      setPromoDialogOpen(false);
+      resetPromoForm();
+      fetchPromotions();
     }
   };
 
@@ -366,30 +458,26 @@ export default function SettingsPage() {
 
   const togglePromoStatus = async (id: string, currentStatus: boolean) => {
     const { error } = await supabase.from("promotions").update({ is_active: !currentStatus }).eq("id", id);
-    if (error) toast({ title: "خطأ", description: "فشل تغيير حالة العرض", variant: "destructive" });
-    else { toast({ title: "تم التحديث", description: `تم ${!currentStatus ? "تفعيل" : "إيقاف"} العرض` }); fetchPromotions(); }
+    if (error) {
+      toast({ title: "خطأ", description: "فشل تغيير حالة العرض", variant: "destructive" });
+    } else {
+      toast({ title: "تم التحديث", description: `تم ${!currentStatus ? "تفعيل" : "إيقاف"} العرض` });
+      fetchPromotions();
+    }
   };
 
   const deletePromo = async (id: string) => {
     if (!confirm("هل أنت متأكد من حذف هذا العرض؟")) return;
     const { error } = await supabase.from("promotions").delete().eq("id", id);
-    if (error) toast({ title: "خطأ", description: "فشل حذف العرض", variant: "destructive" });
-    else { toast({ title: "تم الحذف", description: "تم حذف العرض بنجاح" }); fetchPromotions(); }
+    if (error) {
+      toast({ title: "خطأ", description: "فشل حذف العرض", variant: "destructive" });
+    } else {
+      toast({ title: "تم الحذف", description: "تم حذف العرض بنجاح" });
+      fetchPromotions();
+    }
   };
 
-  function detectCategory(text: string): string {
-    const lower = text.toLowerCase();
-    if (lower.includes("اسنان") || lower.includes("dental") || lower.includes("سن") || lower.includes("ضرس") || lower.includes("أسنان")) return "dental";
-    if (lower.includes("جلد") || lower.includes("dermatology") || lower.includes("بشرة") || lower.includes("حبوب") || lower.includes("جلدية")) return "dermatology";
-    if (lower.includes("نساء") || lower.includes("ولادة") || lower.includes("gynecology") || lower.includes("حمل")) return "gynecology";
-    if (lower.includes("عيون") || lower.includes("ophthalmology") || lower.includes("نظر")) return "ophthalmology";
-    if (lower.includes("تجميل") || lower.includes("cosmetic") || lower.includes("ليزر") || lower.includes("تحاليل") || lower.includes("مختبر")) return "cosmetic";
-    return "general";
-  }
-
-  // ============================================================
-  // 🔥 IMPROVED: generatePromoImage using html2canvas with upsert
-  // ============================================================
+  // ─── دالة توليد الصورة المحسّنة (باستخدام html2canvas) ───
   const generatePromoImage = async (promo: Promotion) => {
     if (!clinic) {
       toast({ title: "خطأ", description: "لم يتم تحميل بيانات العيادة", variant: "destructive" });
@@ -398,43 +486,38 @@ export default function SettingsPage() {
     setGeneratingPromoImage(true);
 
     try {
-      // 1. تحديد التخصص الفعلي
-      const specialty = clinicSpecialty || detectCategory(promo.title + " " + (promo.description || ""));
+      // 1. تحديد تخصص العيادة (افتراضي: "general")
+      const specialty = clinicSpecialty || (clinic as any).specialty || "general";
 
       // 2. قائمة الثيمات حسب التخصص
       const themes: Record<string, any> = {
         dental: {
           background: "linear-gradient(145deg, #0b2a3b 0%, #1a4a6e 40%, #2c6f8f 100%)",
           accentColor: "#4fc3f7",
-          imageKeyword: "dentist+checking+patient",
           overlayImage: "https://images.unsplash.com/photo-1606811841689-23dfddce3e95?w=800&h=600&fit=crop",
           icon: "🦷",
         },
         dermatology: {
           background: "linear-gradient(145deg, #2d1b3d 0%, #4a2c5e 40%, #6b3f8a 100%)",
           accentColor: "#ce93d8",
-          imageKeyword: "dermatologist+examining",
           overlayImage: "https://images.unsplash.com/photo-1582750433449-648ed127bb54?w=800&h=600&fit=crop",
           icon: "✨",
         },
         gynecology: {
           background: "linear-gradient(145deg, #1e3a4a 0%, #2d5a6e 40%, #4a7d94 100%)",
           accentColor: "#f48fb1",
-          imageKeyword: "gynecologist+ultrasound",
           overlayImage: "https://images.unsplash.com/photo-1579684385127-1ef15d508118?w=800&h=600&fit=crop",
           icon: "👩‍⚕️",
         },
         ophthalmology: {
           background: "linear-gradient(145deg, #0d2b45 0%, #1a4a6e 40%, #2b6f8a 100%)",
           accentColor: "#4dd0e1",
-          imageKeyword: "eye+doctor+examining",
           overlayImage: "https://images.unsplash.com/photo-1596178060671-7a80dc8059ea?w=800&h=600&fit=crop",
           icon: "👁️",
         },
         general: {
           background: "linear-gradient(145deg, #0a0f1f 0%, #141e33 40%, #0d2b3e 100%)",
           accentColor: "#fbbf24",
-          imageKeyword: "doctor+with+stethoscope",
           overlayImage: "https://images.unsplash.com/photo-1629909613654-28e377c37b09?w=800&h=600&fit=crop",
           icon: "🏥",
         },
@@ -458,7 +541,7 @@ export default function SettingsPage() {
             .filter(Boolean)
         : [];
 
-      const servicesItems = services.map(s => s.name);
+      const servicesItems = services.map((s) => s.name);
       const finalItems = itemsList.length > 0 ? itemsList : servicesItems.slice(0, 5);
 
       // 4. بناء القالب HTML
@@ -480,26 +563,14 @@ export default function SettingsPage() {
         display: flex;
         flex-direction: column;
         overflow: hidden;
+        z-index: 99999;
       `;
 
-      // طبقة الخلفية مع تأثير ضبابي
-      const overlayStyle = `
-        position: absolute;
-        top: 0;
-        left: 0;
-        right: 0;
-        bottom: 0;
-        background: rgba(0,0,0,0.25);
-        backdrop-filter: blur(2px);
-        z-index: 0;
-      `;
-
-      // شعار العيادة
+      // 5. عناصر القالب
       const logoHtml = clinic.logo_url
         ? `<img src="${clinic.logo_url}" style="width: 90px; height: 90px; border-radius: 24px; object-fit: cover; border: 3px solid rgba(255,255,255,0.3); box-shadow: 0 8px 30px rgba(0,0,0,0.4);" crossorigin="anonymous" />`
         : `<div style="width: 90px; height: 90px; background: rgba(255,255,255,0.12); border-radius: 24px; display: flex; align-items: center; justify-content: center; font-size: 56px; border: 3px solid rgba(255,255,255,0.2); backdrop-filter: blur(8px);">${theme.icon}</div>`;
 
-      // تاريخ الصلاحية
       const endDateHtml = promo.end_date
         ? `<div style="display: flex; align-items: center; gap: 8px; background: rgba(239, 68, 68, 0.15); backdrop-filter: blur(12px); padding: 8px 20px; border-radius: 40px; border: 1px solid rgba(239, 68, 68, 0.2);">
             <span style="font-size: 24px;">📅</span>
@@ -507,7 +578,6 @@ export default function SettingsPage() {
           </div>`
         : "";
 
-      // كود الخصم
       const codeHtml = promo.code
         ? `<div style="display: flex; align-items: center; gap: 16px; background: rgba(255,255,255,0.08); backdrop-filter: blur(16px); padding: 12px 28px; border-radius: 20px; border: 1px solid rgba(255,255,255,0.15);">
             <span style="font-size: 24px; color: rgba(255,255,255,0.7);">🔑</span>
@@ -515,7 +585,6 @@ export default function SettingsPage() {
           </div>`
         : "";
 
-      // رقم الهاتف
       const phoneHtml = (promo as any).phone_text
         ? `<div style="display: flex; align-items: center; gap: 12px; font-size: 32px; font-weight: 700; color: rgba(255,255,255,0.9);">
             <span>📞</span>
@@ -523,7 +592,6 @@ export default function SettingsPage() {
           </div>`
         : "";
 
-      // عناصر الخدمة (chips)
       const chipsHtml =
         finalItems.length > 0
           ? finalItems
@@ -534,28 +602,17 @@ export default function SettingsPage() {
               .join("")
           : "";
 
-      // QR Code
-      const effectiveBotUsername = botUsername || "SmartClinc_bot";
-      const qrLink = `https://t.me/${effectiveBotUsername}?start=clinic_${clinic.id}`;
+      const qrLink = `https://t.me/${botUsername || "SmartClinc_bot"}?start=clinic_${clinic.id}`;
       const qrCodeHtml = `<img src="https://api.qrserver.com/v1/create-qr-code/?size=180x180&data=${encodeURIComponent(
         qrLink
       )}&color=000000&bgcolor=FFFFFF&margin=2&qzone=1" style="width: 170px; height: 170px; border-radius: 24px; background: white; padding: 8px; border: 3px solid rgba(255,255,255,0.2); box-shadow: 0 10px 40px rgba(0,0,0,0.3);" crossorigin="anonymous" />`;
 
-      // صورة الخلفية التوضيحية (من Unsplash)
-      const bgImage = theme.overlayImage;
-
-      // تجميع القالب النهائي
+      // 6. تجميع القالب
       container.innerHTML = `
-        <!-- طبقة الخلفية -->
-        <div style="${overlayStyle}"></div>
-        
-        <!-- صورة الخلفية التوضيحية -->
-        <div style="position: absolute; top: 0; left: 0; right: 0; bottom: 0; z-index: 0; opacity: 0.1; background: url('${bgImage}') center/cover no-repeat; filter: blur(4px);"></div>
+        <div style="position: absolute; top: 0; left: 0; right: 0; bottom: 0; background: rgba(0,0,0,0.25); backdrop-filter: blur(2px); z-index: 0;"></div>
+        <div style="position: absolute; top: 0; left: 0; right: 0; bottom: 0; z-index: 0; opacity: 0.12; background: url('${theme.overlayImage}') center/cover no-repeat; filter: blur(4px);"></div>
 
-        <!-- المحتوى الأساسي -->
         <div style="position: relative; z-index: 1; display: flex; flex-direction: column; height: 100%;">
-          
-          <!-- الرأس -->
           <div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 30px; padding-bottom: 20px; border-bottom: 1px solid rgba(255,255,255,0.08);">
             <div style="display: flex; align-items: center; gap: 24px;">
               ${logoHtml}
@@ -569,7 +626,6 @@ export default function SettingsPage() {
             </div>
           </div>
 
-          <!-- القسم الرئيسي -->
           <div style="flex: 1; display: flex; flex-direction: column; justify-content: center; padding: 10px 0;">
             <h2 style="font-size: 80px; font-weight: 900; margin: 0 0 12px 0; line-height: 1.2; color: #ffffff; text-shadow: 0 4px 40px rgba(0,0,0,0.4);">
               ${promo.title}
@@ -580,7 +636,6 @@ export default function SettingsPage() {
                 : ""
             }
 
-            <!-- عرض الخصم -->
             <div style="display: flex; align-items: center; gap: 60px; margin: 20px 0 30px 0;">
               <div style="display: flex; align-items: baseline; gap: 15px;">
                 <span style="font-size: 160px; font-weight: 900; color: #fbbf24; line-height: 1; text-shadow: 0 8px 50px rgba(251, 191, 36, 0.3);">${promo.discount_value}</span>
@@ -592,7 +647,6 @@ export default function SettingsPage() {
               </div>
             </div>
 
-            <!-- عناصر الخدمة -->
             ${
               chipsHtml
                 ? `<div style="display: flex; flex-wrap: wrap; gap: 16px; margin: 10px 0 20px 0;">${chipsHtml}</div>`
@@ -600,7 +654,6 @@ export default function SettingsPage() {
             }
           </div>
 
-          <!-- البطاقة السفلية -->
           <div style="background: rgba(255,255,255,0.08); backdrop-filter: blur(20px); border-radius: 32px; padding: 28px 35px; margin-top: auto; border: 1px solid rgba(255,255,255,0.1); display: flex; align-items: center; justify-content: space-between; box-shadow: 0 10px 50px rgba(0,0,0,0.3);">
             <div style="display: flex; flex-direction: column; gap: 16px; flex: 1;">
               ${codeHtml}
@@ -615,20 +668,14 @@ export default function SettingsPage() {
             </div>
           </div>
 
-          <!-- تذييل -->
           <div style="text-align: center; padding-top: 20px; margin-top: 16px; border-top: 1px solid rgba(255,255,255,0.05);">
             <span style="font-size: 18px; color: rgba(255,255,255,0.25);">© ${new Date().getFullYear()} ${clinic.name} — نظام العيادة الذكي</span>
           </div>
         </div>
       `;
 
-      // 5. إضافة العنصر إلى DOM
       document.body.appendChild(container);
 
-      // 6. انتظار تحميل الصور
-      await new Promise((resolve) => setTimeout(resolve, 500));
-
-      // 7. التقاط الصورة
       const canvas = await html2canvas(container, {
         scale: 4,
         useCORS: true,
@@ -650,44 +697,41 @@ export default function SettingsPage() {
         },
       });
 
-      // 8. إزالة العنصر
       document.body.removeChild(container);
 
-      // 9. تحويل إلى blob
-      const blob = await new Promise<Blob>((resolve) => canvas.toBlob((b) => resolve(b!), "image/png"));
+      const imageDataUrl = canvas.toDataURL("image/png");
+      const base64Data = imageDataUrl.split(",")[1];
+      const binaryString = atob(base64Data);
+      const bytes = new Uint8Array(binaryString.length);
+      for (let i = 0; i < binaryString.length; i++) {
+        bytes[i] = binaryString.charCodeAt(i);
+      }
 
-      // 10. رفع الصورة باستخدام supabase.storage مع upsert: true (حل مشكلة التكرار)
       const filePath = `${clinic.id}/promo_${promo.id}.png`;
       const { error: uploadError } = await supabase.storage
-        .from('promo-images')
-        .upload(filePath, blob, {
-          contentType: 'image/png',
-          upsert: true, // 👈 هذا هو المفتاح لحل مشكلة 409
+        .from("promo-images")
+        .upload(filePath, bytes, {
+          contentType: "image/png",
+          upsert: true,
         });
 
       if (uploadError) {
-        console.error("❌ فشل رفع الصورة:", uploadError);
-        toast({ title: "خطأ", description: "فشل رفع الصورة: " + uploadError.message, variant: "destructive" });
-        setGeneratingPromoImage(false);
-        return;
+        throw new Error(`فشل رفع الصورة: ${uploadError.message}`);
       }
 
-      // 11. الحصول على الرابط العام
-      const { data: urlData } = supabase.storage.from('promo-images').getPublicUrl(filePath);
+      const { data: urlData } = supabase.storage.from("promo-images").getPublicUrl(filePath);
       const publicUrl = urlData.publicUrl;
 
-      // 12. تحديث قاعدة البيانات
       await supabase
-        .from('promotions')
+        .from("promotions")
         .update({ image_url: publicUrl })
-        .eq('id', promo.id);
+        .eq("id", promo.id);
 
       toast({
         title: "✅ تم توليد الصورة بنجاح",
-        description: "صورة العرض الاحترافية جاهزة للنشر",
+        description: "صورة العرض الاحترافية جاهزة للنشر في البوت",
       });
       fetchPromotions();
-
     } catch (error: any) {
       console.error("❌ خطأ في توليد الصورة:", error);
       toast({
@@ -700,6 +744,15 @@ export default function SettingsPage() {
     }
   };
 
+  // ─── دالة كشف التخصص تلقائياً ───
+  function detectCategory(text: string): string {
+    const lower = text.toLowerCase();
+    if (lower.includes("اسنان") || lower.includes("dental") || lower.includes("سن") || lower.includes("ضرس") || lower.includes("أسنان")) return "dental";
+    if (lower.includes("جلد") || lower.includes("dermatology") || lower.includes("بشرة") || lower.includes("حبوب") || lower.includes("جلدية")) return "dermatology";
+    if (lower.includes("تجميل") || lower.includes("cosmetic") || lower.includes("ليزر") || lower.includes("تحاليل") || lower.includes("مختبر")) return "cosmetic";
+    return "general";
+  }
+
   const copyToClipboard = async (text: string, field: string) => {
     await navigator.clipboard.writeText(text);
     setCopiedField(field);
@@ -707,7 +760,10 @@ export default function SettingsPage() {
     toast({ title: "تم النسخ ✓", description: "تم نسخ النص إلى الحافظة" });
   };
 
-  const handleSignOut = async () => { await signOut(); navigate("/"); };
+  const handleSignOut = async () => {
+    await signOut();
+    navigate("/");
+  };
 
   if (authLoading || clinicLoading) {
     return (
@@ -745,7 +801,7 @@ export default function SettingsPage() {
 
       <main className="flex-1 container mx-auto px-4 py-8 max-w-4xl">
         <div className="space-y-6">
-          {/* === إعدادات العيادة === */}
+          {/* ─── إعدادات العيادة ─── */}
           <section className="card-modern p-6 animate-slide-up">
             <div className="flex items-center gap-3 mb-6">
               <div className="w-12 h-12 rounded-2xl bg-gradient-to-br from-blue-500 to-indigo-600 flex items-center justify-center shadow-lg"><Building2 className="w-6 h-6 text-white" /></div>
@@ -776,23 +832,18 @@ export default function SettingsPage() {
                 <Input id="clinicName" value={clinicName} onChange={(e) => setClinicName(e.target.value)} placeholder="أدخل اسم العيادة" className="input-modern" />
               </div>
 
-              {/* حقل تخصص العيادة */}
               <div className="space-y-2">
-                <Label className="text-sm font-medium">تخصص العيادة (لتصميم الإعلانات)</Label>
+                <Label className="text-sm font-medium">تخصص العيادة</Label>
                 <Select value={clinicSpecialty} onValueChange={setClinicSpecialty}>
-                  <SelectTrigger className="w-full input-modern">
-                    <SelectValue placeholder="اختر تخصص العيادة" />
-                  </SelectTrigger>
+                  <SelectTrigger><SelectValue placeholder="اختر تخصص العيادة" /></SelectTrigger>
                   <SelectContent>
                     <SelectItem value="general">🏥 عام</SelectItem>
                     <SelectItem value="dental">🦷 أسنان</SelectItem>
                     <SelectItem value="dermatology">✨ جلدية</SelectItem>
                     <SelectItem value="gynecology">👩‍⚕️ نساء وولادة</SelectItem>
                     <SelectItem value="ophthalmology">👁️ عيون</SelectItem>
-                    <SelectItem value="cosmetic">💎 تجميل</SelectItem>
                   </SelectContent>
                 </Select>
-                <p className="text-xs text-muted-foreground">يُستخدم لتحديد الصور والألوان في إعلانات العروض الترويجية</p>
               </div>
 
               {isAdmin ? (
@@ -817,7 +868,7 @@ export default function SettingsPage() {
             </div>
           </section>
 
-          {/* === أوقات الدوام === */}
+          {/* ─── أوقات الدوام ─── */}
           <section className="card-modern p-6 animate-slide-up delay-50">
             <div className="flex items-center gap-3 mb-6">
               <div className="w-12 h-12 rounded-2xl bg-gradient-to-br from-amber-500 to-orange-600 flex items-center justify-center shadow-lg"><CalendarClock className="w-6 h-6 text-white" /></div>
@@ -832,7 +883,7 @@ export default function SettingsPage() {
             </Button>
           </section>
 
-          {/* === إدارة الموظفين === */}
+          {/* ─── إدارة الموظفين ─── */}
           <section className="card-modern p-6 animate-slide-up delay-75">
             <div className="flex items-center gap-3 mb-5">
               <div className="w-12 h-12 rounded-2xl bg-gradient-to-br from-indigo-500 to-purple-600 flex items-center justify-center shadow-lg"><Shield className="w-6 h-6 text-white" /></div>
@@ -879,7 +930,7 @@ export default function SettingsPage() {
             )}
           </section>
 
-          {/* === رابط حجز العملاء === */}
+          {/* ─── رابط حجز العملاء ─── */}
           <section className="card-modern p-6 animate-slide-up delay-75">
             <div className="flex items-center gap-3 mb-4">
               <div className="w-12 h-12 rounded-2xl bg-gradient-to-br from-emerald-500 to-teal-600 flex items-center justify-center shadow-lg"><Link2 className="w-6 h-6 text-white" /></div>
@@ -897,7 +948,7 @@ export default function SettingsPage() {
             </div>
           </section>
 
-          {/* === QR Code === */}
+          {/* ─── QR Code ─── */}
           <section className="card-modern p-6 animate-slide-up delay-100">
             <div className="flex items-center gap-3 mb-4">
               <div className="w-12 h-12 rounded-2xl bg-gradient-to-br from-fuchsia-500 to-pink-600 flex items-center justify-center shadow-lg"><QrCode className="w-6 h-6 text-white" /></div>
@@ -928,7 +979,7 @@ export default function SettingsPage() {
             })()}
           </section>
 
-          {/* === الوكيل الصوتي === */}
+          {/* ─── الوكيل الصوتي ─── */}
           <section className="card-modern p-6 animate-slide-up delay-150">
             <div className="flex items-center gap-3 mb-4">
               <div className="w-12 h-12 rounded-2xl bg-gradient-to-br from-violet-500 to-purple-600 flex items-center justify-center shadow-lg"><Sparkles className="w-6 h-6 text-white" /></div>
@@ -958,7 +1009,7 @@ export default function SettingsPage() {
             </div>
           </section>
 
-          {/* === ربط تيليجرام === */}
+          {/* ─── ربط تيليجرام ─── */}
           <section className="card-modern p-6 animate-slide-up delay-100">
             <div className="flex items-center gap-3 mb-4">
               <div className="w-12 h-12 rounded-2xl bg-gradient-to-br from-sky-500 to-blue-600 flex items-center justify-center shadow-lg"><Bot className="w-6 h-6 text-white" /></div>
@@ -980,7 +1031,7 @@ export default function SettingsPage() {
             </div>
           </section>
 
-          {/* === معلومات الربط === */}
+          {/* ─── معلومات الربط ─── */}
           <section className="card-modern p-6 animate-slide-up delay-100">
             <div className="flex items-center gap-3 mb-6">
               <div className="w-12 h-12 rounded-2xl bg-gradient-to-br from-emerald-500 to-teal-600 flex items-center justify-center shadow-lg"><Bot className="w-6 h-6 text-white" /></div>
@@ -1019,7 +1070,7 @@ export default function SettingsPage() {
             </div>
           </section>
 
-          {/* === 🎁 العروض والخصومات === */}
+          {/* ─── العروض والخصومات ─── */}
           <section className="card-modern p-6 animate-slide-up delay-150">
             <div className="flex items-center gap-3 mb-6">
               <div className="w-12 h-12 rounded-2xl bg-gradient-to-br from-amber-500 to-orange-600 flex items-center justify-center shadow-lg"><Tag className="w-6 h-6 text-white" /></div>
@@ -1069,7 +1120,13 @@ export default function SettingsPage() {
                         <Button size="sm" variant="ghost" onClick={() => deletePromo(promo.id)} className="h-7 w-7 p-0 text-destructive hover:text-destructive"><Trash2 className="w-4 h-4" /></Button>
                       </div>
                     </div>
-                    <Button size="sm" variant="outline" className="mt-3 w-full text-xs border-amber-500/30 text-amber-600 hover:bg-amber-500/10" onClick={() => generatePromoImage(promo)} disabled={generatingPromoImage}>
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      className="mt-3 w-full text-xs border-amber-500/30 text-amber-600 hover:bg-amber-500/10"
+                      onClick={() => generatePromoImage(promo)}
+                      disabled={generatingPromoImage}
+                    >
                       {generatingPromoImage ? <Loader2 className="w-3 h-3 animate-spin ml-1" /> : <ImagePlus className="w-3 h-3 ml-1" />}
                       توليد صورة إعلان احترافية 🎨
                     </Button>
@@ -1079,7 +1136,7 @@ export default function SettingsPage() {
             )}
           </section>
 
-          {/* === الخدمات والأسعار === */}
+          {/* ─── الخدمات والأسعار ─── */}
           <section className="card-modern p-6 animate-slide-up delay-200">
             <div className="flex items-center gap-3 mb-6">
               <div className="w-12 h-12 rounded-2xl bg-gradient-to-br from-violet-500 to-purple-600 flex items-center justify-center shadow-lg"><CreditCard className="w-6 h-6 text-white" /></div>
@@ -1111,7 +1168,7 @@ export default function SettingsPage() {
             </div>
           </section>
 
-          {/* === حالة الاشتراك === */}
+          {/* ─── حالة الاشتراك ─── */}
           <section className="card-modern p-6 animate-slide-up delay-300">
             <div className="flex items-center gap-3 mb-6">
               <div className="w-12 h-12 rounded-2xl bg-gradient-to-br from-amber-500 to-orange-600 flex items-center justify-center shadow-lg"><Clock className="w-6 h-6 text-white" /></div>
@@ -1137,9 +1194,7 @@ export default function SettingsPage() {
         </div>
       </main>
 
-      {/* ============================================================
-          🎁 نافذة إضافة/تعديل عرض
-          ============================================================ */}
+      {/* ─── نافذة إضافة/تعديل عرض ─── */}
       <Dialog open={promoDialogOpen} onOpenChange={(open) => { if (!open) setPromoDialogOpen(false); }}>
         <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto" dir="rtl">
           <DialogHeader>
