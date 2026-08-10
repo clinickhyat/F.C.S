@@ -388,7 +388,7 @@ export default function SettingsPage() {
   }
 
   // ============================================================
-  // 🔥 IMPROVED: generatePromoImage using html2canvas with dynamic images
+  // 🔥 IMPROVED: generatePromoImage using html2canvas with upsert
   // ============================================================
   const generatePromoImage = async (promo: Promotion) => {
     if (!clinic) {
@@ -398,10 +398,10 @@ export default function SettingsPage() {
     setGeneratingPromoImage(true);
 
     try {
-      // 1. تحديد التخصص الفعلي (من إعدادات العيادة أو من محتوى العرض)
+      // 1. تحديد التخصص الفعلي
       const specialty = clinicSpecialty || detectCategory(promo.title + " " + (promo.description || ""));
 
-      // 2. قائمة الثيمات حسب التخصص مع صور من Unsplash
+      // 2. قائمة الثيمات حسب التخصص
       const themes: Record<string, any> = {
         dental: {
           background: "linear-gradient(145deg, #0b2a3b 0%, #1a4a6e 40%, #2c6f8f 100%)",
@@ -458,7 +458,6 @@ export default function SettingsPage() {
             .filter(Boolean)
         : [];
 
-      // استخدام الخدمات كعناصر افتراضية إذا لم توجد عناصر محددة
       const servicesItems = services.map(s => s.name);
       const finalItems = itemsList.length > 0 ? itemsList : servicesItems.slice(0, 5);
 
@@ -657,40 +656,31 @@ export default function SettingsPage() {
       // 9. تحويل إلى blob
       const blob = await new Promise<Blob>((resolve) => canvas.toBlob((b) => resolve(b!), "image/png"));
 
-      // 10. رفع الصورة باستخدام جلسة المستخدم الحالية
+      // 10. رفع الصورة باستخدام supabase.storage مع upsert: true (حل مشكلة التكرار)
       const filePath = `${clinic.id}/promo_${promo.id}.png`;
+      const { error: uploadError } = await supabase.storage
+        .from('promo-images')
+        .upload(filePath, blob, {
+          contentType: 'image/png',
+          upsert: true, // 👈 هذا هو المفتاح لحل مشكلة 409
+        });
 
-      // الحصول على توكن الجلسة الحالية
-      const { data: sessionData } = await supabase.auth.getSession();
-      const accessToken = sessionData?.session?.access_token;
-
-      const formData = new FormData();
-      formData.append("file", blob, filePath);
-
-      const uploadResponse = await fetch(`${supabaseUrl}/storage/v1/object/promo-images/${filePath}`, {
-        method: "POST",
-        headers: {
-          apikey: supabaseAnonKey,
-          Authorization: `Bearer ${accessToken}`,
-        },
-        body: formData,
-      });
-
-      if (!uploadResponse.ok) {
-        const errorText = await uploadResponse.text();
-        console.error("❌ فشل رفع الصورة:", uploadResponse.status, errorText);
-        throw new Error(`فشل رفع الصورة: ${uploadResponse.status} - ${errorText}`);
+      if (uploadError) {
+        console.error("❌ فشل رفع الصورة:", uploadError);
+        toast({ title: "خطأ", description: "فشل رفع الصورة: " + uploadError.message, variant: "destructive" });
+        setGeneratingPromoImage(false);
+        return;
       }
 
       // 11. الحصول على الرابط العام
-      const { data: urlData } = supabase.storage.from("promo-images").getPublicUrl(filePath);
+      const { data: urlData } = supabase.storage.from('promo-images').getPublicUrl(filePath);
       const publicUrl = urlData.publicUrl;
 
       // 12. تحديث قاعدة البيانات
       await supabase
-        .from("promotions")
+        .from('promotions')
         .update({ image_url: publicUrl })
-        .eq("id", promo.id);
+        .eq('id', promo.id);
 
       toast({
         title: "✅ تم توليد الصورة بنجاح",
@@ -786,7 +776,7 @@ export default function SettingsPage() {
                 <Input id="clinicName" value={clinicName} onChange={(e) => setClinicName(e.target.value)} placeholder="أدخل اسم العيادة" className="input-modern" />
               </div>
 
-              {/* 🆕 حقل تخصص العيادة */}
+              {/* حقل تخصص العيادة */}
               <div className="space-y-2">
                 <Label className="text-sm font-medium">تخصص العيادة (لتصميم الإعلانات)</Label>
                 <Select value={clinicSpecialty} onValueChange={setClinicSpecialty}>
