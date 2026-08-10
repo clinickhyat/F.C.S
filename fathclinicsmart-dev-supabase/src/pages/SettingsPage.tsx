@@ -50,73 +50,53 @@ interface Promotion {
 }
 
 // ============================================================
-// Theme configurations per specialty — ULTRA PREMIUM EDITION v3
+// Theme configurations per specialty — SVG PRO EDITION v4
 // ============================================================
 const SPECIALTY_THEMES: Record<string, any> = {
   dental: {
-    gradient: "linear-gradient(135deg, #0EA5E9 0%, #0284C7 35%, #075985 70%, #0C4A6E 100%)",
-    accentColor: "#FCD34D",
-    primaryGlow: "#38BDF8",
-    secondaryGlow: "#FBBF24",
-    chipBg: "rgba(56, 189, 248, 0.15)",
-    chipBorder: "rgba(255, 255, 255, 0.25)",
-    doctorImage: "https://images.unsplash.com/photo-1629909613654-28e377c37b09?w=900&h=1200&fit=crop&q=90",
-    bgPattern: "https://images.unsplash.com/photo-1606811971618-4486d14f3f99?w=1200&h=1600&fit=crop&q=80",
+    bg1: "#0EA5E9", bg2: "#075985", bg3: "#0C4A6E",
+    accent: "#FCD34D",
+    chipBg: "#0F4C6B", chipBorder: "#38BDF8",
     icon: "🦷",
     tagline: "ابتسامة صحية تدوم",
-    ringColor: "#FCD34D",
+    doctorEmoji: "🧑‍⚕️",
+    label: "طب الأسنان",
   },
   dermatology: {
-    gradient: "linear-gradient(135deg, #A855F7 0%, #9333EA 35%, #7E22CE 70%, #581C87 100%)",
-    accentColor: "#FDE68A",
-    primaryGlow: "#C084FC",
-    secondaryGlow: "#F9A8D4",
-    chipBg: "rgba(192, 132, 252, 0.15)",
-    chipBorder: "rgba(255, 255, 255, 0.25)",
-    doctorImage: "https://images.unsplash.com/photo-1594824476967-48c8b964273f?w=900&h=1200&fit=crop&q=90",
-    bgPattern: "https://images.unsplash.com/photo-1570172619644-dfd03ed5d881?w=1200&h=1600&fit=crop&q=80",
+    bg1: "#A855F7", bg2: "#7E22CE", bg3: "#581C87",
+    accent: "#FDE68A",
+    chipBg: "#4A1D6E", chipBorder: "#C084FC",
     icon: "✨",
     tagline: "بشرة نضرة وإشراقة طبيعية",
-    ringColor: "#F9A8D4",
+    doctorEmoji: "👩‍⚕️",
+    label: "الجلدية والتجميل",
   },
   gynecology: {
-    gradient: "linear-gradient(135deg, #EC4899 0%, #DB2777 35%, #BE185D 70%, #831843 100%)",
-    accentColor: "#FDE68A",
-    primaryGlow: "#F472B6",
-    secondaryGlow: "#FBBF24",
-    chipBg: "rgba(244, 114, 182, 0.15)",
-    chipBorder: "rgba(255, 255, 255, 0.25)",
-    doctorImage: "https://images.unsplash.com/photo-1638202993928-7267aad84c31?w=900&h=1200&fit=crop&q=90",
-    bgPattern: "https://images.unsplash.com/photo-1584982751601-97dcc096659c?w=1200&h=1600&fit=crop&q=80",
-    icon: "👩‍⚕️",
+    bg1: "#EC4899", bg2: "#BE185D", bg3: "#831843",
+    accent: "#FDE68A",
+    chipBg: "#6B1839", chipBorder: "#F472B6",
+    icon: "🌸",
     tagline: "رعاية متكاملة للأم والطفل",
-    ringColor: "#FBBF24",
+    doctorEmoji: "👩‍⚕️",
+    label: "النساء والولادة",
   },
   ophthalmology: {
-    gradient: "linear-gradient(135deg, #06B6D4 0%, #0891B2 35%, #0E7490 70%, #164E63 100%)",
-    accentColor: "#FDE68A",
-    primaryGlow: "#22D3EE",
-    secondaryGlow: "#FCD34D",
-    chipBg: "rgba(34, 211, 238, 0.15)",
-    chipBorder: "rgba(255, 255, 255, 0.25)",
-    doctorImage: "https://images.unsplash.com/photo-1551601651-2a8555f1a136?w=900&h=1200&fit=crop&q=90",
-    bgPattern: "https://images.unsplash.com/photo-1580281657527-47f249e8f4df?w=1200&h=1600&fit=crop&q=80",
+    bg1: "#06B6D4", bg2: "#0E7490", bg3: "#164E63",
+    accent: "#FDE68A",
+    chipBg: "#0B4F5F", chipBorder: "#22D3EE",
     icon: "👁️",
     tagline: "رؤية أوضح لحياة أفضل",
-    ringColor: "#FCD34D",
+    doctorEmoji: "🧑‍⚕️",
+    label: "طب العيون",
   },
   general: {
-    gradient: "linear-gradient(135deg, #14B8A6 0%, #0D9488 35%, #0F766E 70%, #134E4A 100%)",
-    accentColor: "#FDE68A",
-    primaryGlow: "#2DD4BF",
-    secondaryGlow: "#FBBF24",
-    chipBg: "rgba(45, 212, 191, 0.15)",
-    chipBorder: "rgba(255, 255, 255, 0.25)",
-    doctorImage: "https://images.unsplash.com/photo-1622253692010-333f2da6031d?w=900&h=1200&fit=crop&q=90",
-    bgPattern: "https://images.unsplash.com/photo-1519494026892-80bbd2d6fd0d?w=1200&h=1600&fit=crop&q=80",
+    bg1: "#14B8A6", bg2: "#0F766E", bg3: "#134E4A",
+    accent: "#FDE68A",
+    chipBg: "#0D4A45", chipBorder: "#2DD4BF",
     icon: "🏥",
     tagline: "صحتك أولويتنا القصوى",
-    ringColor: "#FBBF24",
+    doctorEmoji: "🧑‍⚕️",
+    label: "الطب العام",
   },
 };
 
@@ -126,10 +106,8 @@ export default function SettingsPage() {
   const { clinic, subscription, loading: clinicLoading, updateClinic } = useClinic();
   const { toast } = useToast();
 
-  // --- Refs ---
   const promoImageInputRef = useRef<HTMLInputElement>(null);
 
-  // --- Existing State ---
   const [clinicName, setClinicName] = useState("");
   const [clinicSpecialty, setClinicSpecialty] = useState("general");
   const [botToken, setBotToken] = useState("");
@@ -155,7 +133,6 @@ export default function SettingsPage() {
   const [workingHoursStart, setWorkingHoursStart] = useState("08:00");
   const [workingHoursEnd, setWorkingHoursEnd] = useState("16:00");
 
-  // --- Promotions State ---
   const [promotions, setPromotions] = useState<Promotion[]>([]);
   const [promoDialogOpen, setPromoDialogOpen] = useState(false);
   const [editingPromo, setEditingPromo] = useState<Promotion | null>(null);
@@ -175,9 +152,6 @@ export default function SettingsPage() {
   const supabaseUrl = import.meta.env.VITE_SUPABASE_URL;
   const supabaseAnonKey = import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY;
 
-  // ============================================================
-  // UseEffects
-  // ============================================================
   useEffect(() => {
     if (!authLoading && !user) navigate("/auth");
   }, [user, authLoading, navigate]);
@@ -215,9 +189,6 @@ export default function SettingsPage() {
     }
   }, [clinic]);
 
-  // ============================================================
-  // Data Fetching Functions
-  // ============================================================
   const fetchStaff = async () => {
     if (!clinic) return;
     const { data } = await supabase
@@ -324,9 +295,6 @@ export default function SettingsPage() {
     setPromotions(data || []);
   };
 
-  // ============================================================
-  // Save Clinic Settings
-  // ============================================================
   const handleSaveClinic = async () => {
     if (!clinic) {
       toast({ title: "تعذر تحميل العيادة", description: "أعد تحميل الصفحة.", variant: "destructive" });
@@ -476,9 +444,6 @@ export default function SettingsPage() {
     }
   };
 
-  // ============================================================
-  // Promotion Handlers
-  // ============================================================
   const resetPromoForm = () => {
     setPromoForm({
       discount_type: "percentage",
@@ -600,7 +565,7 @@ export default function SettingsPage() {
   };
 
   // ============================================================
-  // 🔥 GENERATE PROFESSIONAL PROMO IMAGE — Ultra Premium v3
+  // 🎨 GENERATE PROFESSIONAL PROMO IMAGE — SVG-BASED v4 (No CORS issues)
   // ============================================================
   const generatePromoImage = async (promo: Promotion) => {
     if (!clinic) {
@@ -610,15 +575,8 @@ export default function SettingsPage() {
     setGeneratingPromoImage(true);
 
     try {
-      // 1. Theme
       const specialty = (clinic as any).specialty || "general";
       const theme = SPECIALTY_THEMES[specialty] || SPECIALTY_THEMES.general;
-
-      // 2. Data prep
-      const discountDisplay =
-        promo.discount_type === "percentage"
-          ? `${promo.discount_value}%`
-          : `${promo.discount_value} ر.ي`;
 
       const itemsList = (promo as any).items
         ? String((promo as any).items)
@@ -626,295 +584,260 @@ export default function SettingsPage() {
             .map((s: string) => s.trim())
             .filter(Boolean)
         : [];
-
       const serviceNames = services.map((s) => s.name);
-      const finalItems = itemsList.length > 0 ? itemsList : serviceNames.slice(0, 6);
+      const finalItems = (itemsList.length > 0 ? itemsList : serviceNames).slice(0, 6);
 
-      // 3. Container
-      const container = document.createElement("div");
-      container.id = "promo-card-container";
-      container.style.cssText = `
-        position: fixed;
-        top: -9999px;
-        left: -9999px;
-        width: 1080px;
-        height: 1440px;
-        background: ${theme.gradient};
-        font-family: 'Cairo', 'Tajawal', 'Segoe UI', sans-serif;
-        direction: rtl;
-        color: white;
-        overflow: hidden;
-        z-index: 99999;
-      `;
-
-      // 4. Logo
-      const logoHtml = clinic.logo_url
-        ? `<img src="${clinic.logo_url}" style="width: 110px; height: 110px; border-radius: 28px; object-fit: cover; border: 4px solid rgba(255,255,255,0.4); box-shadow: 0 12px 40px rgba(0,0,0,0.5), 0 0 60px ${theme.primaryGlow}40;" crossorigin="anonymous" />`
-        : `<div style="width: 110px; height: 110px; background: linear-gradient(135deg, rgba(255,255,255,0.25), rgba(255,255,255,0.1)); border-radius: 28px; display: flex; align-items: center; justify-content: center; font-size: 64px; border: 4px solid rgba(255,255,255,0.4); backdrop-filter: blur(20px); box-shadow: 0 12px 40px rgba(0,0,0,0.4);">${theme.icon}</div>`;
-
-      // 5. QR
       const effectiveBotUsername = botUsername || "SmartClinc_bot";
       const qrLink = `https://t.me/${effectiveBotUsername}?start=clinic_${clinic.id}`;
-      const qrCodeUrl = `https://api.qrserver.com/v1/create-qr-code/?size=220x220&data=${encodeURIComponent(qrLink)}&color=0F172A&bgcolor=FFFFFF&margin=1&qzone=1`;
 
-      // 6. End date badge
-      const endDateHtml = promo.end_date
-        ? `<div style="display: inline-flex; align-items: center; gap: 10px; background: linear-gradient(135deg, rgba(239, 68, 68, 0.9), rgba(220, 38, 38, 0.95)); padding: 12px 26px; border-radius: 50px; border: 2px solid rgba(255,255,255,0.3); box-shadow: 0 8px 30px rgba(239, 68, 68, 0.4);">
-            <span style="font-size: 26px;">⏰</span>
-            <span style="font-size: 22px; font-weight: 800; color: white; letter-spacing: 0.5px;">حتى ${promo.end_date}</span>
-          </div>`
-        : "";
+      // Load QR as base64 (avoids CORS)
+      const qrCanvas = document.createElement("canvas");
+      const qrSize = 200;
+      qrCanvas.width = qrSize;
+      qrCanvas.height = qrSize;
+      const { QRCodeCanvas: QRC } = await import("qrcode.react");
+      // Fallback: generate QR via API and convert to base64
+      const qrApiUrl = `https://api.qrserver.com/v1/create-qr-code/?size=${qrSize}x${qrSize}&data=${encodeURIComponent(qrLink)}&color=0F172A&bgcolor=FFFFFF&margin=1&qzone=1&format=png`;
+      let qrDataUrl = "";
+      try {
+        const qrResp = await fetch(qrApiUrl);
+        const qrBlob = await qrResp.blob();
+        qrDataUrl = await new Promise<string>((resolve) => {
+          const reader = new FileReader();
+          reader.onloadend = () => resolve(reader.result as string);
+          reader.readAsDataURL(qrBlob);
+        });
+      } catch (e) {
+        console.warn("QR fetch failed, using inline");
+      }
 
-      // 7. Code badge
-      const codeHtml = promo.code
-        ? `<div style="display: flex; align-items: center; gap: 14px; background: linear-gradient(135deg, rgba(251, 191, 36, 0.2), rgba(251, 191, 36, 0.1)); backdrop-filter: blur(20px); padding: 14px 30px; border-radius: 20px; border: 2px solid ${theme.accentColor}80;">
-            <span style="font-size: 26px;">🎟️</span>
-            <div style="display: flex; flex-direction: column;">
-              <span style="font-size: 14px; color: rgba(255,255,255,0.7); font-weight: 600;">كود الخصم</span>
-              <span style="font-size: 32px; font-weight: 900; color: ${theme.accentColor}; letter-spacing: 3px; direction: ltr; text-shadow: 0 2px 10px ${theme.accentColor}80;">${promo.code}</span>
-            </div>
-          </div>`
-        : "";
+      // Load clinic logo as base64 (if exists)
+      let logoDataUrl = "";
+      if (clinic.logo_url) {
+        try {
+          const logoResp = await fetch(clinic.logo_url);
+          const logoBlob = await logoResp.blob();
+          logoDataUrl = await new Promise<string>((resolve) => {
+            const reader = new FileReader();
+            reader.onloadend = () => resolve(reader.result as string);
+            reader.readAsDataURL(logoBlob);
+          });
+        } catch (e) {
+          console.warn("Logo fetch failed");
+        }
+      }
 
-      // 8. Phone
-      const phoneHtml = (promo as any).phone_text
-        ? `<div style="display: flex; align-items: center; gap: 12px; background: rgba(255,255,255,0.08); backdrop-filter: blur(15px); padding: 12px 22px; border-radius: 16px; border: 1px solid rgba(255,255,255,0.15);">
-            <div style="width: 44px; height: 44px; border-radius: 50%; background: linear-gradient(135deg, #10B981, #059669); display: flex; align-items: center; justify-content: center; font-size: 22px; box-shadow: 0 4px 15px rgba(16, 185, 129, 0.4);">📞</div>
-            <span style="font-size: 30px; font-weight: 800; color: white; direction: ltr; letter-spacing: 1px;">${(promo as any).phone_text}</span>
-          </div>`
-        : "";
+      const W = 1080;
+      const H = 1440;
+      const discountNum = promo.discount_value;
+      const discountUnit = promo.discount_type === "percentage" ? "%" : "ريال";
 
-      // 9. Chips — professional pill design
-      const chipColors = [
-        { bg: "rgba(255,255,255,0.12)", border: theme.primaryGlow },
-        { bg: "rgba(255,255,255,0.12)", border: theme.secondaryGlow },
-        { bg: "rgba(255,255,255,0.12)", border: theme.primaryGlow },
-        { bg: "rgba(255,255,255,0.12)", border: theme.secondaryGlow },
-        { bg: "rgba(255,255,255,0.12)", border: theme.primaryGlow },
-        { bg: "rgba(255,255,255,0.12)", border: theme.secondaryGlow },
-      ];
+      // ============================================================
+      // BUILD PURE SVG (100% reliable, no CORS, perfect Arabic)
+      // ============================================================
+      const svgString = `
+<svg xmlns="http://www.w3.org/2000/svg" width="${W}" height="${H}" viewBox="0 0 ${W} ${H}">
+  <defs>
+    <!-- Main background gradient -->
+    <linearGradient id="bgGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="${theme.bg1}"/>
+      <stop offset="50%" stop-color="${theme.bg2}"/>
+      <stop offset="100%" stop-color="${theme.bg3}"/>
+    </linearGradient>
+    
+    <!-- Gold gradient for discount -->
+    <linearGradient id="goldGrad" x1="0%" y1="0%" x2="0%" y2="100%">
+      <stop offset="0%" stop-color="#FEF3C7"/>
+      <stop offset="30%" stop-color="#FDE68A"/>
+      <stop offset="60%" stop-color="#F59E0B"/>
+      <stop offset="100%" stop-color="#B45309"/>
+    </linearGradient>
+    
+    <!-- Radial glow -->
+    <radialGradient id="glowGrad" cx="50%" cy="50%" r="50%">
+      <stop offset="0%" stop-color="${theme.accent}" stop-opacity="0.5"/>
+      <stop offset="100%" stop-color="${theme.accent}" stop-opacity="0"/>
+    </radialGradient>
+    
+    <!-- Card gradient -->
+    <linearGradient id="cardGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="rgba(255,255,255,0.15)"/>
+      <stop offset="100%" stop-color="rgba(255,255,255,0.05)"/>
+    </linearGradient>
+    
+    <!-- Shadow filter -->
+    <filter id="dropShadow" x="-50%" y="-50%" width="200%" height="200%">
+      <feGaussianBlur in="SourceAlpha" stdDeviation="8"/>
+      <feOffset dx="0" dy="6" result="offsetblur"/>
+      <feComponentTransfer><feFuncA type="linear" slope="0.5"/></feComponentTransfer>
+      <feMerge><feMergeNode/><feMergeNode in="SourceGraphic"/></feMerge>
+    </filter>
+    
+    <filter id="glow" x="-50%" y="-50%" width="200%" height="200%">
+      <feGaussianBlur stdDeviation="15" result="coloredBlur"/>
+      <feMerge><feMergeNode in="coloredBlur"/><feMergeNode in="SourceGraphic"/></feMerge>
+    </filter>
+    
+    <!-- Medical cross pattern -->
+    <pattern id="medPattern" x="0" y="0" width="140" height="140" patternUnits="userSpaceOnUse">
+      <g opacity="0.06">
+        <path d="M60 40 L80 40 L80 60 L100 60 L100 80 L80 80 L80 100 L60 100 L60 80 L40 80 L40 60 L60 60 Z" fill="white"/>
+        <circle cx="70" cy="70" r="4" fill="${theme.accent}"/>
+      </g>
+    </pattern>
+  </defs>
+  
+  <!-- Background -->
+  <rect width="${W}" height="${H}" fill="url(#bgGrad)"/>
+  <rect width="${W}" height="${H}" fill="url(#medPattern)"/>
+  
+  <!-- Decorative glowing orbs -->
+  <circle cx="${W - 100}" cy="150" r="280" fill="url(#glowGrad)" opacity="0.7"/>
+  <circle cx="120" cy="${H - 350}" r="240" fill="url(#glowGrad)" opacity="0.5"/>
+  <circle cx="${W / 2}" cy="${H / 2}" r="200" fill="${theme.bg1}" opacity="0.15"/>
+  
+  <!-- Top wave decoration -->
+  <path d="M0,0 Q${W / 2},80 ${W},0 L${W},120 Q${W / 2},200 0,120 Z" fill="rgba(255,255,255,0.05)"/>
+  
+  <!-- Bottom wave -->
+  <path d="M0,${H - 100} Q${W / 3},${H - 180} ${W * 0.66},${H - 60} T${W},${H - 100} L${W},${H} L0,${H} Z" fill="rgba(0,0,0,0.25)"/>
+  <path d="M0,${H - 60} Q${W / 3},${H - 140} ${W * 0.66},${H - 20} T${W},${H - 60} L${W},${H} L0,${H} Z" fill="${theme.bg3}" opacity="0.6"/>
+  
+  <!-- ============ HEADER (Right side in RTL = displayed on right) ============ -->
+  <!-- Logo (top right) -->
+  ${logoDataUrl 
+    ? `<clipPath id="logoClip"><rect x="${W - 190}" y="60" width="120" height="120" rx="24"/></clipPath>
+       <image href="${logoDataUrl}" x="${W - 190}" y="60" width="120" height="120" clip-path="url(#logoClip)" preserveAspectRatio="xMidYMid slice"/>
+       <rect x="${W - 190}" y="60" width="120" height="120" rx="24" fill="none" stroke="rgba(255,255,255,0.4)" stroke-width="4"/>`
+    : `<rect x="${W - 190}" y="60" width="120" height="120" rx="24" fill="rgba(255,255,255,0.15)" stroke="rgba(255,255,255,0.4)" stroke-width="3"/>
+       <text x="${W - 130}" y="145" font-size="70" text-anchor="middle" font-family="Segoe UI Emoji, Apple Color Emoji">${theme.icon}</text>`
+  }
+  
+  <!-- Clinic name & tagline (right of logo, RTL aligned right) -->
+  <text x="${W - 220}" y="110" font-family="Cairo, Tajawal, Arial" font-size="52" font-weight="900" fill="#FFFFFF" text-anchor="end" direction="rtl">${escapeXml(clinic.name)}</text>
+  <text x="${W - 220}" y="160" font-family="Cairo, Tajawal, Arial" font-size="26" font-weight="600" fill="rgba(255,255,255,0.85)" text-anchor="end" direction="rtl">${theme.label} ${theme.icon}</text>
+  
+  <!-- Divider glow line -->
+  <line x1="60" y1="220" x2="${W - 60}" y2="220" stroke="${theme.accent}" stroke-width="3" opacity="0.6" filter="url(#glow)"/>
+  <line x1="60" y1="220" x2="${W - 60}" y2="220" stroke="url(#bgGrad)" stroke-width="1" opacity="0.9"/>
+  
+  <!-- End date badge (top left) -->
+  ${promo.end_date ? `
+    <g transform="translate(60, 90)">
+      <rect x="0" y="0" width="360" height="60" rx="30" fill="#DC2626" stroke="rgba(255,255,255,0.4)" stroke-width="2" filter="url(#dropShadow)"/>
+      <text x="180" y="40" font-family="Cairo, Arial" font-size="24" font-weight="800" fill="white" text-anchor="middle" direction="rtl">⏰ صالح حتى ${promo.end_date}</text>
+    </g>
+  ` : ""}
+  
+  <!-- ============ HERO TITLE SECTION ============ -->
+  <!-- "عرض حصري" badge -->
+  <g transform="translate(${W - 320}, 280) rotate(-3)">
+    <rect x="0" y="0" width="260" height="56" rx="12" fill="#DC2626" filter="url(#dropShadow)"/>
+    <text x="130" y="38" font-family="Cairo, Arial" font-size="24" font-weight="900" fill="white" text-anchor="middle" direction="rtl">🔥 عرض حصري</text>
+  </g>
+  
+  <!-- Main title (large, RTL) -->
+  <text x="${W - 60}" y="420" font-family="Cairo, Tajawal, Arial" font-size="82" font-weight="900" fill="#FFFFFF" text-anchor="end" direction="rtl" filter="url(#dropShadow)">${escapeXml(promo.title)}</text>
+  
+  <!-- Description -->
+  ${promo.description ? `
+    <text x="${W - 60}" y="475" font-family="Cairo, Arial" font-size="28" font-weight="500" fill="rgba(255,255,255,0.9)" text-anchor="end" direction="rtl">${escapeXml(truncate(promo.description, 55))}</text>
+  ` : ""}
+  
+  <!-- ============ DOCTOR EMOJI (Left side, large) ============ -->
+  <g transform="translate(120, 480)">
+    <!-- Glowing circle behind doctor -->
+    <circle cx="140" cy="180" r="180" fill="url(#glowGrad)" opacity="0.6"/>
+    <circle cx="140" cy="180" r="160" fill="rgba(255,255,255,0.08)" stroke="${theme.accent}" stroke-width="3" opacity="0.5"/>
+    <!-- Doctor emoji (huge) -->
+    <text x="140" y="270" font-size="240" text-anchor="middle" font-family="Segoe UI Emoji, Apple Color Emoji, Noto Color Emoji">${theme.doctorEmoji}</text>
+    <!-- Stethoscope emoji floating -->
+    <text x="60" y="120" font-size="60" opacity="0.7">🩺</text>
+    <text x="220" y="360" font-size="55" opacity="0.7">💊</text>
+  </g>
+  
+  <!-- ============ GOLDEN DISCOUNT (Right side, large 3D) ============ -->
+  <g transform="translate(${W - 400}, 560)">
+    <!-- "وفّر" label -->
+    <text x="200" y="0" font-family="Cairo, Arial" font-size="30" font-weight="700" fill="rgba(255,255,255,0.85)" text-anchor="middle" letter-spacing="8">وفّـــر</text>
+    
+    <!-- Big golden number -->
+    <text x="200" y="200" font-family="Cairo, Arial Black, Arial" font-size="240" font-weight="900" fill="url(#goldGrad)" text-anchor="middle" filter="url(#dropShadow)" stroke="#78350F" stroke-width="2">${discountNum}</text>
+    
+    <!-- Unit (% or ريال) -->
+    <text x="200" y="260" font-family="Cairo, Arial" font-size="48" font-weight="900" fill="url(#goldGrad)" text-anchor="middle" filter="url(#dropShadow)">${discountUnit}</text>
+    
+    <!-- Label below -->
+    <text x="200" y="310" font-family="Cairo, Arial" font-size="26" font-weight="800" fill="${theme.accent}" text-anchor="middle" letter-spacing="4">خصم فوري</text>
+  </g>
+  
+  <!-- ============ SERVICE CHIPS (Grid at bottom center) ============ -->
+  ${renderChips(finalItems, W, theme)}
+  
+  <!-- ============ BOTTOM CARD (QR + Contact) ============ -->
+  <g transform="translate(60, ${H - 340})">
+    <!-- Card background -->
+    <rect x="0" y="0" width="${W - 120}" height="240" rx="30" fill="url(#cardGrad)" stroke="rgba(255,255,255,0.2)" stroke-width="2" filter="url(#dropShadow)"/>
+    
+    <!-- QR container (left side) -->
+    <rect x="30" y="30" width="180" height="180" rx="16" fill="white" stroke="${theme.accent}" stroke-width="4"/>
+    ${qrDataUrl ? `<image href="${qrDataUrl}" x="40" y="40" width="160" height="160"/>` : `<text x="120" y="130" font-size="80" text-anchor="middle">📱</text>`}
+    <text x="120" y="230" font-family="Cairo, Arial" font-size="16" font-weight="700" fill="${theme.accent}" text-anchor="middle">📱 امسح واحجز</text>
+    
+    <!-- Contact info (right side, RTL) -->
+    ${promo.code ? `
+      <g transform="translate(${W - 180}, 55)">
+        <rect x="-330" y="0" width="330" height="60" rx="14" fill="rgba(251, 191, 36, 0.15)" stroke="${theme.accent}" stroke-width="2"/>
+        <text x="-20" y="25" font-family="Cairo, Arial" font-size="16" font-weight="600" fill="rgba(255,255,255,0.7)" text-anchor="end" direction="rtl">كود الخصم</text>
+        <text x="-20" y="52" font-family="Courier New, monospace" font-size="30" font-weight="900" fill="${theme.accent}" text-anchor="end" letter-spacing="4">${escapeXml(promo.code)}</text>
+      </g>
+    ` : ""}
+    
+    ${(promo as any).phone_text ? `
+      <g transform="translate(${W - 180}, ${promo.code ? 135 : 75})">
+        <rect x="-330" y="0" width="330" height="55" rx="14" fill="rgba(16, 185, 129, 0.15)" stroke="#10B981" stroke-width="2"/>
+        <circle cx="-30" cy="27" r="18" fill="#10B981"/>
+        <text x="-30" y="35" font-size="20" text-anchor="middle">📞</text>
+        <text x="-70" y="37" font-family="Cairo, Arial" font-size="28" font-weight="800" fill="white" text-anchor="end" direction="ltr">${escapeXml((promo as any).phone_text)}</text>
+      </g>
+    ` : ""}
+    
+    ${!promo.code && !(promo as any).phone_text ? `
+      <text x="${(W - 120) / 2 + 100}" y="125" font-family="Cairo, Arial" font-size="26" font-weight="800" fill="white" text-anchor="middle" direction="rtl">احجز موعدك الآن</text>
+      <text x="${(W - 120) / 2 + 100}" y="165" font-family="Cairo, Arial" font-size="22" font-weight="600" fill="${theme.accent}" text-anchor="middle" direction="rtl">عن طريق موظفنا الآلي الذكي 🤖</text>
+    ` : ""}
+  </g>
+  
+  <!-- ============ FOOTER ============ -->
+  <text x="${W / 2}" y="${H - 40}" font-family="Cairo, Arial" font-size="18" font-weight="500" fill="rgba(255,255,255,0.4)" text-anchor="middle" letter-spacing="1" direction="rtl">© ${new Date().getFullYear()} ${escapeXml(clinic.name)} — نظام العيادة الذكي</text>
+</svg>
+      `.trim();
 
-      const chipsHtml =
-        finalItems.length > 0
-          ? `<div style="display: grid; grid-template-columns: repeat(3, 1fr); gap: 14px; margin: 10px 0;">
-              ${finalItems
-                .slice(0, 6)
-                .map((item: string, idx: number) => {
-                  const c = chipColors[idx % chipColors.length];
-                  return `<div style="background: ${c.bg}; backdrop-filter: blur(20px); border: 2px solid ${c.border}60; padding: 18px 20px; border-radius: 22px; text-align: center; box-shadow: 0 8px 25px rgba(0,0,0,0.25), inset 0 1px 0 rgba(255,255,255,0.15); position: relative; overflow: hidden;">
-                    <div style="position: absolute; top: -20px; right: -20px; width: 60px; height: 60px; border-radius: 50%; background: ${c.border}25; filter: blur(20px);"></div>
-                    <span style="font-size: 22px; font-weight: 800; color: white; text-shadow: 0 2px 10px rgba(0,0,0,0.3); position: relative; z-index: 1; line-height: 1.3;">${item}</span>
-                  </div>`;
-                })
-                .join("")}
-            </div>`
-          : "";
+      // Convert SVG string to canvas via Image
+      const svgBlob = new Blob([svgString], { type: "image/svg+xml;charset=utf-8" });
+      const svgUrl = URL.createObjectURL(svgBlob);
 
-      // 10. SVG decorative pattern (medical cross + waves)
-      const svgDecor = `
-        <svg width="1080" height="1440" style="position: absolute; top: 0; left: 0; z-index: 0; opacity: 0.08;" viewBox="0 0 1080 1440" xmlns="http://www.w3.org/2000/svg">
-          <defs>
-            <pattern id="medPattern" x="0" y="0" width="120" height="120" patternUnits="userSpaceOnUse">
-              <path d="M50 30 L70 30 L70 50 L90 50 L90 70 L70 70 L70 90 L50 90 L50 70 L30 70 L30 50 L50 50 Z" fill="white" opacity="0.4"/>
-              <circle cx="60" cy="60" r="3" fill="${theme.accentColor}" opacity="0.5"/>
-            </pattern>
-          </defs>
-          <rect width="1080" height="1440" fill="url(#medPattern)"/>
-        </svg>
-      `;
-
-      // 11. Wave SVG at bottom
-      const waveSvg = `
-        <svg width="1080" height="200" style="position: absolute; bottom: 0; left: 0; z-index: 0; opacity: 0.15;" viewBox="0 0 1080 200" xmlns="http://www.w3.org/2000/svg">
-          <path d="M0,100 C270,180 540,20 810,100 C945,140 1010,80 1080,100 L1080,200 L0,200 Z" fill="${theme.primaryGlow}"/>
-          <path d="M0,140 C270,80 540,180 810,120 C945,90 1010,150 1080,130 L1080,200 L0,200 Z" fill="${theme.accentColor}" opacity="0.5"/>
-        </svg>
-      `;
-
-      // 12. Doctor image overlay (professional medical image)
-      const doctorOverlay = `
-        <div style="position: absolute; bottom: 200px; left: 20px; width: 380px; height: 550px; z-index: 1; opacity: 0.88;">
-          <img src="${theme.doctorImage}" 
-               style="width: 100%; height: 100%; object-fit: cover; border-radius: 30px; 
-                      mask-image: linear-gradient(to top, black 60%, transparent 100%), linear-gradient(to right, transparent 0%, black 15%);
-                      -webkit-mask-image: linear-gradient(to top, black 60%, transparent 100%);
-                      filter: drop-shadow(0 20px 50px rgba(0,0,0,0.5));" 
-               crossorigin="anonymous" />
-        </div>
-      `;
-
-      // 13. Golden 3D discount number
-      const goldenDiscount = `
-        <div style="position: relative; display: inline-flex; align-items: baseline; gap: 8px;">
-          <span style="
-            font-size: 240px; 
-            font-weight: 900; 
-            line-height: 0.9;
-            background: linear-gradient(135deg, #FDE68A 0%, #F59E0B 40%, #D97706 70%, #92400E 100%);
-            -webkit-background-clip: text;
-            -webkit-text-fill-color: transparent;
-            background-clip: text;
-            filter: drop-shadow(0 8px 20px rgba(217, 119, 6, 0.5)) drop-shadow(0 0 40px ${theme.accentColor}80);
-            text-shadow: 0 4px 0 rgba(146, 64, 14, 0.3);
-            letter-spacing: -8px;
-          ">${promo.discount_value}</span>
-          <span style="
-            font-size: 90px; 
-            font-weight: 900;
-            background: linear-gradient(135deg, #FDE68A 0%, #F59E0B 60%, #D97706 100%);
-            -webkit-background-clip: text;
-            -webkit-text-fill-color: transparent;
-            background-clip: text;
-            filter: drop-shadow(0 4px 15px rgba(217, 119, 6, 0.5));
-          ">${promo.discount_type === "percentage" ? "%" : "ر.ي"}</span>
-        </div>
-      `;
-
-      // 14. Build final HTML
-      container.innerHTML = `
-        <!-- Background image overlay -->
-        <div style="position: absolute; top: 0; left: 0; right: 0; bottom: 0; z-index: 0; opacity: 0.15; background: url('${theme.bgPattern}') center/cover no-repeat; filter: blur(3px);"></div>
-        
-        <!-- Dark vignette -->
-        <div style="position: absolute; top: 0; left: 0; right: 0; bottom: 0; z-index: 0; background: radial-gradient(ellipse at center, transparent 30%, rgba(0,0,0,0.4) 100%);"></div>
-
-        <!-- SVG pattern -->
-        ${svgDecor}
-
-        <!-- Decorative glowing orbs -->
-        <div style="position: absolute; top: -150px; right: -150px; width: 500px; height: 500px; border-radius: 50%; background: radial-gradient(circle, ${theme.primaryGlow}40 0%, transparent 65%); z-index: 0; filter: blur(20px);"></div>
-        <div style="position: absolute; top: 300px; left: -200px; width: 450px; height: 450px; border-radius: 50%; background: radial-gradient(circle, ${theme.accentColor}30 0%, transparent 70%); z-index: 0; filter: blur(30px);"></div>
-        <div style="position: absolute; bottom: -100px; right: -100px; width: 400px; height: 400px; border-radius: 50%; background: radial-gradient(circle, ${theme.secondaryGlow}25 0%, transparent 70%); z-index: 0; filter: blur(25px);"></div>
-
-        <!-- Wave decoration -->
-        ${waveSvg}
-
-        <!-- Doctor image -->
-        ${doctorOverlay}
-
-        <!-- Main content -->
-        <div style="position: relative; z-index: 2; display: flex; flex-direction: column; height: 100%; padding: 45px 55px;">
-          
-          <!-- HEADER -->
-          <div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 25px;">
-            <div style="display: flex; align-items: center; gap: 22px;">
-              ${logoHtml}
-              <div>
-                <h1 style="font-size: 46px; font-weight: 900; margin: 0; color: #ffffff; line-height: 1.1; text-shadow: 0 4px 30px rgba(0,0,0,0.5), 0 0 20px ${theme.primaryGlow}40;">${clinic.name}</h1>
-                <p style="font-size: 22px; color: rgba(255,255,255,0.85); margin: 8px 0 0; font-weight: 600; text-shadow: 0 2px 10px rgba(0,0,0,0.3);">${theme.tagline} ${theme.icon}</p>
-              </div>
-            </div>
-            ${endDateHtml}
-          </div>
-
-          <!-- DIVIDER GLOW LINE -->
-          <div style="height: 3px; background: linear-gradient(90deg, transparent, ${theme.accentColor}, ${theme.primaryGlow}, transparent); margin-bottom: 30px; border-radius: 3px; box-shadow: 0 0 20px ${theme.accentColor}80;"></div>
-
-          <!-- HERO SECTION: Title + Discount -->
-          <div style="display: flex; align-items: center; justify-content: flex-end; margin: 20px 0 15px 0;">
-            <div style="text-align: left; flex: 1; padding-right: 400px;">
-              <div style="display: inline-block; background: linear-gradient(135deg, #DC2626, #991B1B); padding: 8px 22px; border-radius: 12px; margin-bottom: 15px; box-shadow: 0 8px 25px rgba(220, 38, 38, 0.5); transform: rotate(-2deg);">
-                <span style="font-size: 22px; font-weight: 900; color: white; letter-spacing: 2px;">🔥 عرض حصري</span>
-              </div>
-              <h2 style="font-size: 78px; font-weight: 900; margin: 0 0 10px 0; line-height: 1.1; color: #ffffff; text-shadow: 0 6px 40px rgba(0,0,0,0.6), 0 0 30px ${theme.primaryGlow}30;">
-                ${promo.title}
-              </h2>
-              ${
-                promo.description
-                  ? `<p style="font-size: 28px; color: rgba(255,255,255,0.92); margin: 12px 0 0 0; line-height: 1.4; text-shadow: 0 3px 20px rgba(0,0,0,0.4); font-weight: 500;">${promo.description}</p>`
-                  : ""
-              }
-            </div>
-          </div>
-
-          <!-- GOLDEN DISCOUNT -->
-          <div style="display: flex; justify-content: flex-end; align-items: center; margin: 10px 0 20px 0; padding-right: 60px;">
-            <div style="text-align: center;">
-              <div style="font-size: 26px; font-weight: 700; color: rgba(255,255,255,0.8); margin-bottom: -20px; letter-spacing: 3px; text-shadow: 0 2px 10px rgba(0,0,0,0.4);">وفّر</div>
-              ${goldenDiscount}
-              <div style="font-size: 24px; font-weight: 800; color: ${theme.accentColor}; margin-top: -10px; letter-spacing: 4px; text-shadow: 0 2px 15px ${theme.accentColor}80;">${promo.discount_type === "percentage" ? "خصم فوري" : "قيمة الخصم"}</div>
-            </div>
-          </div>
-
-          <!-- SERVICE CHIPS GRID -->
-          ${chipsHtml ? `<div style="margin: 15px 0;">${chipsHtml}</div>` : `<div style="flex: 1;"></div>`}
-
-          <!-- BOTTOM CARD: QR + Contact -->
-          <div style="
-            background: linear-gradient(135deg, rgba(255,255,255,0.15), rgba(255,255,255,0.05));
-            backdrop-filter: blur(30px);
-            border-radius: 30px;
-            padding: 28px 32px;
-            margin-top: auto;
-            border: 2px solid rgba(255,255,255,0.2);
-            display: flex;
-            align-items: center;
-            justify-content: space-between;
-            gap: 24px;
-            box-shadow: 0 20px 60px rgba(0,0,0,0.4), inset 0 1px 0 rgba(255,255,255,0.2);
-            position: relative;
-            overflow: hidden;
-          ">
-            <div style="position: absolute; top: -30px; right: -30px; width: 120px; height: 120px; border-radius: 50%; background: radial-gradient(circle, ${theme.accentColor}30, transparent); filter: blur(20px);"></div>
-            
-            <!-- QR Section -->
-            <div style="flex-shrink: 0; text-align: center;">
-              <div style="background: white; padding: 10px; border-radius: 20px; box-shadow: 0 10px 40px rgba(0,0,0,0.4); border: 3px solid ${theme.accentColor};">
-                <img src="${qrCodeUrl}" style="width: 180px; height: 180px; display: block;" crossorigin="anonymous" />
-              </div>
-              <div style="margin-top: 10px; font-size: 16px; font-weight: 700; color: ${theme.accentColor}; letter-spacing: 1px;">📱 امسح واحجز</div>
-            </div>
-
-            <!-- Contact Info -->
-            <div style="flex: 1; display: flex; flex-direction: column; gap: 14px;">
-              ${codeHtml}
-              ${phoneHtml}
-              ${
-                !codeHtml && !phoneHtml
-                  ? `<div style="font-size: 28px; font-weight: 800; color: white; text-align: center;">احجز موعدك الآن عن طريق موظفنا الآلي الذكي 🤖</div>`
-                  : `<div style="font-size: 18px; font-weight: 600; color: rgba(255,255,255,0.75); text-align: right; margin-top: 4px;">✨ احجز عن طريق موظفنا الآلي الذكي</div>`
-              }
-            </div>
-          </div>
-
-          <!-- FOOTER -->
-          <div style="text-align: center; padding-top: 18px; margin-top: 12px;">
-            <span style="font-size: 16px; color: rgba(255,255,255,0.4); letter-spacing: 1px; font-weight: 500;">© ${new Date().getFullYear()} ${clinic.name} — نظام العيادة الذكي</span>
-          </div>
-        </div>
-      `;
-
-      // 15. Append + capture
-      document.body.appendChild(container);
-
-      const canvas = await html2canvas(container, {
-        scale: 3,
-        useCORS: true,
-        allowTaint: false,
-        backgroundColor: null,
-        logging: false,
-        width: 1080,
-        height: 1440,
-        imageTimeout: 15000,
-        onclone: (doc) => {
-          const images = doc.querySelectorAll('img');
-          return Promise.all(
-            Array.from(images).map((img) => {
-              if (img.complete && img.naturalHeight !== 0) return Promise.resolve();
-              return new Promise((resolve) => {
-                img.onload = resolve;
-                img.onerror = resolve;
-                setTimeout(resolve, 8000);
-              });
-            })
-          );
-        },
+      const img = new window.Image();
+      img.crossOrigin = "anonymous";
+      
+      await new Promise<void>((resolve, reject) => {
+        img.onload = () => resolve();
+        img.onerror = (e) => reject(new Error("فشل تحميل SVG"));
+        img.src = svgUrl;
       });
 
-      document.body.removeChild(container);
+      const canvas = document.createElement("canvas");
+      const scale = 2;
+      canvas.width = W * scale;
+      canvas.height = H * scale;
+      const ctx = canvas.getContext("2d")!;
+      ctx.scale(scale, scale);
+      ctx.drawImage(img, 0, 0, W, H);
 
-      // 16. Convert to bytes
-      const imageDataUrl = canvas.toDataURL("image/png");
+      URL.revokeObjectURL(svgUrl);
+
+      // Convert to bytes
+      const imageDataUrl = canvas.toDataURL("image/png", 1.0);
       const base64Data = imageDataUrl.split(",")[1];
       const binaryString = atob(base64Data);
       const bytes = new Uint8Array(binaryString.length);
@@ -922,16 +845,16 @@ export default function SettingsPage() {
         bytes[i] = binaryString.charCodeAt(i);
       }
 
-      // 17. Upload (multi-fallback strategy)
+      // Upload
       const filePath = `${clinic.id}/promo_${promo.id}.png`;
-      const supabaseUrl = import.meta.env.VITE_SUPABASE_URL;
+      const supabaseUrl2 = import.meta.env.VITE_SUPABASE_URL;
       const supabaseServiceKey = import.meta.env.VITE_SUPABASE_SERVICE_ROLE_KEY;
 
       let uploadSuccess = false;
 
       if (supabaseServiceKey) {
         try {
-          const uploadResponse = await fetch(`${supabaseUrl}/storage/v1/object/promo-images/${filePath}`, {
+          const uploadResponse = await fetch(`${supabaseUrl2}/storage/v1/object/promo-images/${filePath}`, {
             method: "POST",
             headers: {
               "Content-Type": "image/png",
@@ -943,13 +866,9 @@ export default function SettingsPage() {
           });
           if (uploadResponse.ok) {
             uploadSuccess = true;
-            console.log("✅ Uploaded with service role key");
-          } else {
-            const errorText = await uploadResponse.text();
-            console.log("⚠️ Service role upload failed:", errorText);
           }
         } catch (e) {
-          console.log("⚠️ Service role upload error:", e);
+          console.log("Service role upload error:", e);
         }
       }
 
@@ -960,7 +879,7 @@ export default function SettingsPage() {
           if (token) {
             const formData = new FormData();
             formData.append("file", new Blob([bytes], { type: "image/png" }), filePath);
-            const uploadResponse = await fetch(`${supabaseUrl}/storage/v1/object/promo-images/${filePath}`, {
+            const uploadResponse = await fetch(`${supabaseUrl2}/storage/v1/object/promo-images/${filePath}`, {
               method: "POST",
               headers: {
                 "apikey": supabaseAnonKey,
@@ -969,16 +888,10 @@ export default function SettingsPage() {
               },
               body: formData,
             });
-            if (uploadResponse.ok) {
-              uploadSuccess = true;
-              console.log("✅ Uploaded with session token");
-            } else {
-              const errorText = await uploadResponse.text();
-              console.log("⚠️ Session token upload failed:", errorText);
-            }
+            if (uploadResponse.ok) uploadSuccess = true;
           }
         } catch (e) {
-          console.log("⚠️ Session token upload error:", e);
+          console.log("Session upload error:", e);
         }
       }
 
@@ -986,33 +899,21 @@ export default function SettingsPage() {
         try {
           const { error: uploadError } = await supabase.storage
             .from("promo-images")
-            .upload(filePath, bytes, {
-              contentType: "image/png",
-              upsert: true,
-            });
-          if (!uploadError) {
-            uploadSuccess = true;
-            console.log("✅ Uploaded with supabase client");
-          } else {
-            console.log("⚠️ Supabase client upload failed:", uploadError);
-          }
+            .upload(filePath, bytes, { contentType: "image/png", upsert: true });
+          if (!uploadError) uploadSuccess = true;
         } catch (e) {
-          console.log("⚠️ Supabase client upload error:", e);
+          console.log("Client upload error:", e);
         }
       }
 
       if (!uploadSuccess) {
-        throw new Error("فشل رفع الصورة. تأكد من أن bucket 'promo-images' موجود ومفعل.");
+        throw new Error("فشل رفع الصورة. تأكد من bucket 'promo-images'.");
       }
 
-      // 18. Get URL + update DB
       const { data: urlData } = supabase.storage.from("promo-images").getPublicUrl(filePath);
       const publicUrl = `${urlData.publicUrl}?t=${Date.now()}`;
 
-      await supabase
-        .from("promotions")
-        .update({ image_url: publicUrl })
-        .eq("id", promo.id);
+      await supabase.from("promotions").update({ image_url: publicUrl }).eq("id", promo.id);
 
       toast({
         title: "✅ تم توليد الصورة الاحترافية",
@@ -1021,7 +922,7 @@ export default function SettingsPage() {
       fetchPromotions();
 
     } catch (error: any) {
-      console.error("❌ خطأ في توليد الصورة:", error);
+      console.error("❌ خطأ:", error);
       toast({
         title: "❌ فشل توليد الصورة",
         description: error.message || "حدث خطأ غير متوقع",
@@ -1065,9 +966,6 @@ export default function SettingsPage() {
     navigate("/");
   };
 
-  // ============================================================
-  // Loading State
-  // ============================================================
   if (authLoading || clinicLoading) {
     return (
       <div className="min-h-screen flex items-center justify-center bg-mesh">
@@ -1079,9 +977,6 @@ export default function SettingsPage() {
     );
   }
 
-  // ============================================================
-  // Render
-  // ============================================================
   return (
     <div className="min-h-screen bg-mesh flex flex-col">
       <SubscriptionLock />
@@ -1118,9 +1013,6 @@ export default function SettingsPage() {
 
       <main className="flex-1 container mx-auto px-4 py-8 max-w-4xl">
         <div className="space-y-6">
-          {/* ============================================================
-              CLINIC SETTINGS
-              ============================================================ */}
           <section className="card-modern p-6 animate-slide-up">
             <div className="flex items-center gap-3 mb-6">
               <div className="w-12 h-12 rounded-2xl bg-gradient-to-br from-blue-500 to-indigo-600 flex items-center justify-center shadow-lg">
@@ -1132,7 +1024,6 @@ export default function SettingsPage() {
               </div>
             </div>
             <div className="grid gap-5">
-              {/* Logo */}
               <div className="space-y-2">
                 <Label className="text-sm font-medium flex items-center gap-2">
                   <Image className="w-4 h-4" />
@@ -1174,7 +1065,6 @@ export default function SettingsPage() {
                 </div>
               </div>
 
-              {/* Clinic Name */}
               <div className="space-y-2">
                 <Label htmlFor="clinicName" className="text-sm font-medium">اسم العيادة</Label>
                 <Input
@@ -1186,7 +1076,6 @@ export default function SettingsPage() {
                 />
               </div>
 
-              {/* Specialty */}
               <div className="space-y-2">
                 <Label className="text-sm font-medium">تخصص العيادة</Label>
                 <Select value={clinicSpecialty} onValueChange={setClinicSpecialty}>
@@ -1204,7 +1093,6 @@ export default function SettingsPage() {
                 <p className="text-xs text-muted-foreground">يستخدم هذا التخصص في تصميم صور العروض الإعلانية</p>
               </div>
 
-              {/* Bot Token */}
               {isAdmin ? (
                 <div className="space-y-2">
                   <Label htmlFor="botToken" className="text-sm font-medium">رمز الموظف الآلي الموحّد (للأدمن فقط)</Label>
@@ -1212,7 +1100,7 @@ export default function SettingsPage() {
                     id="botToken"
                     value={botToken}
                     onChange={(e) => setBotToken(e.target.value)}
-                    placeholder="أدخل رمز الموظف الآلي الموحّد"
+                    placeholder="أدخل الرمز الموحّد"
                     className="input-modern font-mono text-sm"
                     dir="ltr"
                   />
@@ -1227,7 +1115,6 @@ export default function SettingsPage() {
                 </div>
               )}
 
-              {/* Save & Webhook */}
               <Button onClick={handleSaveClinic} disabled={saving} className="w-full sm:w-auto">
                 {saving ? <Loader2 className="w-4 h-4 animate-spin" /> : <Save className="w-4 h-4" />}
                 حفظ الإعدادات
@@ -1243,9 +1130,6 @@ export default function SettingsPage() {
             </div>
           </section>
 
-          {/* ============================================================
-              WORKING HOURS
-              ============================================================ */}
           <section className="card-modern p-6 animate-slide-up delay-50">
             <div className="flex items-center gap-3 mb-6">
               <div className="w-12 h-12 rounded-2xl bg-gradient-to-br from-amber-500 to-orange-600 flex items-center justify-center shadow-lg">
@@ -1253,7 +1137,7 @@ export default function SettingsPage() {
               </div>
               <div>
                 <h2 className="text-xl font-bold text-foreground">أوقات الدوام الرسمية</h2>
-                <p className="text-sm text-muted-foreground">تحديد ساعات العمل التي يرد عليها الموظف الآلي بالحجوزات</p>
+                <p className="text-sm text-muted-foreground">تحديد ساعات العمل التي يرد عليها موظفنا الآلي الذكي بالحجوزات</p>
               </div>
             </div>
             <div className="grid grid-cols-2 gap-4">
@@ -1282,9 +1166,6 @@ export default function SettingsPage() {
             </Button>
           </section>
 
-          {/* ============================================================
-              STAFF MANAGEMENT
-              ============================================================ */}
           <section className="card-modern p-6 animate-slide-up delay-75">
             <div className="flex items-center gap-3 mb-5">
               <div className="w-12 h-12 rounded-2xl bg-gradient-to-br from-indigo-500 to-purple-600 flex items-center justify-center shadow-lg">
@@ -1406,9 +1287,6 @@ export default function SettingsPage() {
             )}
           </section>
 
-          {/* ============================================================
-              CUSTOMER BOOKING LINK
-              ============================================================ */}
           <section className="card-modern p-6 animate-slide-up delay-75">
             <div className="flex items-center gap-3 mb-4">
               <div className="w-12 h-12 rounded-2xl bg-gradient-to-br from-emerald-500 to-teal-600 flex items-center justify-center shadow-lg">
@@ -1421,7 +1299,7 @@ export default function SettingsPage() {
             </div>
             <div className="bg-accent/5 border border-accent/20 rounded-2xl p-5 space-y-3">
               <p className="text-sm text-muted-foreground">
-                هذا هو الرابط/الأمر الخاص بالزبون. عند فتحه سيتعرف الموظف الآلي على عيادتك ويعرض خدماتك فقط.
+                هذا هو الرابط/الأمر الخاص بالزبون. عند فتحه سيتعرف موظفنا الآلي الذكي على عيادتك ويعرض خدماتك فقط.
               </p>
               <div className="flex gap-2">
                 <Input
@@ -1450,9 +1328,6 @@ export default function SettingsPage() {
             </div>
           </section>
 
-          {/* ============================================================
-              QR CODE
-              ============================================================ */}
           <section className="card-modern p-6 animate-slide-up delay-100">
             <div className="flex items-center gap-3 mb-4">
               <div className="w-12 h-12 rounded-2xl bg-gradient-to-br from-fuchsia-500 to-pink-600 flex items-center justify-center shadow-lg">
@@ -1474,7 +1349,7 @@ export default function SettingsPage() {
                   </div>
                   <div className="flex-1 space-y-3 w-full">
                     <p className="text-sm text-foreground">
-                      عند مسح الرمز يفتح موظفنا الآلي <b dir="ltr">@{effectiveBotUsername}</b> مباشرةً على عيادتك.
+                      عند مسح الرمز يفتح موظفنا الآلي الذكي <b dir="ltr">@{effectiveBotUsername}</b> مباشرةً على عيادتك.
                     </p>
                     <div className="flex gap-2">
                       <Input value={link} readOnly className="font-mono text-xs bg-background" dir="ltr" />
@@ -1507,9 +1382,6 @@ export default function SettingsPage() {
             })()}
           </section>
 
-          {/* ============================================================
-              VOICE AGENT
-              ============================================================ */}
           <section className="card-modern p-6 animate-slide-up delay-150">
             <div className="flex items-center gap-3 mb-4">
               <div className="w-12 h-12 rounded-2xl bg-gradient-to-br from-violet-500 to-purple-600 flex items-center justify-center shadow-lg">
@@ -1562,9 +1434,6 @@ export default function SettingsPage() {
             </div>
           </section>
 
-          {/* ============================================================
-              LINK DOCTOR
-              ============================================================ */}
           <section className="card-modern p-6 animate-slide-up delay-100">
             <div className="flex items-center gap-3 mb-4">
               <div className="w-12 h-12 rounded-2xl bg-gradient-to-br from-sky-500 to-blue-600 flex items-center justify-center shadow-lg">
@@ -1580,7 +1449,7 @@ export default function SettingsPage() {
                 <b>الخطوات:</b>
               </p>
               <ol className="text-sm text-muted-foreground space-y-2 list-decimal pr-5">
-                <li>افتح موظف العيادة الآلي</li>
+                <li>افتح موظفنا الآلي الذكي الخاص بالعيادة</li>
                 <li>انسخ الأمر التالي وأرسله له:</li>
               </ol>
               <div className="flex gap-2">
@@ -1604,14 +1473,11 @@ export default function SettingsPage() {
                 </Button>
               </div>
               <p className="text-xs text-muted-foreground">
-                بمجرد الإرسال، سيؤكد لك الموظف الآلي الربط، وستصلك جميع الإشعارات.
+                بمجرد الإرسال، سيؤكد لك موظفنا الآلي الذكي الربط، وستصلك جميع الإشعارات.
               </p>
             </div>
           </section>
 
-          {/* ============================================================
-              INTEGRATION INFO
-              ============================================================ */}
           <section className="card-modern p-6 animate-slide-up delay-100">
             <div className="flex items-center gap-3 mb-6">
               <div className="w-12 h-12 rounded-2xl bg-gradient-to-br from-emerald-500 to-teal-600 flex items-center justify-center shadow-lg">
@@ -1700,9 +1566,6 @@ export default function SettingsPage() {
             </div>
           </section>
 
-          {/* ============================================================
-              🎁 PROMOTIONS & OFFERS
-              ============================================================ */}
           <section className="card-modern p-6 animate-slide-up delay-150">
             <div className="flex items-center gap-3 mb-6">
               <div className="w-12 h-12 rounded-2xl bg-gradient-to-br from-amber-500 to-orange-600 flex items-center justify-center shadow-lg">
@@ -1830,9 +1693,6 @@ export default function SettingsPage() {
             )}
           </section>
 
-          {/* ============================================================
-              SERVICES
-              ============================================================ */}
           <section className="card-modern p-6 animate-slide-up delay-200">
             <div className="flex items-center gap-3 mb-6">
               <div className="w-12 h-12 rounded-2xl bg-gradient-to-br from-violet-500 to-purple-600 flex items-center justify-center shadow-lg">
@@ -1898,9 +1758,6 @@ export default function SettingsPage() {
             </div>
           </section>
 
-          {/* ============================================================
-              SUBSCRIPTION STATUS
-              ============================================================ */}
           <section className="card-modern p-6 animate-slide-up delay-300">
             <div className="flex items-center gap-3 mb-6">
               <div className="w-12 h-12 rounded-2xl bg-gradient-to-br from-amber-500 to-orange-600 flex items-center justify-center shadow-lg">
@@ -1947,9 +1804,6 @@ export default function SettingsPage() {
         </div>
       </main>
 
-      {/* ============================================================
-          🎁 PROMO DIALOG (Add/Edit)
-          ============================================================ */}
       <Dialog
         open={promoDialogOpen}
         onOpenChange={(open) => {
@@ -1963,7 +1817,6 @@ export default function SettingsPage() {
           </DialogHeader>
 
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4 py-4">
-            {/* Left Column */}
             <div className="space-y-4">
               <div>
                 <Label className="text-sm font-medium">اسم العرض *</Label>
@@ -2021,7 +1874,6 @@ export default function SettingsPage() {
                 />
                 <p className="text-[10px] text-muted-foreground mt-1">اترك فارغاً للتوليد التلقائي</p>
               </div>
-              {/* Items */}
               <div>
                 <Label className="text-sm font-medium">عناصر الإعلان (تظهر كصناديق في الصورة)</Label>
                 <textarea
@@ -2036,7 +1888,6 @@ export default function SettingsPage() {
               </div>
             </div>
 
-            {/* Right Column */}
             <div className="space-y-4">
               <div>
                 <Label className="text-sm font-medium">تاريخ البداية</Label>
@@ -2078,7 +1929,6 @@ export default function SettingsPage() {
                   />
                 </div>
               </div>
-              {/* Template */}
               <div>
                 <Label className="text-sm font-medium">قالب التصميم الإعلاني</Label>
                 <Select
@@ -2097,7 +1947,6 @@ export default function SettingsPage() {
                   </SelectContent>
                 </Select>
               </div>
-              {/* Phone Text */}
               <div>
                 <Label className="text-sm font-medium">هاتف التذييل (اختياري)</Label>
                 <Input
@@ -2116,7 +1965,6 @@ export default function SettingsPage() {
                 />
                 <Label className="text-sm font-medium cursor-pointer">العرض نشط</Label>
               </div>
-              {/* Image Upload */}
               <div>
                 <Label className="text-sm font-medium">صورة العرض (اختياري)</Label>
                 <div className="flex items-center gap-3 mt-1">
@@ -2196,4 +2044,67 @@ export default function SettingsPage() {
       <Footer />
     </div>
   );
+}
+
+// ============================================================
+// HELPER FUNCTIONS (for SVG generation)
+// ============================================================
+function escapeXml(unsafe: string): string {
+  if (!unsafe) return "";
+  return String(unsafe)
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;")
+    .replace(/'/g, "&apos;");
+}
+
+function truncate(str: string, max: number): string {
+  if (!str) return "";
+  return str.length > max ? str.substring(0, max) + "..." : str;
+}
+
+function renderChips(items: string[], W: number, theme: any): string {
+  if (!items || items.length === 0) return "";
+  
+  const chipsCount = items.length;
+  const chipsPerRow = chipsCount <= 3 ? chipsCount : 3;
+  const rows = Math.ceil(chipsCount / chipsPerRow);
+  
+  const chipWidth = 280;
+  const chipHeight = 70;
+  const gap = 20;
+  const totalWidth = chipsPerRow * chipWidth + (chipsPerRow - 1) * gap;
+  const startX = (W - totalWidth) / 2;
+  const startY = 990;
+  
+  let chipsHtml = "";
+  
+  items.forEach((item, idx) => {
+    const row = Math.floor(idx / chipsPerRow);
+    const col = idx % chipsPerRow;
+    const x = startX + col * (chipWidth + gap);
+    const y = startY + row * (chipHeight + gap);
+    
+    chipsHtml += `
+      <g transform="translate(${x}, ${y})">
+        <rect x="0" y="0" width="${chipWidth}" height="${chipHeight}" rx="35" 
+              fill="${theme.chipBg}" 
+              stroke="${theme.chipBorder}" 
+              stroke-width="2.5"
+              opacity="0.95"
+              filter="url(#dropShadow)"/>
+        <circle cx="30" cy="${chipHeight / 2}" r="8" fill="${theme.accent}" opacity="0.9"/>
+        <text x="${chipWidth / 2 + 15}" y="${chipHeight / 2 + 9}" 
+              font-family="Cairo, Tajawal, Arial" 
+              font-size="24" 
+              font-weight="700" 
+              fill="white" 
+              text-anchor="middle" 
+              direction="rtl">${escapeXml(truncate(item, 20))}</text>
+      </g>
+    `;
+  });
+  
+  return chipsHtml;
 }
