@@ -49,9 +49,8 @@ import {
   ImagePlus,
   X,
   Edit,
-  Eye,
 } from "lucide-react";
-// 🆕 استيراد html2canvas (موجود في المشروع)
+// 🔥 استيراد html2canvas (نفس مكتبة سند الإيصال)
 import html2canvas from "html2canvas";
 
 interface Service {
@@ -60,7 +59,6 @@ interface Service {
   price: number | null;
 }
 
-// 🆕 إضافة حقول القالب إلى واجهة Promotion
 interface Promotion {
   id: string;
   title: string;
@@ -74,9 +72,6 @@ interface Promotion {
   per_user_limit?: number;
   is_active: boolean;
   image_url?: string;
-  template?: string;    // 'auto' | 'teal' | 'dental' | 'derma' | 'cosmetic'
-  items?: string;       // عناصر الخدمة مفصولة بفواصل
-  phone_text?: string;  // رقم الهاتف في تذييل الصورة
   created_at: string;
 }
 
@@ -88,8 +83,7 @@ export default function SettingsPage() {
 
   // --- Refs ---
   const promoImageInputRef = useRef<HTMLInputElement>(null);
-  // 🆕 Ref لعنصر الصورة المؤقت
-  const promoCardRef = useRef<HTMLDivElement | null>(null);
+  const promoCardRef = useRef<HTMLDivElement>(null);
 
   // --- Existing State ---
   const [clinicName, setClinicName] = useState("");
@@ -454,9 +448,9 @@ export default function SettingsPage() {
         per_user_limit: promo.per_user_limit || 1,
         is_active: promo.is_active,
         image_url: promo.image_url || "",
-        template: promo.template || "auto",
-        items: promo.items || "",
-        phone_text: promo.phone_text || "",
+        template: (promo as any).template || "auto",
+        items: (promo as any).items || "",
+        phone_text: (promo as any).phone_text || "",
       });
       if (promo.image_url) setPromoImagePreview(promo.image_url);
     } else {
@@ -468,17 +462,10 @@ export default function SettingsPage() {
   const handlePromoImageSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
-    console.log("📷 تم اختيار صورة العرض:", file.name, file.size);
     setPromoImageFile(file);
     const reader = new FileReader();
-    reader.onload = (ev) => {
-      setPromoImagePreview(ev.target?.result as string);
-      console.log("✅ تم تحميل معاينة الصورة");
-    };
-    reader.onerror = (err) => {
-      console.error("❌ فشل قراءة الصورة:", err);
-      toast({ title: "خطأ", description: "فشل قراءة الصورة", variant: "destructive" });
-    };
+    reader.onload = (ev) => setPromoImagePreview(ev.target?.result as string);
+    reader.onerror = () => toast({ title: "خطأ", description: "فشل قراءة الصورة", variant: "destructive" });
     reader.readAsDataURL(file);
     if (promoImageInputRef.current) {
       promoImageInputRef.current.value = "";
@@ -486,373 +473,287 @@ export default function SettingsPage() {
   };
 
   const handlePromoImageUploadClick = () => {
-    console.log("🖱️ زر رفع الصورة تم الضغط عليه");
     if (promoImageInputRef.current) {
       promoImageInputRef.current.click();
     } else {
-      console.error("❌ المرجع غير موجود");
       toast({ title: "خطأ", description: "حدث خطأ في تهيئة رفع الصورة", variant: "destructive" });
     }
   };
 
-  // 🆕 دالة رفع الصورة إلى Supabase Storage باستخدام Service Role Key
-  const uploadPromoImageToStorage = async (bytes: Uint8Array, filePath: string): Promise<string | null> => {
-    try {
-      const { data, error } = await supabase.storage
-        .from("promo-images")
-        .upload(filePath, bytes, {
-          contentType: "image/png",
-          upsert: true,
-        });
-      if (error) throw error;
-      const { data: { publicUrl } } = supabase.storage
-        .from("promo-images")
-        .getPublicUrl(filePath);
-      return publicUrl;
-    } catch (error: any) {
-      console.error("❌ فشل رفع الصورة:", error);
-      toast({ title: "خطأ في رفع الصورة", description: error.message || "فشل رفع الصورة إلى التخزين", variant: "destructive" });
-      return null;
+  const handlePromoSubmit = async () => {
+    if (!clinic) return;
+    if (!promoForm.title || !promoForm.discount_type || !promoForm.discount_value) {
+      toast({ title: "بيانات ناقصة", description: "يرجى ملء جميع الحقول الأساسية", variant: "destructive" });
+      return;
+    }
+
+    setUploadingPromoImage(true);
+    let imageUrl = promoForm.image_url || null;
+    if (promoImageFile) {
+      try {
+        const fileExt = promoImageFile.name.split(".").pop();
+        const filePath = `${clinic.id}/promo_${Date.now()}.${fileExt}`;
+        console.log("📤 رفع صورة العرض إلى:", filePath);
+        const { error: uploadError } = await supabase.storage
+          .from("promo-images")
+          .upload(filePath, promoImageFile, { upsert: true });
+        if (uploadError) {
+          console.error("❌ فشل رفع الصورة:", uploadError);
+          toast({ title: "خطأ في رفع الصورة", description: uploadError.message, variant: "destructive" });
+          setUploadingPromoImage(false);
+          return;
+        }
+        const { data: { publicUrl } } = supabase.storage.from("promo-images").getPublicUrl(filePath);
+        imageUrl = publicUrl;
+        console.log("✅ تم رفع الصورة بنجاح:", imageUrl);
+      } catch (err: any) {
+        console.error("❌ استثناء في رفع الصورة:", err);
+        toast({ title: "خطأ", description: err.message || "فشل رفع الصورة", variant: "destructive" });
+        setUploadingPromoImage(false);
+        return;
+      }
+    }
+
+    const payload = {
+      clinic_id: clinic.id,
+      title: promoForm.title,
+      description: promoForm.description || null,
+      discount_type: promoForm.discount_type,
+      discount_value: promoForm.discount_value,
+      code: promoForm.code || null,
+      start_date: promoForm.start_date || null,
+      end_date: promoForm.end_date || null,
+      usage_limit: promoForm.usage_limit || null,
+      per_user_limit: promoForm.per_user_limit || 1,
+      is_active: promoForm.is_active !== undefined ? promoForm.is_active : true,
+      image_url: imageUrl,
+      template: promoForm.template || "auto",
+      items: promoForm.items || null,
+      phone_text: promoForm.phone_text || null,
+    };
+
+    let error;
+    if (editingPromo) {
+      const { error: e } = await supabase.from("promotions").update(payload).eq("id", editingPromo.id);
+      error = e;
+    } else {
+      const { error: e } = await supabase.from("promotions").insert(payload);
+      error = e;
+    }
+
+    setUploadingPromoImage(false);
+    if (error) {
+      console.error("❌ فشل حفظ العرض:", error);
+      toast({ title: "خطأ", description: "فشل حفظ العرض: " + error.message, variant: "destructive" });
+    } else {
+      toast({ title: "تم الحفظ ✓", description: "تم حفظ العرض بنجاح" });
+      setPromoDialogOpen(false);
+      resetPromoForm();
+      fetchPromotions();
     }
   };
 
-  // 🆕 NEW: توليد صورة عرض احترافية باستخدام html2canvas (نفس آلية سند الإيصال)
-  const generatePromoImage = async (promo: Promotion) => {
+  const fetchPromotions = async () => {
     if (!clinic) return;
+    const { data } = await supabase
+      .from("promotions")
+      .select("*")
+      .eq("clinic_id", clinic.id)
+      .order("created_at", { ascending: false });
+    setPromotions(data || []);
+  };
+
+  const togglePromoStatus = async (id: string, currentStatus: boolean) => {
+    const { error } = await supabase.from("promotions").update({ is_active: !currentStatus }).eq("id", id);
+    if (error) {
+      toast({ title: "خطأ", description: "فشل تغيير حالة العرض", variant: "destructive" });
+    } else {
+      toast({ title: "تم التحديث", description: `تم ${!currentStatus ? "تفعيل" : "إيقاف"} العرض` });
+      fetchPromotions();
+    }
+  };
+
+  const deletePromo = async (id: string) => {
+    if (!confirm("هل أنت متأكد من حذف هذا العرض؟")) return;
+    const { error } = await supabase.from("promotions").delete().eq("id", id);
+    if (error) {
+      toast({ title: "خطأ", description: "فشل حذف العرض", variant: "destructive" });
+    } else {
+      toast({ title: "تم الحذف", description: "تم حذف العرض بنجاح" });
+      fetchPromotions();
+    }
+  };
+
+  // ============================================================
+  // 🔥 NEW: Generate Promo Image using html2canvas (same as receipt)
+  // ============================================================
+  const generatePromoImage = async (promo: Promotion) => {
+    if (!clinic) {
+      toast({ title: "خطأ", description: "لم يتم تحميل بيانات العيادة", variant: "destructive" });
+      return;
+    }
     setGeneratingPromoImage(true);
 
     try {
-      // 1. إنشاء عنصر مؤقت في DOM (مخفي عن المستخدم)
+      // 1. بناء قالب HTML للصورة (مشابه لسند الإيصال)
       const container = document.createElement("div");
+      container.id = "promo-card-container";
       container.style.cssText = `
         position: fixed;
         top: -9999px;
         left: -9999px;
-        width: 800px;
-        height: 1000px;
-        background: transparent;
-        z-index: -9999;
+        width: 900px;
+        height: 1200px;
+        background: linear-gradient(145deg, #0a0f1f 0%, #141e33 40%, #0d2b3e 100%);
+        padding: 50px 55px;
+        font-family: 'Cairo', 'Segoe UI', sans-serif;
+        direction: rtl;
+        color: white;
+        border-radius: 32px;
+        box-shadow: 0 30px 90px rgba(0,0,0,0.7);
+        display: flex;
+        flex-direction: column;
       `;
-      container.id = "promo-card-container";
-      document.body.appendChild(container);
 
-      // 2. بناء قالب HTML/CSS للصورة الاحترافية (مستوحى من الإعلانات الطبية الفاخرة)
-      const discountDisplay = promo.discount_type === "percentage" ? `${promo.discount_value}%` : `${promo.discount_value} ر.ي`;
-      const isPercentage = promo.discount_type === "percentage";
-      const itemsArray = (promo.items || "").split(",").map(s => s.trim()).filter(Boolean);
+      // بناء عناصر الصورة
+      const discountDisplay =
+        promo.discount_type === "percentage"
+          ? `${promo.discount_value}%`
+          : `${promo.discount_value} ر.ي`;
 
-      // تدرجات الألوان حسب القالب
-      const templateStyles: Record<string, { bg: string; accent: string; gold: string }> = {
-        teal: { bg: "linear-gradient(165deg, #032f2b 0%, #0f766e 50%, #2dd4bf 100%)", accent: "#e11d48", gold: "#f7c948" },
-        dental: { bg: "linear-gradient(165deg, #0a2e6e 0%, #1d4ed8 50%, #60a5fa 100%)", accent: "#dc2626", gold: "#fbbf24" },
-        derma: { bg: "linear-gradient(165deg, #3b0764 0%, #86198f 50%, #e879f9 100%)", accent: "#dc2626", gold: "#fbbf24" },
-        cosmetic: { bg: "linear-gradient(165deg, #082f49 0%, #0369a1 50%, #7dd3fc 100%)", accent: "#e11d48", gold: "#f7c948" },
-        general: { bg: "linear-gradient(165deg, #043f3a 0%, #0f766e 50%, #5eead4 100%)", accent: "#e11d48", gold: "#f7c948" },
-      };
-      const selectedTemplate = (promo.template || "auto") !== "auto" ? promo.template : "general";
-      const theme = templateStyles[selectedTemplate] || templateStyles.general;
+      const discountLabel =
+        promo.discount_type === "percentage" ? "خصم" : "قيمة الخصم";
 
-      const qrValue = `https://t.me/${botUsername || "SmartClinc_bot"}?start=clinic_${clinic.id}`;
+      // تحويل العناصر إلى مصفوفة
+      const itemsList = (promo as any).items
+        ? String((promo as any).items)
+            .split(/[,،\n]/)
+            .map((s: string) => s.trim())
+            .filter(Boolean)
+        : [];
 
+      // شعار العيادة
+      const logoHtml = clinic.logo_url
+        ? `<img src="${clinic.logo_url}" style="width: 80px; height: 80px; border-radius: 20px; object-fit: cover; border: 2px solid rgba(255,255,255,0.3);" />`
+        : `<div style="width: 80px; height: 80px; background: rgba(255,255,255,0.12); border-radius: 20px; display: flex; align-items: center; justify-content: center; font-size: 48px; border: 2px solid rgba(255,255,255,0.2);">🏥</div>`;
+
+      // تاريخ الصلاحية
+      const endDateHtml = promo.end_date
+        ? `<span style="background: rgba(239, 68, 68, 0.2); padding: 6px 16px; border-radius: 30px; font-size: 20px; color: #fca5a5; border: 1px solid rgba(239, 68, 68, 0.3);">📅 صالح حتى: ${promo.end_date}</span>`
+        : "";
+
+      // كود الخصم
+      const codeHtml = promo.code
+        ? `<div style="display: flex; align-items: center; gap: 12px; background: rgba(255,255,255,0.06); padding: 12px 24px; border-radius: 16px; border: 1px dashed rgba(255,255,255,0.2);">
+             <span style="font-size: 22px; color: rgba(255,255,255,0.6);">🔑 كود الخصم:</span>
+             <span style="font-size: 34px; font-weight: 900; color: #fbbf24; letter-spacing: 3px; direction: ltr;">${promo.code}</span>
+           </div>`
+        : "";
+
+      // رقم الهاتف
+      const phoneHtml = (promo as any).phone_text
+        ? `<div style="font-size: 28px; font-weight: 700; color: rgba(255,255,255,0.8); direction: ltr; text-align: right;">📞 ${(promo as any).phone_text}</div>`
+        : "";
+
+      // عناصر الخدمة (chips)
+      const chipsHtml =
+        itemsList.length > 0
+          ? itemsList
+              .map(
+                (item: string) =>
+                  `<span style="background: rgba(255,255,255,0.08); border: 1px solid rgba(255,255,255,0.15); padding: 10px 24px; border-radius: 30px; font-size: 22px; font-weight: 600; color: rgba(255,255,255,0.9);">${item}</span>`
+              )
+              .join("")
+          : "";
+
+      // QR Code (رابط العيادة)
+      const qrLink = `https://t.me/${botUsername || "SmartClinc_bot"}?start=clinic_${clinic.id}`;
+      const qrCodeHtml = `<img src="https://api.qrserver.com/v1/create-qr-code/?size=160x160&data=${encodeURIComponent(
+        qrLink
+      )}&color=000000&bgcolor=FFFFFF&margin=1&qzone=1" style="width: 150px; height: 150px; border-radius: 16px; background: white; padding: 6px; border: 2px solid rgba(255,255,255,0.15);" />`;
+
+      // تجميع القالب
       container.innerHTML = `
-        <style>
-          @import url('https://fonts.googleapis.com/css2?family=Cairo:wght@400;700;900&display=swap');
-          * { margin: 0; padding: 0; box-sizing: border-box; }
-          body { font-family: 'Cairo', sans-serif; }
-          .promo-card {
-            width: 800px;
-            height: 1000px;
-            background: ${theme.bg};
-            border-radius: 24px;
-            padding: 40px 48px;
-            color: #ffffff;
-            display: flex;
-            flex-direction: column;
-            position: relative;
-            overflow: hidden;
-            direction: rtl;
-          }
-          .promo-card .deco-circle {
-            position: absolute;
-            border-radius: 50%;
-            background: rgba(255,255,255,0.05);
-          }
-          .promo-card .deco-circle-1 {
-            width: 400px;
-            height: 400px;
-            top: -120px;
-            right: -120px;
-          }
-          .promo-card .deco-circle-2 {
-            width: 300px;
-            height: 300px;
-            bottom: -100px;
-            left: -100px;
-          }
-          .promo-card .header {
-            display: flex;
-            align-items: center;
-            gap: 18px;
-            margin-bottom: 20px;
-            position: relative;
-            z-index: 2;
-          }
-          .promo-card .header .logo {
-            width: 72px;
-            height: 72px;
-            border-radius: 18px;
-            background: rgba(255,255,255,0.15);
-            border: 2px solid rgba(255,255,255,0.3);
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            overflow: hidden;
-            flex-shrink: 0;
-          }
-          .promo-card .header .logo img {
-            width: 100%;
-            height: 100%;
-            object-fit: cover;
-          }
-          .promo-card .header .clinic-info h2 {
-            font-size: 32px;
-            font-weight: 900;
-            line-height: 1.2;
-          }
-          .promo-card .header .clinic-info p {
-            font-size: 16px;
-            color: rgba(255,255,255,0.7);
-            margin-top: 2px;
-          }
-          .promo-card .header .badge {
-            background: ${theme.accent};
-            border-radius: 999px;
-            padding: 8px 22px;
-            font-size: 18px;
-            font-weight: 800;
-            border: 2px solid rgba(255,255,255,0.6);
-            margin-right: auto;
-          }
-          .promo-card .title-section {
-            margin-top: 10px;
-            position: relative;
-            z-index: 2;
-          }
-          .promo-card .title-section h1 {
-            font-size: 56px;
-            font-weight: 900;
-            line-height: 1.2;
-          }
-          .promo-card .title-section p {
-            font-size: 22px;
-            color: rgba(255,255,255,0.8);
-            margin-top: 6px;
-          }
-          .promo-card .discount-row {
-            display: flex;
-            align-items: center;
-            gap: 30px;
-            margin: 24px 0;
-            position: relative;
-            z-index: 2;
-          }
-          .promo-card .discount-number {
-            font-size: 120px;
-            font-weight: 900;
-            color: ${theme.gold};
-            line-height: 1;
-            display: flex;
-            align-items: baseline;
-            gap: 8px;
-          }
-          .promo-card .discount-number span {
-            font-size: 48px;
-          }
-          .promo-card .discount-circle {
-            width: 140px;
-            height: 140px;
-            border-radius: 50%;
-            background: ${theme.accent};
-            border: 5px solid rgba(255,255,255,0.8);
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            font-size: 32px;
-            font-weight: 900;
-            text-align: center;
-            line-height: 1.2;
-            flex-shrink: 0;
-          }
-          .promo-card .items-row {
-            display: flex;
-            flex-wrap: wrap;
-            gap: 10px;
-            margin: 16px 0;
-            position: relative;
-            z-index: 2;
-          }
-          .promo-card .items-row .chip {
-            background: rgba(255,255,255,0.12);
-            border: 1px solid rgba(255,255,255,0.2);
-            border-radius: 20px;
-            padding: 8px 18px;
-            font-size: 16px;
-            font-weight: 600;
-          }
-          .promo-card .bottom-card {
-            margin-top: auto;
-            background: rgba(255,255,255,0.96);
-            border-radius: 20px;
-            padding: 20px 28px;
-            display: flex;
-            align-items: center;
-            gap: 20px;
-            position: relative;
-            z-index: 2;
-          }
-          .promo-card .bottom-card .info {
-            flex: 1;
-          }
-          .promo-card .bottom-card .info .code-row {
-            display: flex;
-            align-items: center;
-            gap: 10px;
-          }
-          .promo-card .bottom-card .info .code-row .label {
-            font-size: 16px;
-            color: #64748b;
-            font-weight: 700;
-          }
-          .promo-card .bottom-card .info .code-row .code {
-            font-size: 32px;
-            font-weight: 900;
-            color: #0d9488;
-            direction: ltr;
-            font-family: monospace;
-          }
-          .promo-card .bottom-card .info .phone {
-            font-size: 24px;
-            font-weight: 900;
-            color: #0f172a;
-            direction: ltr;
-            margin-top: 4px;
-          }
-          .promo-card .bottom-card .info .hint {
-            font-size: 14px;
-            color: #94a3b8;
-            margin-top: 2px;
-          }
-          .promo-card .bottom-card .qr {
-            background: #ffffff;
-            padding: 6px;
-            border-radius: 12px;
-            border: 2px solid #e2e8f0;
-            flex-shrink: 0;
-          }
-          .promo-card .bottom-card .qr canvas {
-            display: block;
-            width: 120px;
-            height: 120px;
-          }
-          .promo-card .footer {
-            text-align: center;
-            padding-top: 16px;
-            border-top: 1px solid rgba(255,255,255,0.1);
-            margin-top: 16px;
-            font-size: 14px;
-            color: rgba(255,255,255,0.35);
-            position: relative;
-            z-index: 2;
-          }
-        </style>
-        <div class="promo-card">
-          <div class="deco-circle deco-circle-1"></div>
-          <div class="deco-circle deco-circle-2"></div>
-
-          <div class="header">
-            <div class="logo">
-              ${logoUrl ? `<img src="${logoUrl}" alt="شعار العيادة" />` : '<span style="font-size: 32px;">🏥</span>'}
+        <!-- Header: شعار + اسم العيادة + شارة الصلاحية -->
+        <div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 30px; padding-bottom: 20px; border-bottom: 1px solid rgba(255,255,255,0.06);">
+          <div style="display: flex; align-items: center; gap: 20px;">
+            ${logoHtml}
+            <div>
+              <h1 style="font-size: 38px; font-weight: 900; margin: 0; color: #ffffff; line-height: 1.1;">${clinic.name}</h1>
+              <p style="font-size: 20px; color: rgba(255,255,255,0.5); margin: 4px 0 0; font-weight: 500;">عرض ترويجي حصري 🎁</p>
             </div>
-            <div class="clinic-info">
-              <h2>${clinic.name}</h2>
-              <p>عرض خاص — لفترة محدودة</p>
-            </div>
-            <div class="badge">${promo.end_date ? `حتى ${promo.end_date}` : "لفترة محدودة"}</div>
           </div>
-
-          <div class="title-section">
-            <h1>${promo.title}</h1>
-            ${promo.description ? `<p>${promo.description}</p>` : ""}
+          <div style="display: flex; align-items: center; gap: 14px;">
+            ${endDateHtml}
           </div>
+        </div>
 
-          <div class="discount-row">
-            <div class="discount-number">
-              ${promo.discount_value}<span>${isPercentage ? "%" : "ر.ي"}</span>
-            </div>
-            <div class="discount-circle">${isPercentage ? `${promo.discount_value}%` : "عرض خاص"}</div>
-          </div>
+        <!-- القسم الرئيسي: العنوان والوصف -->
+        <div style="flex: 1; display: flex; flex-direction: column; justify-content: center; padding: 10px 0;">
+          <h2 style="font-size: 68px; font-weight: 900; margin: 0 0 10px 0; line-height: 1.2; color: #ffffff; text-shadow: 0 4px 30px rgba(0,0,0,0.3);">
+            ${promo.title}
+          </h2>
+          ${
+            promo.description
+              ? `<p style="font-size: 28px; color: rgba(255,255,255,0.8); margin: 0 0 30px 0; line-height: 1.5;">${promo.description}</p>`
+              : ""
+          }
 
-          ${itemsArray.length ? `
-            <div class="items-row">
-              ${itemsArray.map(item => `<span class="chip">${item}</span>`).join("")}
+          <!-- عرض الخصم بشكل بارز -->
+          <div style="display: flex; align-items: center; gap: 50px; margin: 15px 0 25px 0;">
+            <div style="display: flex; align-items: baseline; gap: 10px;">
+              <span style="font-size: 130px; font-weight: 900; color: #fbbf24; line-height: 1;">${promo.discount_value}</span>
+              <span style="font-size: 48px; font-weight: 900; color: #fbbf24;">${promo.discount_type === "percentage" ? "%" : "ر.ي"}</span>
             </div>
-          ` : ""}
-
-          <div class="bottom-card">
-            <div class="info">
-              ${promo.code ? `
-                <div class="code-row">
-                  <span class="label">كود الخصم:</span>
-                  <span class="code">${promo.code}</span>
-                </div>
-              ` : `<div style="font-size: 20px; font-weight: 800; color: #0d9488;">🎁 الخصم يُطبَّق تلقائياً عند الحجز</div>`}
-              ${promo.phone_text ? `<div class="phone">📞 ${promo.phone_text}</div>` : ""}
-              <div class="hint">امسح الرمز واحجز فوراً عبر البوت</div>
-            </div>
-            <div class="qr">
-              <div id="promo-qr-code"></div>
+            <div style="width: 180px; height: 180px; border-radius: 50%; background: linear-gradient(135deg, #dc2626 0%, #b91c1c 100%); border: 6px solid rgba(255,255,255,0.9); display: flex; align-items: center; justify-content: center; flex-direction: column; box-shadow: 0 15px 50px rgba(220, 38, 38, 0.4);">
+              <span style="font-size: 38px; font-weight: 900; color: white; text-align: center; line-height: 1.1;">${discountDisplay}</span>
+              <span style="font-size: 22px; font-weight: 700; color: rgba(255,255,255,0.9);">${discountLabel}</span>
             </div>
           </div>
 
-          <div class="footer">
-            © ${new Date().getFullYear()} ${clinic.name} — نظام العيادة الذكي
+          <!-- عناصر الخدمة -->
+          ${
+            chipsHtml
+              ? `<div style="display: flex; flex-wrap: wrap; gap: 14px; margin: 10px 0 20px 0;">${chipsHtml}</div>`
+              : ""
+          }
+        </div>
+
+        <!-- البطاقة السفلية (كود الخصم + QR) -->
+        <div style="background: rgba(255,255,255,0.06); backdrop-filter: blur(12px); border-radius: 24px; padding: 25px 30px; margin-top: auto; border: 1px solid rgba(255,255,255,0.08); display: flex; align-items: center; justify-content: space-between;">
+          <div style="display: flex; flex-direction: column; gap: 12px; flex: 1;">
+            ${codeHtml}
+            ${phoneHtml}
+            <div style="font-size: 18px; color: rgba(255,255,255,0.4); margin-top: 4px;">📱 امسح الرمز واحجز الآن عبر البوت</div>
           </div>
+          <div style="flex-shrink: 0;">
+            ${qrCodeHtml}
+          </div>
+        </div>
+
+        <!-- تذييل الصفحة -->
+        <div style="text-align: center; padding-top: 20px; margin-top: 16px; border-top: 1px solid rgba(255,255,255,0.05);">
+          <span style="font-size: 16px; color: rgba(255,255,255,0.2);">© ${new Date().getFullYear()} ${clinic.name} — نظام العيادة الذكي</span>
         </div>
       `;
 
-      // 3. رسم QR Code داخل العنصر
-      const qrContainer = container.querySelector("#promo-qr-code");
-      if (qrContainer) {
-        // استخدام QRCodeCanvas مباشرة (موجود في المشروع)
-        const qrCanvas = document.createElement("canvas");
-        qrCanvas.width = 120;
-        qrCanvas.height = 120;
-        qrContainer.appendChild(qrCanvas);
-        // استخدام مكتبة qrcode.react (موجودة) ولكن نستخدمها بشكل مباشر
-        // بدلاً من ذلك، نستخدم QRCodeCanvas كـ React component لكن هنا نضعه كـ HTML
-        // سنقوم بتوليد QR باستخدام canvas يدوياً
-        const QRCode = require("qrcode");
-        await QRCode.toCanvas(qrCanvas, qrValue, { width: 120, margin: 2 });
-      }
+      // 2. إضافة العنصر إلى DOM مؤقتاً
+      document.body.appendChild(container);
 
-      // 4. الانتظار قليلاً لضمان اكتمال التحميل
-      await new Promise(resolve => setTimeout(resolve, 300));
-
-      // 5. التقاط الصورة باستخدام html2canvas
+      // 3. التقاط الصورة باستخدام html2canvas
       const canvas = await html2canvas(container, {
         scale: 2.5,
         useCORS: true,
         backgroundColor: null,
         logging: false,
-        allowTaint: true,
-        width: 800,
-        height: 1000,
+        width: 900,
+        height: 1200,
       });
 
-      // 6. إزالة العنصر المؤقت
+      // 4. إزالة العنصر من DOM
       document.body.removeChild(container);
 
-      // 7. تحويل canvas إلى Uint8Array
+      // 5. تحويل canvas إلى base64
       const imageDataUrl = canvas.toDataURL("image/png");
       const base64Data = imageDataUrl.split(",")[1];
       const binaryString = atob(base64Data);
@@ -861,26 +762,58 @@ export default function SettingsPage() {
         bytes[i] = binaryString.charCodeAt(i);
       }
 
-      // 8. رفع الصورة إلى Supabase Storage
+      // 6. رفع الصورة إلى Supabase Storage (باستخدام Service Role Key)
       const filePath = `${clinic.id}/promo_${promo.id}.png`;
-      const publicUrl = await uploadPromoImageToStorage(bytes, filePath);
+      const { data: uploadData, error: uploadError } = await supabase.storage
+        .from("promo-images")
+        .upload(filePath, bytes, {
+          contentType: "image/png",
+          upsert: true,
+        });
 
-      if (!publicUrl) {
-        throw new Error("فشل رفع الصورة");
+      if (uploadError) {
+        console.error("❌ خطأ في رفع الصورة:", uploadError);
+        // محاولة رفع باستخدام طريقة بديلة (URL)
+        const formData = new FormData();
+        formData.append("file", new Blob([bytes], { type: "image/png" }), filePath);
+        const uploadResponse = await fetch(
+          `${supabaseUrl}/storage/v1/object/promo-images/${filePath}`,
+          {
+            method: "POST",
+            headers: {
+              apikey: supabaseAnonKey,
+              Authorization: `Bearer ${(await supabase.auth.getSession()).data.session?.access_token}`,
+            },
+            body: formData,
+          }
+        );
+        if (!uploadResponse.ok) {
+          throw new Error(`فشل رفع الصورة: ${uploadResponse.status}`);
+        }
       }
 
-      // 9. تحديث قاعدة البيانات
+      // 7. الحصول على الرابط العام
+      const { data: urlData } = supabase.storage.from("promo-images").getPublicUrl(filePath);
+      const publicUrl = urlData.publicUrl;
+
+      // 8. تحديث قاعدة البيانات
       await supabase
         .from("promotions")
         .update({ image_url: publicUrl })
         .eq("id", promo.id);
 
-      toast({ title: "✅ تم توليد الصورة بنجاح", description: "صورة العرض الاحترافية جاهزة" });
+      toast({
+        title: "✅ تم توليد الصورة بنجاح",
+        description: "صورة العرض الاحترافية جاهزة للنشر في البوت",
+      });
       fetchPromotions();
-
     } catch (error: any) {
-      console.error("❌ توليد الصورة فشل:", error);
-      toast({ title: "فشل التوليد", description: error.message || "حدث خطأ أثناء توليد الصورة", variant: "destructive" });
+      console.error("❌ خطأ في توليد الصورة:", error);
+      toast({
+        title: "❌ فشل توليد الصورة",
+        description: error.message || "حدث خطأ غير متوقع",
+        variant: "destructive",
+      });
     } finally {
       setGeneratingPromoImage(false);
     }
@@ -1753,7 +1686,7 @@ export default function SettingsPage() {
       </main>
 
       {/* ============================================================
-          🆕 NEW: Promotions Dialog (Add/Edit) — مع حقول القالب
+          🆕 NEW: Promotions Dialog (Add/Edit) with template fields
           ============================================================ */}
       <Dialog
         open={promoDialogOpen}
@@ -1826,7 +1759,7 @@ export default function SettingsPage() {
                 />
                 <p className="text-[10px] text-muted-foreground mt-1">اترك فارغاً للتوليد التلقائي</p>
               </div>
-              {/* 🆕 حقل عناصر الإعلان */}
+              {/* 🆕 عناصر الإعلان (chips) */}
               <div>
                 <Label className="text-sm font-medium">عناصر الإعلان (تظهر كصناديق في الصورة)</Label>
                 <textarea
@@ -1835,7 +1768,9 @@ export default function SettingsPage() {
                   placeholder={"مثال:\nتحاليل دقيقة\nاستشارة مجانية\nخصم للعائلات"}
                   className="w-full h-20 rounded-md border border-input bg-background px-3 py-2 text-sm"
                 />
-                <p className="text-[10px] text-muted-foreground mt-1">افصل بين العناصر بسطر أو فاصلة.</p>
+                <p className="text-[10px] text-muted-foreground mt-1">
+                  افصل بين العناصر بسطر أو فاصلة. إن تُركت فارغة تُستخدم أسماء الخدمات تلقائياً.
+                </p>
               </div>
             </div>
 
@@ -1881,7 +1816,7 @@ export default function SettingsPage() {
                   />
                 </div>
               </div>
-              {/* 🆕 حقل قالب التصميم */}
+              {/* 🆕 قالب التصميم الإعلاني */}
               <div>
                 <Label className="text-sm font-medium">قالب التصميم الإعلاني</Label>
                 <Select
@@ -1900,7 +1835,6 @@ export default function SettingsPage() {
                   </SelectContent>
                 </Select>
               </div>
-              {/* 🆕 حقل رقم الهاتف */}
               <div>
                 <Label className="text-sm font-medium">هاتف التذييل (اختياري)</Label>
                 <Input
@@ -1964,7 +1898,7 @@ export default function SettingsPage() {
                   )}
                 </div>
                 <p className="text-[10px] text-muted-foreground mt-1">
-                  أو استخدم زر "توليد صورة عرض احترافية" بعد الحفظ
+                  أو استخدم زر "توليد صورة احترافية" بعد الحفظ
                 </p>
               </div>
             </div>
