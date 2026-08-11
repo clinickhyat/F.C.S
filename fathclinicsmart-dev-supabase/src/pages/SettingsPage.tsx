@@ -47,71 +47,150 @@ interface Promotion {
 }
 
 // ============================================================
-// Theme configurations — PROFESSIONAL CANVAS EDITION v5
-// Layout: Vertical (like reference lab image)
+// SPECIALTY THEMES — Professional Medical Ad Edition v6
+// كل تخصص له: ألوان + صورة خلفية + كلمات مفتاحية لصور الخدمات
 // ============================================================
 const SPECIALTY_THEMES: Record<string, any> = {
   dental: {
-    bg1: "#7DD3C0", bg2: "#5FBFAB", bg3: "#3FA893",
+    bg1: "#B8E4E1", bg2: "#7DD3C7", bg3: "#4FBFB0",
+    darkColor: "#0C4A6E",
     accent: "#F59E0B",
     accentDark: "#B45309",
-    chipBg: "#B8E4D8",
-    chipText: "#0F4C6B",
-    doctorImg: "https://images.pexels.com/photos/5327585/pexels-photo-5327585.jpeg?auto=compress&cs=tinysrgb&w=800",
+    chipBg: "#B8E4E1",
+    chipBorder: "#4FBFB0",
+    chipText: "#0C4A6E",
     icon: "🦷",
-    tagline: "ابتسامة صحية تدوم",
     label: "طب الأسنان",
-    fallbackBg: "#7DD3C0",
+    labelEn: "Dental Care",
+    tagline: "ابتسامة صحية تدوم",
+    // صور خلفية احترافية لعيادة الأسنان
+    heroImages: [
+      "https://images.pexels.com/photos/6528856/pexels-photo-6528856.jpeg?auto=compress&cs=tinysrgb&w=1200",
+      "https://images.pexels.com/photos/3845763/pexels-photo-3845763.jpeg?auto=compress&cs=tinysrgb&w=1200",
+      "https://images.pexels.com/photos/305568/pexels-photo-305568.jpeg?auto=compress&cs=tinysrgb&w=1200",
+    ],
   },
   dermatology: {
-    bg1: "#D8B4F8", bg2: "#B57BE0", bg3: "#8B4FC7",
+    bg1: "#F5E1F5", bg2: "#E0B4E8", bg3: "#B87BC7",
+    darkColor: "#4A1D6E",
     accent: "#F59E0B",
     accentDark: "#B45309",
-    chipBg: "#E9D5F5",
+    chipBg: "#F5E1F5",
+    chipBorder: "#B87BC7",
     chipText: "#4A1D6E",
-    doctorImg: "https://images.pexels.com/photos/5327580/pexels-photo-5327580.jpeg?auto=compress&cs=tinysrgb&w=800",
     icon: "✨",
-    tagline: "بشرة نضرة وإشراقة طبيعية",
     label: "الجلدية والتجميل",
-    fallbackBg: "#D8B4F8",
+    labelEn: "Dermatology",
+    tagline: "بشرة نضرة وإشراقة طبيعية",
+    heroImages: [
+      "https://images.pexels.com/photos/3762879/pexels-photo-3762879.jpeg?auto=compress&cs=tinysrgb&w=1200",
+      "https://images.pexels.com/photos/3985329/pexels-photo-3985329.jpeg?auto=compress&cs=tinysrgb&w=1200",
+      "https://images.pexels.com/photos/3985338/pexels-photo-3985338.jpeg?auto=compress&cs=tinysrgb&w=1200",
+    ],
   },
   gynecology: {
-    bg1: "#F9A8D4", bg2: "#EC4899", bg3: "#BE185D",
+    bg1: "#FBD5E3", bg2: "#F9A8C7", bg3: "#EC4899",
+    darkColor: "#6B1839",
     accent: "#F59E0B",
     accentDark: "#B45309",
-    chipBg: "#FBCFE8",
+    chipBg: "#FBD5E3",
+    chipBorder: "#EC4899",
     chipText: "#6B1839",
-    doctorImg: "https://images.pexels.com/photos/5407206/pexels-photo-5407206.jpeg?auto=compress&cs=tinysrgb&w=800",
     icon: "🌸",
-    tagline: "رعاية متكاملة للأم والطفل",
     label: "النساء والولادة",
-    fallbackBg: "#F9A8D4",
+    labelEn: "Gynecology",
+    tagline: "رعاية متكاملة للأم والطفل",
+    heroImages: [
+      "https://images.pexels.com/photos/3662824/pexels-photo-3662824.jpeg?auto=compress&cs=tinysrgb&w=1200",
+      "https://images.pexels.com/photos/4056723/pexels-photo-4056723.jpeg?auto=compress&cs=tinysrgb&w=1200",
+      "https://images.pexels.com/photos/3985163/pexels-photo-3985163.jpeg?auto=compress&cs=tinysrgb&w=1200",
+    ],
   },
   ophthalmology: {
-    bg1: "#7DD3E8", bg2: "#22B8D9", bg3: "#0E7490",
+    bg1: "#BEE7F0", bg2: "#7DD3E8", bg3: "#22B8D9",
+    darkColor: "#0B4F5F",
     accent: "#F59E0B",
     accentDark: "#B45309",
-    chipBg: "#BAE6FD",
+    chipBg: "#BEE7F0",
+    chipBorder: "#22B8D9",
     chipText: "#0B4F5F",
-    doctorImg: "https://images.pexels.com/photos/5407234/pexels-photo-5407234.jpeg?auto=compress&cs=tinysrgb&w=800",
     icon: "👁️",
-    tagline: "رؤية أوضح لحياة أفضل",
     label: "طب العيون",
-    fallbackBg: "#7DD3E8",
+    labelEn: "Ophthalmology",
+    tagline: "رؤية أوضح لحياة أفضل",
+    heroImages: [
+      "https://images.pexels.com/photos/5752242/pexels-photo-5752242.jpeg?auto=compress&cs=tinysrgb&w=1200",
+      "https://images.pexels.com/photos/5752272/pexels-photo-5752272.jpeg?auto=compress&cs=tinysrgb&w=1200",
+      "https://images.pexels.com/photos/5752275/pexels-photo-5752275.jpeg?auto=compress&cs=tinysrgb&w=1200",
+    ],
   },
   general: {
-    bg1: "#7DD3C0", bg2: "#4FB8A2", bg3: "#2A9D87",
+    bg1: "#B8E4D8", bg2: "#7DD3C0", bg3: "#4FB8A2",
+    darkColor: "#0D4A45",
     accent: "#F59E0B",
     accentDark: "#B45309",
     chipBg: "#B8E4D8",
+    chipBorder: "#4FB8A2",
     chipText: "#0D4A45",
-    doctorImg: "https://images.pexels.com/photos/5327656/pexels-photo-5327656.jpeg?auto=compress&cs=tinysrgb&w=800",
     icon: "🏥",
-    tagline: "صحتك أولويتنا القصوى",
     label: "الطب العام",
-    fallbackBg: "#7DD3C0",
+    labelEn: "General Medicine",
+    tagline: "صحتك أولويتنا القصوى",
+    heroImages: [
+      "https://images.pexels.com/photos/4386466/pexels-photo-4386466.jpeg?auto=compress&cs=tinysrgb&w=1200",
+      "https://images.pexels.com/photos/3376790/pexels-photo-3376790.jpeg?auto=compress&cs=tinysrgb&w=1200",
+      "https://images.pexels.com/photos/4173251/pexels-photo-4173251.jpeg?auto=compress&cs=tinysrgb&w=1200",
+    ],
   },
 };
+
+// ============================================================
+// Smart service image selector based on keywords in title/items
+// ============================================================
+const SERVICE_KEYWORD_IMAGES: Array<{ keywords: string[]; image: string }> = [
+  {
+    keywords: ["تحليل", "دم", "مختبر", "فحص دم", "تحاليل", "معمل"],
+    image: "https://images.pexels.com/photos/3735709/pexels-photo-3735709.jpeg?auto=compress&cs=tinysrgb&w=1200",
+  },
+  {
+    keywords: ["أسنان", "تنظيف", "تقويم", "حشو", "خلع", "تركيب"],
+    image: "https://images.pexels.com/photos/6529144/pexels-photo-6529144.jpeg?auto=compress&cs=tinysrgb&w=1200",
+  },
+  {
+    keywords: ["جلد", "بشرة", "ليزر", "تجميل", "حب الشباب", "تقشير"],
+    image: "https://images.pexels.com/photos/3762453/pexels-photo-3762453.jpeg?auto=compress&cs=tinysrgb&w=1200",
+  },
+  {
+    keywords: ["حمل", "ولادة", "أم", "طفل", "متابعة", "سونار"],
+    image: "https://images.pexels.com/photos/3662850/pexels-photo-3662850.jpeg?auto=compress&cs=tinysrgb&w=1200",
+  },
+  {
+    keywords: ["عين", "نظر", "فحص نظر", "عدسات", "قرنية"],
+    image: "https://images.pexels.com/photos/5752268/pexels-photo-5752268.jpeg?auto=compress&cs=tinysrgb&w=1200",
+  },
+  {
+    keywords: ["أشعة", "سونار", "تصوير", "رنين"],
+    image: "https://images.pexels.com/photos/5327585/pexels-photo-5327585.jpeg?auto=compress&cs=tinysrgb&w=1200",
+  },
+  {
+    keywords: ["استشارة", "كشف", "فحص عام"],
+    image: "https://images.pexels.com/photos/4173251/pexels-photo-4173251.jpeg?auto=compress&cs=tinysrgb&w=1200",
+  },
+];
+
+function pickHeroImage(theme: any, promo: Promotion, items: string[]): string {
+  const searchText = `${promo.title} ${promo.description || ""} ${items.join(" ")}`.toLowerCase();
+  for (const entry of SERVICE_KEYWORD_IMAGES) {
+    for (const kw of entry.keywords) {
+      if (searchText.includes(kw.toLowerCase())) {
+        return entry.image;
+      }
+    }
+  }
+  // Fallback: random hero from theme
+  const heros = theme.heroImages || [];
+  return heros[Math.floor(Math.random() * heros.length)] || heros[0];
+}
 
 export default function SettingsPage() {
   const navigate = useNavigate();
@@ -186,7 +265,10 @@ export default function SettingsPage() {
   useEffect(() => {
     if (clinic) {
       setClinicName(clinic.name || "");
-      setClinicSpecialty((clinic as any).specialty || "general");
+      // Try to get specialty from DB, fallback to localStorage, then "general"
+      const dbSpecialty = (clinic as any).specialty;
+      const lsSpecialty = typeof window !== "undefined" ? localStorage.getItem(`clinic_specialty_${clinic.id}`) : null;
+      setClinicSpecialty(dbSpecialty || lsSpecialty || "general");
       setBotToken((clinic as any).bot_token || "");
       setLogoUrl(clinic.logo_url || null);
       setBotUsername((clinic as any).bot_username || null);
@@ -308,6 +390,9 @@ export default function SettingsPage() {
     setPromotions(data || []);
   };
 
+  // ============================================================
+  // SAFE SAVE — Handles missing 'specialty' column gracefully
+  // ============================================================
   const handleSaveClinic = async () => {
     if (!clinic) {
       toast({ title: "تعذر تحميل العيادة", description: "أعد تحميل الصفحة.", variant: "destructive" });
@@ -319,7 +404,16 @@ export default function SettingsPage() {
     } catch (e) {
       console.warn("vault save failed", e);
     }
-    const { error } = await updateClinic({
+
+    // Always save specialty to localStorage as backup
+    try {
+      if (typeof window !== "undefined") {
+        localStorage.setItem(`clinic_specialty_${clinic.id}`, clinicSpecialty);
+      }
+    } catch (e) {}
+
+    // Try full update first
+    const fullPayload: any = {
       name: clinicName,
       specialty: clinicSpecialty,
       bot_token: botToken,
@@ -329,12 +423,24 @@ export default function SettingsPage() {
       receptionist_whatsapp: receptionistWhatsapp || null,
       working_hours_start: workingHoursStart,
       working_hours_end: workingHoursEnd,
-    } as any);
+    };
+
+    let { error } = await updateClinic(fullPayload);
+
+    // If specialty column doesn't exist, retry without it
+    if (error && String(error.message || "").toLowerCase().includes("specialty")) {
+      console.warn("specialty column missing, retrying without it");
+      const { specialty, ...safePayload } = fullPayload;
+      const retry = await updateClinic(safePayload);
+      error = retry.error;
+    }
+
     if (error) {
       setSaving(false);
       toast({ title: "خطأ", description: error.message || "فشل في حفظ الإعدادات", variant: "destructive" });
       return;
     }
+
     if (botToken && botToken.trim().length > 10) {
       const hookResult = await invokeBotAction("set-webhook");
       if (!hookResult.ok) {
@@ -578,36 +684,48 @@ export default function SettingsPage() {
   };
 
   // ============================================================
-  // 🎨 GENERATE PROFESSIONAL PROMO IMAGE — CANVAS API v5
-  // Layout: Vertical (like reference lab image)
-  // - Header: Logo + Clinic name (top center)
-  // - Doctor image (center-left, large)
-  // - Golden discount number (center-right, 3D)
-  // - Service chips grid (bottom, 3 columns rounded pills)
-  // - Phone footer (very bottom)
+  // 🎨 GENERATE PREMIUM MEDICAL AD IMAGE — v6 FINAL
+  // Free (no server), Professional layout like lab reference
   // ============================================================
-  const generatePromoImage = async (promo: Promotion) => {
+  const generatePromoImage = async (promo: Promotion, forceRegenerate: boolean = false) => {
     if (!clinic) {
       toast({ title: "خطأ", description: "لم يتم تحميل بيانات العيادة", variant: "destructive" });
       return;
     }
+
+    // Check if image already exists and user didn't force regenerate
+    if (!forceRegenerate && promo.image_url) {
+      const confirmRegen = window.confirm(
+        "✅ توجد صورة مرفوعة مسبقاً لهذا العرض.\n\nهل تريد توليد صورة جديدة تحل محل القديمة؟"
+      );
+      if (!confirmRegen) {
+        toast({
+          title: "ℹ️ الصورة موجودة",
+          description: "الصورة الحالية جاهزة للاستخدام. يمكنك حذفها من تعديل العرض ثم إعادة التوليد.",
+        });
+        return;
+      }
+    }
+
     setGeneratingPromoImage(true);
 
     try {
-      const specialty = (clinic as any).specialty || "general";
+      const specialty = clinicSpecialty || "general";
       const theme = SPECIALTY_THEMES[specialty] || SPECIALTY_THEMES.general;
 
-      // Prepare items
+      // Items → عرض فقط الخدمات المشمولة في العرض
       const itemsList = (promo as any).items
         ? String((promo as any).items)
             .split(/[,،\n]/)
             .map((s: string) => s.trim())
             .filter(Boolean)
         : [];
-      const serviceNames = services.map((s) => s.name);
-      const finalItems = (itemsList.length > 0 ? itemsList : serviceNames).slice(0, 9);
 
-      // Canvas setup — Portrait A4-like ratio
+      const finalItems = itemsList.length > 0
+        ? itemsList.slice(0, 9)
+        : ["استشارة مجانية", "خصم فوري", "خدمة متميزة"];
+
+      // Canvas
       const W = 1200;
       const H = 1500;
       const canvas = document.createElement("canvas");
@@ -617,16 +735,14 @@ export default function SettingsPage() {
       ctx.imageSmoothingEnabled = true;
       ctx.imageSmoothingQuality = "high";
 
-      // ============================================================
-      // Helper functions
-      // ============================================================
+      // Helpers
       const loadImage = (url: string): Promise<HTMLImageElement | null> => {
         return new Promise((resolve) => {
           const img = new window.Image();
           img.crossOrigin = "anonymous";
-          img.onload = () => resolve(img);
-          img.onerror = () => resolve(null);
-          setTimeout(() => resolve(null), 10000);
+          const timer = setTimeout(() => resolve(null), 12000);
+          img.onload = () => { clearTimeout(timer); resolve(img); };
+          img.onerror = () => { clearTimeout(timer); resolve(null); };
           img.src = url;
         });
       };
@@ -645,417 +761,380 @@ export default function SettingsPage() {
         ctx.closePath();
       };
 
-      // ============================================================
-      // STEP 1: Background gradient
-      // ============================================================
+      // ============ STEP 1: Background (soft mint gradient) ============
       const bgGrad = ctx.createLinearGradient(0, 0, 0, H);
-      bgGrad.addColorStop(0, theme.bg1);
-      bgGrad.addColorStop(0.5, theme.bg2);
-      bgGrad.addColorStop(1, theme.bg3);
+      bgGrad.addColorStop(0, "#F0FDFA");
+      bgGrad.addColorStop(0.3, theme.bg1);
+      bgGrad.addColorStop(0.7, theme.bg2);
+      bgGrad.addColorStop(1, theme.bg1);
       ctx.fillStyle = bgGrad;
       ctx.fillRect(0, 0, W, H);
 
-      // Soft overlay pattern
-      ctx.fillStyle = "rgba(255, 255, 255, 0.03)";
-      for (let i = 0; i < W; i += 80) {
-        for (let j = 0; j < H; j += 80) {
-          ctx.beginPath();
-          ctx.arc(i, j, 2, 0, Math.PI * 2);
-          ctx.fill();
+      // ============ STEP 2: HERO IMAGE (Left side, large vertical) ============
+      const heroImageUrl = pickHeroImage(theme, promo, itemsList);
+      const heroImg = await loadImage(heroImageUrl);
+
+      const heroX = 40;
+      const heroY = 240;
+      const heroW = 620;
+      const heroH = 940;
+
+      // Hero container with rounded corners and shadow
+      ctx.save();
+      ctx.shadowColor = "rgba(0, 0, 0, 0.25)";
+      ctx.shadowBlur = 30;
+      ctx.shadowOffsetY = 10;
+      ctx.fillStyle = "white";
+      roundRect(heroX - 8, heroY - 8, heroW + 16, heroH + 16, 30);
+      ctx.fill();
+      ctx.restore();
+
+      // Draw hero image inside rounded rect
+      if (heroImg) {
+        ctx.save();
+        roundRect(heroX, heroY, heroW, heroH, 26);
+        ctx.clip();
+
+        // Cover mode
+        const imgRatio = heroImg.width / heroImg.height;
+        const boxRatio = heroW / heroH;
+        let drawW, drawH, drawX, drawY;
+        if (imgRatio > boxRatio) {
+          drawH = heroH;
+          drawW = heroH * imgRatio;
+          drawX = heroX - (drawW - heroW) / 2;
+          drawY = heroY;
+        } else {
+          drawW = heroW;
+          drawH = heroW / imgRatio;
+          drawX = heroX;
+          drawY = heroY - (drawH - heroH) / 2;
         }
+        ctx.drawImage(heroImg, drawX, drawY, drawW, drawH);
+
+        // Subtle overlay for depth
+        const overlayGrad = ctx.createLinearGradient(heroX, heroY, heroX, heroY + heroH);
+        overlayGrad.addColorStop(0, "rgba(0,0,0,0)");
+        overlayGrad.addColorStop(0.7, "rgba(0,0,0,0)");
+        overlayGrad.addColorStop(1, "rgba(0,0,0,0.3)");
+        ctx.fillStyle = overlayGrad;
+        ctx.fillRect(heroX, heroY, heroW, heroH);
+
+        ctx.restore();
+      } else {
+        // Fallback: colored background with icon
+        ctx.save();
+        roundRect(heroX, heroY, heroW, heroH, 26);
+        ctx.fillStyle = theme.bg3;
+        ctx.fill();
+        ctx.font = "300px 'Segoe UI Emoji', Arial";
+        ctx.textAlign = "center";
+        ctx.textBaseline = "middle";
+        ctx.fillStyle = "rgba(255,255,255,0.6)";
+        ctx.fillText(theme.icon, heroX + heroW / 2, heroY + heroH / 2);
+        ctx.restore();
       }
 
-      // Decorative glow circles
-      const glowGrad1 = ctx.createRadialGradient(W - 100, 100, 0, W - 100, 100, 400);
-      glowGrad1.addColorStop(0, "rgba(255, 255, 255, 0.25)");
-      glowGrad1.addColorStop(1, "rgba(255, 255, 255, 0)");
-      ctx.fillStyle = glowGrad1;
-      ctx.fillRect(0, 0, W, H);
-
-      const glowGrad2 = ctx.createRadialGradient(100, H - 200, 0, 100, H - 200, 350);
-      glowGrad2.addColorStop(0, "rgba(255, 255, 255, 0.15)");
-      glowGrad2.addColorStop(1, "rgba(255, 255, 255, 0)");
-      ctx.fillStyle = glowGrad2;
-      ctx.fillRect(0, 0, W, H);
-
-      // ============================================================
-      // STEP 2: HEADER — Logo + Clinic Name (top center)
-      // ============================================================
+      // ============ STEP 3: HEADER (Top center: Logo + Name) ============
       let logoImg: HTMLImageElement | null = null;
       if (clinic.logo_url) {
         logoImg = await loadImage(clinic.logo_url);
       }
 
-      const headerY = 70;
-      const logoSize = 110;
+      const logoSize = 130;
+      const logoX = W / 2 - logoSize / 2;
+      const logoY = 40;
 
-      // Center logo horizontally
+      // Logo white card
+      ctx.save();
+      ctx.shadowColor = "rgba(0, 0, 0, 0.15)";
+      ctx.shadowBlur = 20;
+      ctx.shadowOffsetY = 6;
+      ctx.fillStyle = "white";
+      roundRect(logoX - 10, logoY - 10, logoSize + 20, logoSize + 20, 24);
+      ctx.fill();
+      ctx.restore();
+
       if (logoImg) {
-        // White background for logo
         ctx.save();
-        ctx.shadowColor = "rgba(0, 0, 0, 0.2)";
-        ctx.shadowBlur = 15;
-        ctx.shadowOffsetY = 5;
-        ctx.fillStyle = "white";
-        roundRect(W / 2 - logoSize / 2 - 8, headerY - 8, logoSize + 16, logoSize + 16, 20);
-        ctx.fill();
-        ctx.restore();
-
-        // Clip and draw logo
-        ctx.save();
-        roundRect(W / 2 - logoSize / 2, headerY, logoSize, logoSize, 16);
+        roundRect(logoX, logoY, logoSize, logoSize, 20);
         ctx.clip();
-        ctx.drawImage(logoImg, W / 2 - logoSize / 2, headerY, logoSize, logoSize);
+        ctx.drawImage(logoImg, logoX, logoY, logoSize, logoSize);
         ctx.restore();
       } else {
-        // Fallback: colored circle with icon
         ctx.save();
-        ctx.shadowColor = "rgba(0, 0, 0, 0.2)";
-        ctx.shadowBlur = 15;
-        ctx.fillStyle = "white";
-        ctx.beginPath();
-        ctx.arc(W / 2, headerY + logoSize / 2, logoSize / 2, 0, Math.PI * 2);
+        roundRect(logoX, logoY, logoSize, logoSize, 20);
+        ctx.fillStyle = theme.bg3;
         ctx.fill();
-        ctx.restore();
-
-        ctx.font = "70px 'Segoe UI Emoji', 'Apple Color Emoji', Arial";
+        ctx.font = "80px 'Segoe UI Emoji', Arial";
         ctx.textAlign = "center";
         ctx.textBaseline = "middle";
-        ctx.fillText(theme.icon, W / 2, headerY + logoSize / 2 + 5);
+        ctx.fillStyle = "white";
+        ctx.fillText(theme.icon, logoX + logoSize / 2, logoY + logoSize / 2 + 4);
+        ctx.restore();
       }
 
-      // Clinic name (Arabic, centered)
-      ctx.font = "bold 56px 'Cairo', 'Tajawal', 'Segoe UI', Arial";
-      ctx.fillStyle = "#FFFFFF";
+      // Clinic name (Arabic RTL)
+      ctx.save();
+      ctx.font = "bold 42px 'Cairo', 'Tajawal', 'Segoe UI', Arial";
+      ctx.fillStyle = theme.darkColor;
       ctx.textAlign = "center";
       ctx.textBaseline = "top";
       ctx.direction = "rtl";
-      ctx.shadowColor = "rgba(0, 0, 0, 0.3)";
-      ctx.shadowBlur = 8;
-      ctx.shadowOffsetY = 3;
-      ctx.fillText(clinic.name, W / 2, headerY + logoSize + 20);
-      ctx.shadowColor = "transparent";
+      ctx.fillText(clinic.name, W / 2, logoY + logoSize + 20);
+      ctx.restore();
 
-      // English/Label subtitle
-      ctx.font = "500 26px 'Cairo', 'Tajawal', Arial";
-      ctx.fillStyle = "rgba(255, 255, 255, 0.9)";
-      ctx.fillText(theme.label, W / 2, headerY + logoSize + 90);
+      // English subtitle (label)
+      ctx.save();
+      ctx.font = "500 22px 'Cairo', Arial";
+      ctx.fillStyle = theme.chipText;
+      ctx.textAlign = "center";
+      ctx.textBaseline = "top";
+      ctx.direction = "rtl";
+      ctx.fillText(`${theme.label} • ${theme.labelEn}`, W / 2, logoY + logoSize + 70);
+      ctx.restore();
 
-      // ============================================================
-      // STEP 3: End date badge (top right corner)
-      // ============================================================
+      // ============ STEP 4: End date badge (top right) ============
       if (promo.end_date) {
         ctx.save();
-        const badgeW = 320;
-        const badgeH = 55;
-        const badgeX = 40;
-        const badgeY = 40;
+        const badgeW = 260;
+        const badgeH = 48;
+        const badgeX = W - badgeW - 40;
+        const badgeY = 50;
 
         ctx.shadowColor = "rgba(220, 38, 38, 0.4)";
-        ctx.shadowBlur = 15;
+        ctx.shadowBlur = 12;
         ctx.fillStyle = "#DC2626";
-        roundRect(badgeX, badgeY, badgeW, badgeH, 27);
+        roundRect(badgeX, badgeY, badgeW, badgeH, 24);
         ctx.fill();
         ctx.shadowColor = "transparent";
 
-        ctx.font = "bold 22px 'Cairo', 'Tajawal', Arial";
+        ctx.font = "bold 20px 'Cairo', Arial";
         ctx.fillStyle = "white";
         ctx.textAlign = "center";
         ctx.textBaseline = "middle";
         ctx.direction = "rtl";
-        ctx.fillText(`⏰ صالح حتى ${promo.end_date}`, badgeX + badgeW / 2, badgeY + badgeH / 2);
+        ctx.fillText(`⏰ حتى ${promo.end_date}`, badgeX + badgeW / 2, badgeY + badgeH / 2);
         ctx.restore();
       }
 
-      // ============================================================
-      // STEP 4: Load doctor image (center-left of canvas)
-      // ============================================================
-      const doctorImg = await loadImage(theme.doctorImg);
-      const doctorX = 80;
-      const doctorY = 350;
-      const doctorW = 520;
-      const doctorH = 780;
-
-      if (doctorImg) {
-        // Draw doctor with soft edge fade
-        ctx.save();
-
-        // Create soft rounded mask
-        const grad = ctx.createLinearGradient(doctorX, doctorY, doctorX, doctorY + doctorH);
-        grad.addColorStop(0, "rgba(0,0,0,1)");
-        grad.addColorStop(0.85, "rgba(0,0,0,1)");
-        grad.addColorStop(1, "rgba(0,0,0,0)");
-
-        // Draw image
-        const aspectRatio = doctorImg.width / doctorImg.height;
-        let drawW = doctorW;
-        let drawH = doctorW / aspectRatio;
-        if (drawH < doctorH) {
-          drawH = doctorH;
-          drawW = doctorH * aspectRatio;
-        }
-        const offsetX = doctorX - (drawW - doctorW) / 2;
-        const offsetY = doctorY - (drawH - doctorH) / 2;
-
-        ctx.drawImage(doctorImg, offsetX, offsetY, drawW, drawH);
-
-        // Apply gradient fade at bottom
-        ctx.globalCompositeOperation = "destination-in";
-        ctx.fillStyle = grad;
-        ctx.fillRect(doctorX - 100, doctorY, doctorW + 200, doctorH + 100);
-
-        ctx.restore();
-      } else {
-        // Fallback: colored placeholder with icon
-        ctx.save();
-        ctx.fillStyle = "rgba(255, 255, 255, 0.1)";
-        roundRect(doctorX, doctorY, doctorW, doctorH, 40);
-        ctx.fill();
-
-        ctx.font = "300px 'Segoe UI Emoji', 'Apple Color Emoji', Arial";
-        ctx.textAlign = "center";
-        ctx.textBaseline = "middle";
-        ctx.fillStyle = "rgba(255,255,255,0.8)";
-        ctx.fillText("👩‍⚕️", doctorX + doctorW / 2, doctorY + doctorH / 2);
-        ctx.restore();
-      }
-
-      // ============================================================
-      // STEP 5: Title on left side (above doctor)
-      // ============================================================
+      // ============ STEP 5: TITLE (Right side, above discount) ============
       ctx.save();
-      ctx.font = "bold 62px 'Cairo', 'Tajawal', Arial";
-      ctx.fillStyle = "#FFFFFF";
+      ctx.font = "bold 56px 'Cairo', Arial";
+      ctx.fillStyle = theme.darkColor;
       ctx.textAlign = "right";
       ctx.textBaseline = "top";
       ctx.direction = "rtl";
-      ctx.shadowColor = "rgba(0, 0, 0, 0.3)";
-      ctx.shadowBlur = 10;
-      ctx.shadowOffsetY = 4;
-
-      // Break long title into lines (max 2 lines)
-      const titleLines = wrapText(ctx, promo.title, 500);
+      const titleLines = wrapText(ctx, promo.title, 480);
       titleLines.slice(0, 2).forEach((line, idx) => {
-        ctx.fillText(line, W - 80, 400 + idx * 75);
+        ctx.fillText(line, W - 60, 300 + idx * 68);
       });
       ctx.restore();
 
-      // Description (below title, right side)
+      // Description
       if (promo.description) {
         ctx.save();
-        ctx.font = "500 26px 'Cairo', 'Tajawal', Arial";
-        ctx.fillStyle = "rgba(255, 255, 255, 0.95)";
+        ctx.font = "500 24px 'Cairo', Arial";
+        ctx.fillStyle = theme.chipText;
         ctx.textAlign = "right";
         ctx.textBaseline = "top";
         ctx.direction = "rtl";
         const descLines = wrapText(ctx, promo.description, 480);
         descLines.slice(0, 2).forEach((line, idx) => {
-          ctx.fillText(line, W - 80, 555 + idx * 38);
+          ctx.fillText(line, W - 60, 445 + idx * 34);
         });
         ctx.restore();
       }
 
-      // ============================================================
-      // STEP 6: GOLDEN 3D DISCOUNT NUMBER (right side, huge)
-      // ============================================================
-      const discountX = W - 280;
-      const discountY = 720;
-
-      // "خصم" small label
-      ctx.save();
-      ctx.font = "bold 32px 'Cairo', 'Tajawal', Arial";
-      ctx.fillStyle = "rgba(255, 255, 255, 0.9)";
-      ctx.textAlign = "center";
-      ctx.textBaseline = "top";
-      ctx.direction = "rtl";
-      ctx.fillText("خصم يصل إلى", discountX, discountY - 60);
-      ctx.restore();
-
-      // The BIG golden number
+      // ============ STEP 6: BIG GOLDEN DISCOUNT (Right center, 3D) ============
+      const discountCenterX = W - 260;
+      const discountY = 570;
       const numStr = String(promo.discount_value);
       const unitStr = promo.discount_type === "percentage" ? "%" : "ريال";
 
+      // Small "خصم يصل إلى" label
       ctx.save();
-      // Shadow behind number (3D depth)
-      ctx.font = "900 260px 'Cairo', 'Arial Black', Arial";
+      ctx.font = "bold 26px 'Cairo', Arial";
+      ctx.fillStyle = theme.darkColor;
       ctx.textAlign = "center";
       ctx.textBaseline = "top";
-      ctx.fillStyle = theme.accentDark;
-      ctx.fillText(numStr, discountX + 6, discountY + 6);
-
-      // Golden gradient number (main)
-      const goldGrad = ctx.createLinearGradient(discountX - 100, discountY, discountX - 100, discountY + 260);
-      goldGrad.addColorStop(0, "#FEF3C7");
-      goldGrad.addColorStop(0.3, "#FDE68A");
-      goldGrad.addColorStop(0.6, "#F59E0B");
-      goldGrad.addColorStop(1, "#B45309");
-      ctx.fillStyle = goldGrad;
-      ctx.fillText(numStr, discountX, discountY);
-
-      // Golden outline
-      ctx.strokeStyle = "#78350F";
-      ctx.lineWidth = 3;
-      ctx.strokeText(numStr, discountX, discountY);
+      ctx.direction = "rtl";
+      ctx.fillText("خصم يصل إلى", discountCenterX, discountY);
       ctx.restore();
 
-      // Unit (% or ريال) — in a golden pill below
+      // Draw big golden number with 3D depth
       ctx.save();
-      const unitW = 130;
-      const unitH = 60;
-      const unitPillX = discountX - unitW / 2;
-      const unitPillY = discountY + 280;
+      const bigFontSize = 240;
+      ctx.font = `900 ${bigFontSize}px 'Cairo', 'Arial Black', Arial`;
+      ctx.textAlign = "center";
+      ctx.textBaseline = "top";
+      ctx.direction = "ltr";
 
-      ctx.shadowColor = "rgba(180, 83, 9, 0.4)";
+      // Deep shadow (3D bottom)
+      for (let i = 8; i >= 1; i--) {
+        ctx.fillStyle = `rgba(120, 53, 15, ${0.15 + i * 0.05})`;
+        ctx.fillText(numStr, discountCenterX + i, discountY + 50 + i);
+      }
+
+      // Main golden gradient
+      const goldGrad = ctx.createLinearGradient(0, discountY + 50, 0, discountY + 50 + bigFontSize);
+      goldGrad.addColorStop(0, "#FEF3C7");
+      goldGrad.addColorStop(0.2, "#FDE68A");
+      goldGrad.addColorStop(0.5, "#F59E0B");
+      goldGrad.addColorStop(0.8, "#D97706");
+      goldGrad.addColorStop(1, "#78350F");
+      ctx.fillStyle = goldGrad;
+      ctx.fillText(numStr, discountCenterX, discountY + 50);
+
+      // Highlight overlay (glossy top)
+      const highlightGrad = ctx.createLinearGradient(0, discountY + 50, 0, discountY + 130);
+      highlightGrad.addColorStop(0, "rgba(255, 255, 255, 0.7)");
+      highlightGrad.addColorStop(1, "rgba(255, 255, 255, 0)");
+      ctx.fillStyle = highlightGrad;
+      ctx.fillText(numStr, discountCenterX, discountY + 50);
+
+      // Outline
+      ctx.strokeStyle = "#92400E";
+      ctx.lineWidth = 4;
+      ctx.strokeText(numStr, discountCenterX, discountY + 50);
+      ctx.restore();
+
+      // Unit pill (% or ريال) below
+      ctx.save();
+      const unitW = 150;
+      const unitH = 60;
+      const unitX = discountCenterX - unitW / 2;
+      const unitY = discountY + 310;
+
+      ctx.shadowColor = "rgba(180, 83, 9, 0.5)";
       ctx.shadowBlur = 15;
-      const unitGrad = ctx.createLinearGradient(0, unitPillY, 0, unitPillY + unitH);
-      unitGrad.addColorStop(0, "#FDE68A");
-      unitGrad.addColorStop(1, "#B45309");
+      ctx.shadowOffsetY = 5;
+      const unitGrad = ctx.createLinearGradient(0, unitY, 0, unitY + unitH);
+      unitGrad.addColorStop(0, "#FCD34D");
+      unitGrad.addColorStop(1, "#D97706");
       ctx.fillStyle = unitGrad;
-      roundRect(unitPillX, unitPillY, unitW, unitH, 30);
+      roundRect(unitX, unitY, unitW, unitH, 30);
       ctx.fill();
       ctx.shadowColor = "transparent";
 
-      ctx.font = "bold 34px 'Cairo', 'Tajawal', Arial";
+      ctx.font = "bold 32px 'Cairo', Arial";
       ctx.fillStyle = "#78350F";
       ctx.textAlign = "center";
       ctx.textBaseline = "middle";
       ctx.direction = "rtl";
-      ctx.fillText(unitStr, discountX, unitPillY + unitH / 2);
+      ctx.fillText(unitStr, discountCenterX, unitY + unitH / 2);
       ctx.restore();
 
-      // ============================================================
-      // STEP 7: SERVICE CHIPS GRID (bottom, 3 columns)
-      // ============================================================
-      const chipsStartY = 1120;
-      const chipsAreaW = W - 120;
-      const chipsAreaX = 60;
-      const chipCols = 3;
-      const chipRows = Math.min(3, Math.ceil(finalItems.length / chipCols));
-      const chipGap = 16;
-      const chipW = (chipsAreaW - (chipCols - 1) * chipGap) / chipCols;
-      const chipH = 75;
+      // ============ STEP 7: SERVICE CHIPS (Bottom, grid 3 cols) ============
+      const chipsStartY = 1210;
+      const chipsPerRow = 3;
+      const chipRows = Math.ceil(Math.min(finalItems.length, 9) / chipsPerRow);
+      const chipGap = 12;
+      const chipsAreaX = 40;
+      const chipsAreaW = W - 80;
+      const chipW = (chipsAreaW - (chipsPerRow - 1) * chipGap) / chipsPerRow;
+      const chipH = 62;
 
-      finalItems.slice(0, chipCols * chipRows).forEach((item, idx) => {
-        const row = Math.floor(idx / chipCols);
-        const col = idx % chipCols;
+      finalItems.slice(0, chipsPerRow * 3).forEach((item, idx) => {
+        const row = Math.floor(idx / chipsPerRow);
+        const col = idx % chipsPerRow;
         const chipX = chipsAreaX + col * (chipW + chipGap);
-        const chipY = chipsAreaY(chipsStartY, row, chipH, chipGap);
+        const chipY = chipsStartY + row * (chipH + chipGap);
 
         ctx.save();
-        // Chip shadow
-        ctx.shadowColor = "rgba(0, 0, 0, 0.15)";
+        // Shadow
+        ctx.shadowColor = "rgba(0, 0, 0, 0.12)";
         ctx.shadowBlur = 10;
-        ctx.shadowOffsetY = 4;
+        ctx.shadowOffsetY = 3;
 
         // Chip background
         ctx.fillStyle = theme.chipBg;
-        roundRect(chipX, chipY, chipW, chipH, 40);
+        roundRect(chipX, chipY, chipW, chipH, 31);
         ctx.fill();
         ctx.shadowColor = "transparent";
 
-        // Chip border (subtle)
-        ctx.strokeStyle = "rgba(255, 255, 255, 0.5)";
-        ctx.lineWidth = 2;
-        roundRect(chipX, chipY, chipW, chipH, 40);
+        // Chip border
+        ctx.strokeStyle = theme.chipBorder;
+        ctx.lineWidth = 1.5;
+        ctx.globalAlpha = 0.6;
+        roundRect(chipX, chipY, chipW, chipH, 31);
         ctx.stroke();
+        ctx.globalAlpha = 1;
 
-        // Chip text
-        ctx.font = "bold 26px 'Cairo', 'Tajawal', Arial";
+        // Text
+        ctx.font = "bold 22px 'Cairo', Arial";
         ctx.fillStyle = theme.chipText;
         ctx.textAlign = "center";
         ctx.textBaseline = "middle";
         ctx.direction = "rtl";
-        const displayText = truncateText(ctx, item, chipW - 30);
+        const displayText = truncateText(ctx, item, chipW - 24);
         ctx.fillText(displayText, chipX + chipW / 2, chipY + chipH / 2);
         ctx.restore();
       });
 
-      function chipsAreaY(startY: number, row: number, h: number, gap: number) {
-        return startY + row * (h + gap);
-      }
-
-      // ============================================================
-      // STEP 8: PHONE FOOTER (very bottom, centered pill)
-      // ============================================================
+      // ============ STEP 8: FOOTER (Phone or Code) ============
+      const footerY = H - 80;
       const phoneText = (promo as any).phone_text || "";
-      if (phoneText) {
-        const phoneY = H - 100;
-        const phoneW = 380;
-        const phoneH = 65;
-        const phoneX = W / 2 - phoneW / 2;
+
+      if (phoneText || promo.code) {
+        const footerW = 500;
+        const footerH = 60;
+        const footerX = W / 2 - footerW / 2;
 
         ctx.save();
-        ctx.shadowColor = "rgba(0, 0, 0, 0.3)";
-        ctx.shadowBlur = 20;
+        ctx.shadowColor = "rgba(0, 0, 0, 0.2)";
+        ctx.shadowBlur = 15;
         ctx.shadowOffsetY = 5;
-        ctx.fillStyle = "rgba(255, 255, 255, 0.95)";
-        roundRect(phoneX, phoneY, phoneW, phoneH, 32);
-        ctx.fill();
-        ctx.shadowColor = "transparent";
-
-        // Green phone circle
-        ctx.fillStyle = "#10B981";
-        ctx.beginPath();
-        ctx.arc(phoneX + 40, phoneY + phoneH / 2, 22, 0, Math.PI * 2);
-        ctx.fill();
-
-        // Phone icon
-        ctx.font = "24px 'Segoe UI Emoji', Arial";
         ctx.fillStyle = "white";
-        ctx.textAlign = "center";
-        ctx.textBaseline = "middle";
-        ctx.fillText("📞", phoneX + 40, phoneY + phoneH / 2 + 2);
-
-        // Phone number
-        ctx.font = "bold 34px 'Cairo', Arial";
-        ctx.fillStyle = "#0F172A";
-        ctx.textAlign = "center";
-        ctx.textBaseline = "middle";
-        ctx.direction = "ltr";
-        ctx.fillText(phoneText, phoneX + phoneW / 2 + 20, phoneY + phoneH / 2);
-        ctx.restore();
-      } else if (promo.code) {
-        // Show code instead
-        const codeY = H - 100;
-        const codeW = 380;
-        const codeH = 65;
-        const codeX = W / 2 - codeW / 2;
-
-        ctx.save();
-        ctx.shadowColor = "rgba(0, 0, 0, 0.3)";
-        ctx.shadowBlur = 20;
-        ctx.fillStyle = "rgba(255, 255, 255, 0.95)";
-        roundRect(codeX, codeY, codeW, codeH, 32);
+        roundRect(footerX, footerY, footerW, footerH, 30);
         ctx.fill();
         ctx.shadowColor = "transparent";
 
-        ctx.font = "bold 22px 'Cairo', Arial";
-        ctx.fillStyle = "#6B7280";
-        ctx.textAlign = "right";
-        ctx.textBaseline = "middle";
-        ctx.direction = "rtl";
-        ctx.fillText("كود الخصم:", codeX + codeW - 20, codeY + codeH / 2);
+        if (phoneText) {
+          // Green phone circle
+          ctx.fillStyle = "#10B981";
+          ctx.beginPath();
+          ctx.arc(footerX + 36, footerY + footerH / 2, 20, 0, Math.PI * 2);
+          ctx.fill();
 
-        ctx.font = "bold 34px 'Courier New', monospace";
-        ctx.fillStyle = theme.accentDark;
-        ctx.textAlign = "left";
-        ctx.fillText(promo.code, codeX + 20, codeY + codeH / 2);
+          ctx.font = "22px 'Segoe UI Emoji', Arial";
+          ctx.fillStyle = "white";
+          ctx.textAlign = "center";
+          ctx.textBaseline = "middle";
+          ctx.fillText("📞", footerX + 36, footerY + footerH / 2 + 2);
+
+          ctx.font = "bold 30px 'Cairo', Arial";
+          ctx.fillStyle = theme.darkColor;
+          ctx.textAlign = "center";
+          ctx.textBaseline = "middle";
+          ctx.direction = "ltr";
+          ctx.fillText(phoneText, footerX + footerW / 2 + 20, footerY + footerH / 2);
+        } else if (promo.code) {
+          ctx.font = "bold 20px 'Cairo', Arial";
+          ctx.fillStyle = "#6B7280";
+          ctx.textAlign = "right";
+          ctx.textBaseline = "middle";
+          ctx.direction = "rtl";
+          ctx.fillText("كود الخصم:", footerX + footerW - 20, footerY + footerH / 2);
+
+          ctx.font = "bold 30px 'Courier New', monospace";
+          ctx.fillStyle = theme.accentDark;
+          ctx.textAlign = "left";
+          ctx.fillText(promo.code, footerX + 20, footerY + footerH / 2);
+        }
         ctx.restore();
       } else {
-        // Generic footer
         ctx.save();
-        ctx.font = "bold 28px 'Cairo', Arial";
-        ctx.fillStyle = "rgba(255, 255, 255, 0.95)";
+        ctx.font = "bold 24px 'Cairo', Arial";
+        ctx.fillStyle = theme.darkColor;
         ctx.textAlign = "center";
         ctx.textBaseline = "middle";
         ctx.direction = "rtl";
-        ctx.fillText("احجز الآن عن طريق موظفنا الآلي الذكي 🤖", W / 2, H - 80);
+        ctx.fillText("احجز الآن عن طريق موظفنا الآلي الذكي 🤖", W / 2, footerY + 30);
         ctx.restore();
       }
 
-      // ============================================================
-      // STEP 9: Convert canvas to bytes
-      // ============================================================
+      // ============ STEP 9: Convert & Upload ============
       const imageDataUrl = canvas.toDataURL("image/png", 1.0);
       const base64Data = imageDataUrl.split(",")[1];
       const binaryString = atob(base64Data);
@@ -1064,9 +1143,6 @@ export default function SettingsPage() {
         bytes[i] = binaryString.charCodeAt(i);
       }
 
-      // ============================================================
-      // STEP 10: Upload to Supabase
-      // ============================================================
       const filePath = `${clinic.id}/promo_${promo.id}.png`;
       const supabaseUrl2 = import.meta.env.VITE_SUPABASE_URL;
       const supabaseServiceKey = import.meta.env.VITE_SUPABASE_SERVICE_ROLE_KEY;
@@ -1153,6 +1229,20 @@ export default function SettingsPage() {
     } else {
       toast({ title: "تم التحديث", description: `تم ${!currentStatus ? "تفعيل" : "إيقاف"} العرض` });
       fetchPromotions();
+    }
+  };
+
+  const deletePromoImage = async (promo: Promotion) => {
+    if (!promo.image_url) return;
+    if (!confirm("هل تريد حذف الصورة الحالية؟ ستحتاج إلى توليد صورة جديدة بعد الحذف.")) return;
+    try {
+      const filePath = `${clinic?.id}/promo_${promo.id}.png`;
+      await supabase.storage.from("promo-images").remove([filePath]);
+      await supabase.from("promotions").update({ image_url: null }).eq("id", promo.id);
+      toast({ title: "✓ تم الحذف", description: "تم حذف الصورة. يمكنك توليد صورة جديدة الآن" });
+      fetchPromotions();
+    } catch (e: any) {
+      toast({ title: "خطأ", description: e.message || "فشل حذف الصورة", variant: "destructive" });
     }
   };
 
@@ -1811,7 +1901,7 @@ export default function SettingsPage() {
                     className="border rounded-xl p-4 hover:shadow-md transition-all bg-card/50 relative"
                   >
                     {promo.image_url && (
-                      <div className="w-full h-32 rounded-lg overflow-hidden mb-3 bg-slate-100 border border-slate-200">
+                      <div className="w-full h-32 rounded-lg overflow-hidden mb-3 bg-slate-100 border border-slate-200 relative group">
                         <img
                           src={promo.image_url}
                           alt={promo.title}
@@ -1820,6 +1910,13 @@ export default function SettingsPage() {
                             (e.target as HTMLImageElement).style.display = "none";
                           }}
                         />
+                        <button
+                          onClick={() => deletePromoImage(promo)}
+                          className="absolute top-2 left-2 w-8 h-8 rounded-full bg-red-500/90 hover:bg-red-600 text-white flex items-center justify-center shadow-lg opacity-0 group-hover:opacity-100 transition-opacity"
+                          title="حذف الصورة"
+                        >
+                          <Trash2 className="w-4 h-4" />
+                        </button>
                       </div>
                     )}
                     <div className="flex items-start justify-between">
@@ -1861,6 +1958,7 @@ export default function SettingsPage() {
                           variant="ghost"
                           onClick={() => openPromoDialog(promo)}
                           className="h-7 w-7 p-0"
+                          title="تعديل العرض"
                         >
                           <Edit className="w-4 h-4" />
                         </Button>
@@ -1898,7 +1996,7 @@ export default function SettingsPage() {
                       ) : (
                         <ImagePlus className="w-3 h-3 ml-1" />
                       )}
-                      توليد صورة إعلانية احترافية 🎨
+                      {promo.image_url ? "إعادة توليد الصورة 🔄" : "توليد صورة إعلانية احترافية 🎨"}
                     </Button>
                   </div>
                 ))}
@@ -2088,15 +2186,15 @@ export default function SettingsPage() {
                 <p className="text-[10px] text-muted-foreground mt-1">اترك فارغاً للتوليد التلقائي</p>
               </div>
               <div>
-                <Label className="text-sm font-medium">عناصر الإعلان (تظهر كصناديق في الصورة)</Label>
+                <Label className="text-sm font-medium">عناصر الإعلان (الخدمات المشمولة في العرض فقط)</Label>
                 <textarea
                   value={promoForm.items || ""}
                   onChange={(e) => setPromoForm({ ...promoForm, items: e.target.value })}
                   placeholder={"مثال:\nتحاليل دقيقة\nاستشارة مجانية\nخصم للعائلات"}
-                  className="w-full h-20 rounded-md border border-input bg-background px-3 py-2 text-sm"
+                  className="w-full h-24 rounded-md border border-input bg-background px-3 py-2 text-sm"
                 />
                 <p className="text-[10px] text-muted-foreground mt-1">
-                  افصل بين العناصر بسطر أو فاصلة. إن تُركت فارغة تُستخدم أسماء الخدمات تلقائياً.
+                  اكتب فقط الخدمات المشمولة في العرض. افصل بين العناصر بسطر أو فاصلة.
                 </p>
               </div>
             </div>
@@ -2210,6 +2308,7 @@ export default function SettingsPage() {
                         onClick={() => {
                           setPromoImageFile(null);
                           setPromoImagePreview(null);
+                          setPromoForm({ ...promoForm, image_url: "" });
                           if (promoImageInputRef.current) {
                             promoImageInputRef.current.value = "";
                           }
@@ -2267,7 +2366,6 @@ function wrapText(ctx: CanvasRenderingContext2D, text: string, maxWidth: number)
   const words = text.split(" ");
   const lines: string[] = [];
   let currentLine = words[0] || "";
-
   for (let i = 1; i < words.length; i++) {
     const testLine = currentLine + " " + words[i];
     const metrics = ctx.measureText(testLine);
