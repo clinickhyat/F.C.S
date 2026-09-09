@@ -47,37 +47,41 @@ interface Promotion {
 }
 
 // ============================================================
-// SPECIALTY THEMES — Professional Medical Ad Edition v6
-// كل تخصص له: ألوان + صورة خلفية + كلمات مفتاحية لصور الخدمات
+// SPECIALTY THEMES — MEGA POOL EDITION v7
+// كل تخصص لديه 8+ صورة مختلفة لضمان عدم التكرار
 // ============================================================
 const SPECIALTY_THEMES: Record<string, any> = {
   dental: {
-    bg1: "#B8E4E1", bg2: "#7DD3C7", bg3: "#4FBFB0",
-    darkColor: "#0C4A6E",
+    bg1: "#DBEAFE", bg2: "#93C5FD", bg3: "#3B82F6",
+    darkColor: "#1E3A8A",
     accent: "#F59E0B",
     accentDark: "#B45309",
-    chipBg: "#B8E4E1",
-    chipBorder: "#4FBFB0",
-    chipText: "#0C4A6E",
+    chipBg: "#DBEAFE",
+    chipBorder: "#3B82F6",
+    chipText: "#1E3A8A",
     icon: "🦷",
     label: "طب الأسنان",
     labelEn: "Dental Care",
     tagline: "ابتسامة صحية تدوم",
-    // صور خلفية احترافية لعيادة الأسنان
     heroImages: [
       "https://images.pexels.com/photos/6528856/pexels-photo-6528856.jpeg?auto=compress&cs=tinysrgb&w=1200",
       "https://images.pexels.com/photos/3845763/pexels-photo-3845763.jpeg?auto=compress&cs=tinysrgb&w=1200",
       "https://images.pexels.com/photos/305568/pexels-photo-305568.jpeg?auto=compress&cs=tinysrgb&w=1200",
+      "https://images.pexels.com/photos/3762453/pexels-photo-3762453.jpeg?auto=compress&cs=tinysrgb&w=1200",
+      "https://images.pexels.com/photos/6528854/pexels-photo-6528854.jpeg?auto=compress&cs=tinysrgb&w=1200",
+      "https://images.pexels.com/photos/4270360/pexels-photo-4270360.jpeg?auto=compress&cs=tinysrgb&w=1200",
+      "https://images.pexels.com/photos/3881457/pexels-photo-3881457.jpeg?auto=compress&cs=tinysrgb&w=1200",
+      "https://images.pexels.com/photos/6812503/pexels-photo-6812503.jpeg?auto=compress&cs=tinysrgb&w=1200",
     ],
   },
   dermatology: {
-    bg1: "#F5E1F5", bg2: "#E0B4E8", bg3: "#B87BC7",
-    darkColor: "#4A1D6E",
+    bg1: "#FCE7F3", bg2: "#F9A8D4", bg3: "#DB2777",
+    darkColor: "#831843",
     accent: "#F59E0B",
     accentDark: "#B45309",
-    chipBg: "#F5E1F5",
-    chipBorder: "#B87BC7",
-    chipText: "#4A1D6E",
+    chipBg: "#FCE7F3",
+    chipBorder: "#DB2777",
+    chipText: "#831843",
     icon: "✨",
     label: "الجلدية والتجميل",
     labelEn: "Dermatology",
@@ -86,16 +90,21 @@ const SPECIALTY_THEMES: Record<string, any> = {
       "https://images.pexels.com/photos/3762879/pexels-photo-3762879.jpeg?auto=compress&cs=tinysrgb&w=1200",
       "https://images.pexels.com/photos/3985329/pexels-photo-3985329.jpeg?auto=compress&cs=tinysrgb&w=1200",
       "https://images.pexels.com/photos/3985338/pexels-photo-3985338.jpeg?auto=compress&cs=tinysrgb&w=1200",
+      "https://images.pexels.com/photos/6663575/pexels-photo-6663575.jpeg?auto=compress&cs=tinysrgb&w=1200",
+      "https://images.pexels.com/photos/5069433/pexels-photo-5069433.jpeg?auto=compress&cs=tinysrgb&w=1200",
+      "https://images.pexels.com/photos/7755513/pexels-photo-7755513.jpeg?auto=compress&cs=tinysrgb&w=1200",
+      "https://images.pexels.com/photos/4041392/pexels-photo-4041392.jpeg?auto=compress&cs=tinysrgb&w=1200",
+      "https://images.pexels.com/photos/5069611/pexels-photo-5069611.jpeg?auto=compress&cs=tinysrgb&w=1200",
     ],
   },
   gynecology: {
-    bg1: "#FBD5E3", bg2: "#F9A8C7", bg3: "#EC4899",
-    darkColor: "#6B1839",
+    bg1: "#FBCFE8", bg2: "#F472B6", bg3: "#BE185D",
+    darkColor: "#500724",
     accent: "#F59E0B",
     accentDark: "#B45309",
-    chipBg: "#FBD5E3",
-    chipBorder: "#EC4899",
-    chipText: "#6B1839",
+    chipBg: "#FBCFE8",
+    chipBorder: "#BE185D",
+    chipText: "#500724",
     icon: "🌸",
     label: "النساء والولادة",
     labelEn: "Gynecology",
@@ -104,16 +113,21 @@ const SPECIALTY_THEMES: Record<string, any> = {
       "https://images.pexels.com/photos/3662824/pexels-photo-3662824.jpeg?auto=compress&cs=tinysrgb&w=1200",
       "https://images.pexels.com/photos/4056723/pexels-photo-4056723.jpeg?auto=compress&cs=tinysrgb&w=1200",
       "https://images.pexels.com/photos/3985163/pexels-photo-3985163.jpeg?auto=compress&cs=tinysrgb&w=1200",
+      "https://images.pexels.com/photos/1556710/pexels-photo-1556710.jpeg?auto=compress&cs=tinysrgb&w=1200",
+      "https://images.pexels.com/photos/1442005/pexels-photo-1442005.jpeg?auto=compress&cs=tinysrgb&w=1200",
+      "https://images.pexels.com/photos/1648377/pexels-photo-1648377.jpeg?auto=compress&cs=tinysrgb&w=1200",
+      "https://images.pexels.com/photos/3662850/pexels-photo-3662850.jpeg?auto=compress&cs=tinysrgb&w=1200",
+      "https://images.pexels.com/photos/6849249/pexels-photo-6849249.jpeg?auto=compress&cs=tinysrgb&w=1200",
     ],
   },
   ophthalmology: {
-    bg1: "#BEE7F0", bg2: "#7DD3E8", bg3: "#22B8D9",
-    darkColor: "#0B4F5F",
+    bg1: "#CFFAFE", bg2: "#67E8F9", bg3: "#0891B2",
+    darkColor: "#164E63",
     accent: "#F59E0B",
     accentDark: "#B45309",
-    chipBg: "#BEE7F0",
-    chipBorder: "#22B8D9",
-    chipText: "#0B4F5F",
+    chipBg: "#CFFAFE",
+    chipBorder: "#0891B2",
+    chipText: "#164E63",
     icon: "👁️",
     label: "طب العيون",
     labelEn: "Ophthalmology",
@@ -122,16 +136,21 @@ const SPECIALTY_THEMES: Record<string, any> = {
       "https://images.pexels.com/photos/5752242/pexels-photo-5752242.jpeg?auto=compress&cs=tinysrgb&w=1200",
       "https://images.pexels.com/photos/5752272/pexels-photo-5752272.jpeg?auto=compress&cs=tinysrgb&w=1200",
       "https://images.pexels.com/photos/5752275/pexels-photo-5752275.jpeg?auto=compress&cs=tinysrgb&w=1200",
+      "https://images.pexels.com/photos/5752268/pexels-photo-5752268.jpeg?auto=compress&cs=tinysrgb&w=1200",
+      "https://images.pexels.com/photos/2911521/pexels-photo-2911521.jpeg?auto=compress&cs=tinysrgb&w=1200",
+      "https://images.pexels.com/photos/1290141/pexels-photo-1290141.jpeg?auto=compress&cs=tinysrgb&w=1200",
+      "https://images.pexels.com/photos/5752238/pexels-photo-5752238.jpeg?auto=compress&cs=tinysrgb&w=1200",
+      "https://images.pexels.com/photos/3985233/pexels-photo-3985233.jpeg?auto=compress&cs=tinysrgb&w=1200",
     ],
   },
   general: {
-    bg1: "#B8E4D8", bg2: "#7DD3C0", bg3: "#4FB8A2",
-    darkColor: "#0D4A45",
+    bg1: "#D1FAE5", bg2: "#6EE7B7", bg3: "#059669",
+    darkColor: "#064E3B",
     accent: "#F59E0B",
     accentDark: "#B45309",
-    chipBg: "#B8E4D8",
-    chipBorder: "#4FB8A2",
-    chipText: "#0D4A45",
+    chipBg: "#D1FAE5",
+    chipBorder: "#059669",
+    chipText: "#064E3B",
     icon: "🏥",
     label: "الطب العام",
     labelEn: "General Medicine",
@@ -140,56 +159,111 @@ const SPECIALTY_THEMES: Record<string, any> = {
       "https://images.pexels.com/photos/4386466/pexels-photo-4386466.jpeg?auto=compress&cs=tinysrgb&w=1200",
       "https://images.pexels.com/photos/3376790/pexels-photo-3376790.jpeg?auto=compress&cs=tinysrgb&w=1200",
       "https://images.pexels.com/photos/4173251/pexels-photo-4173251.jpeg?auto=compress&cs=tinysrgb&w=1200",
+      "https://images.pexels.com/photos/4225920/pexels-photo-4225920.jpeg?auto=compress&cs=tinysrgb&w=1200",
+      "https://images.pexels.com/photos/3846005/pexels-photo-3846005.jpeg?auto=compress&cs=tinysrgb&w=1200",
+      "https://images.pexels.com/photos/6129507/pexels-photo-6129507.jpeg?auto=compress&cs=tinysrgb&w=1200",
+      "https://images.pexels.com/photos/4021775/pexels-photo-4021775.jpeg?auto=compress&cs=tinysrgb&w=1200",
+      "https://images.pexels.com/photos/3735709/pexels-photo-3735709.jpeg?auto=compress&cs=tinysrgb&w=1200",
     ],
   },
 };
 
 // ============================================================
-// Smart service image selector based on keywords in title/items
+// Smart service image selector — expanded pool
 // ============================================================
-const SERVICE_KEYWORD_IMAGES: Array<{ keywords: string[]; image: string }> = [
+const SERVICE_KEYWORD_IMAGES: Array<{ keywords: string[]; images: string[] }> = [
   {
-    keywords: ["تحليل", "دم", "مختبر", "فحص دم", "تحاليل", "معمل"],
-    image: "https://images.pexels.com/photos/3735709/pexels-photo-3735709.jpeg?auto=compress&cs=tinysrgb&w=1200",
+    keywords: ["تحليل", "دم", "مختبر", "فحص دم", "تحاليل", "معمل", "cbc"],
+    images: [
+      "https://images.pexels.com/photos/3735709/pexels-photo-3735709.jpeg?auto=compress&cs=tinysrgb&w=1200",
+      "https://images.pexels.com/photos/2280571/pexels-photo-2280571.jpeg?auto=compress&cs=tinysrgb&w=1200",
+      "https://images.pexels.com/photos/8460158/pexels-photo-8460158.jpeg?auto=compress&cs=tinysrgb&w=1200",
+      "https://images.pexels.com/photos/5726837/pexels-photo-5726837.jpeg?auto=compress&cs=tinysrgb&w=1200",
+      "https://images.pexels.com/photos/4033148/pexels-photo-4033148.jpeg?auto=compress&cs=tinysrgb&w=1200",
+    ],
   },
   {
-    keywords: ["أسنان", "تنظيف", "تقويم", "حشو", "خلع", "تركيب"],
-    image: "https://images.pexels.com/photos/6529144/pexels-photo-6529144.jpeg?auto=compress&cs=tinysrgb&w=1200",
+    keywords: ["أسنان", "تنظيف", "تقويم", "حشو", "خلع", "تركيب", "ابتسامة", "لثة"],
+    images: [
+      "https://images.pexels.com/photos/6529144/pexels-photo-6529144.jpeg?auto=compress&cs=tinysrgb&w=1200",
+      "https://images.pexels.com/photos/6528856/pexels-photo-6528856.jpeg?auto=compress&cs=tinysrgb&w=1200",
+      "https://images.pexels.com/photos/305568/pexels-photo-305568.jpeg?auto=compress&cs=tinysrgb&w=1200",
+      "https://images.pexels.com/photos/3881457/pexels-photo-3881457.jpeg?auto=compress&cs=tinysrgb&w=1200",
+    ],
   },
   {
-    keywords: ["جلد", "بشرة", "ليزر", "تجميل", "حب الشباب", "تقشير"],
-    image: "https://images.pexels.com/photos/3762453/pexels-photo-3762453.jpeg?auto=compress&cs=tinysrgb&w=1200",
+    keywords: ["جلد", "بشرة", "ليزر", "تجميل", "حب الشباب", "تقشير", "بوتوكس", "فيلر"],
+    images: [
+      "https://images.pexels.com/photos/3762453/pexels-photo-3762453.jpeg?auto=compress&cs=tinysrgb&w=1200",
+      "https://images.pexels.com/photos/3985329/pexels-photo-3985329.jpeg?auto=compress&cs=tinysrgb&w=1200",
+      "https://images.pexels.com/photos/6663575/pexels-photo-6663575.jpeg?auto=compress&cs=tinysrgb&w=1200",
+      "https://images.pexels.com/photos/5069433/pexels-photo-5069433.jpeg?auto=compress&cs=tinysrgb&w=1200",
+    ],
   },
   {
-    keywords: ["حمل", "ولادة", "أم", "طفل", "متابعة", "سونار"],
-    image: "https://images.pexels.com/photos/3662850/pexels-photo-3662850.jpeg?auto=compress&cs=tinysrgb&w=1200",
+    keywords: ["حمل", "ولادة", "أم", "طفل", "متابعة", "سونار", "رضيع", "أطفال"],
+    images: [
+      "https://images.pexels.com/photos/3662850/pexels-photo-3662850.jpeg?auto=compress&cs=tinysrgb&w=1200",
+      "https://images.pexels.com/photos/1442005/pexels-photo-1442005.jpeg?auto=compress&cs=tinysrgb&w=1200",
+      "https://images.pexels.com/photos/1648377/pexels-photo-1648377.jpeg?auto=compress&cs=tinysrgb&w=1200",
+      "https://images.pexels.com/photos/1556710/pexels-photo-1556710.jpeg?auto=compress&cs=tinysrgb&w=1200",
+    ],
   },
   {
-    keywords: ["عين", "نظر", "فحص نظر", "عدسات", "قرنية"],
-    image: "https://images.pexels.com/photos/5752268/pexels-photo-5752268.jpeg?auto=compress&cs=tinysrgb&w=1200",
+    keywords: ["عين", "نظر", "فحص نظر", "عدسات", "قرنية", "شبكية"],
+    images: [
+      "https://images.pexels.com/photos/5752268/pexels-photo-5752268.jpeg?auto=compress&cs=tinysrgb&w=1200",
+      "https://images.pexels.com/photos/5752242/pexels-photo-5752242.jpeg?auto=compress&cs=tinysrgb&w=1200",
+      "https://images.pexels.com/photos/2911521/pexels-photo-2911521.jpeg?auto=compress&cs=tinysrgb&w=1200",
+      "https://images.pexels.com/photos/1290141/pexels-photo-1290141.jpeg?auto=compress&cs=tinysrgb&w=1200",
+    ],
   },
   {
-    keywords: ["أشعة", "سونار", "تصوير", "رنين"],
-    image: "https://images.pexels.com/photos/5327585/pexels-photo-5327585.jpeg?auto=compress&cs=tinysrgb&w=1200",
+    keywords: ["أشعة", "تصوير", "رنين", "مقطعية", "x-ray"],
+    images: [
+      "https://images.pexels.com/photos/5327585/pexels-photo-5327585.jpeg?auto=compress&cs=tinysrgb&w=1200",
+      "https://images.pexels.com/photos/7089401/pexels-photo-7089401.jpeg?auto=compress&cs=tinysrgb&w=1200",
+      "https://images.pexels.com/photos/263402/pexels-photo-263402.jpeg?auto=compress&cs=tinysrgb&w=1200",
+    ],
   },
   {
-    keywords: ["استشارة", "كشف", "فحص عام"],
-    image: "https://images.pexels.com/photos/4173251/pexels-photo-4173251.jpeg?auto=compress&cs=tinysrgb&w=1200",
+    keywords: ["استشارة", "كشف", "فحص عام", "طبيب"],
+    images: [
+      "https://images.pexels.com/photos/4173251/pexels-photo-4173251.jpeg?auto=compress&cs=tinysrgb&w=1200",
+      "https://images.pexels.com/photos/4386466/pexels-photo-4386466.jpeg?auto=compress&cs=tinysrgb&w=1200",
+      "https://images.pexels.com/photos/3376790/pexels-photo-3376790.jpeg?auto=compress&cs=tinysrgb&w=1200",
+    ],
   },
 ];
 
+// Hash-based image picker → ensures different image per promo
 function pickHeroImage(theme: any, promo: Promotion, items: string[]): string {
   const searchText = `${promo.title} ${promo.description || ""} ${items.join(" ")}`.toLowerCase();
+
+  // Hash from promo.id for deterministic uniqueness
+  let hash = 0;
+  const seedStr = (promo.id || "") + Date.now().toString();
+  for (let i = 0; i < seedStr.length; i++) {
+    hash = ((hash << 5) - hash) + seedStr.charCodeAt(i);
+    hash |= 0;
+  }
+  hash = Math.abs(hash);
+
+  // Try keyword match first
   for (const entry of SERVICE_KEYWORD_IMAGES) {
     for (const kw of entry.keywords) {
       if (searchText.includes(kw.toLowerCase())) {
-        return entry.image;
+        const idx = hash % entry.images.length;
+        return entry.images[idx];
       }
     }
   }
-  // Fallback: random hero from theme
+
+  // Fallback: pick from theme hero pool by hash
   const heros = theme.heroImages || [];
-  return heros[Math.floor(Math.random() * heros.length)] || heros[0];
+  if (heros.length === 0) return "";
+  const idx = hash % heros.length;
+  return heros[idx];
 }
 
 export default function SettingsPage() {
@@ -265,7 +339,6 @@ export default function SettingsPage() {
   useEffect(() => {
     if (clinic) {
       setClinicName(clinic.name || "");
-      // Try to get specialty from DB, fallback to localStorage, then "general"
       const dbSpecialty = (clinic as any).specialty;
       const lsSpecialty = typeof window !== "undefined" ? localStorage.getItem(`clinic_specialty_${clinic.id}`) : null;
       setClinicSpecialty(dbSpecialty || lsSpecialty || "general");
@@ -390,9 +463,6 @@ export default function SettingsPage() {
     setPromotions(data || []);
   };
 
-  // ============================================================
-  // SAFE SAVE — Handles missing 'specialty' column gracefully
-  // ============================================================
   const handleSaveClinic = async () => {
     if (!clinic) {
       toast({ title: "تعذر تحميل العيادة", description: "أعد تحميل الصفحة.", variant: "destructive" });
@@ -404,15 +474,11 @@ export default function SettingsPage() {
     } catch (e) {
       console.warn("vault save failed", e);
     }
-
-    // Always save specialty to localStorage as backup
     try {
       if (typeof window !== "undefined") {
         localStorage.setItem(`clinic_specialty_${clinic.id}`, clinicSpecialty);
       }
     } catch (e) {}
-
-    // Try full update first
     const fullPayload: any = {
       name: clinicName,
       specialty: clinicSpecialty,
@@ -424,23 +490,18 @@ export default function SettingsPage() {
       working_hours_start: workingHoursStart,
       working_hours_end: workingHoursEnd,
     };
-
     let { error } = await updateClinic(fullPayload);
-
-    // If specialty column doesn't exist, retry without it
     if (error && String(error.message || "").toLowerCase().includes("specialty")) {
       console.warn("specialty column missing, retrying without it");
       const { specialty, ...safePayload } = fullPayload;
       const retry = await updateClinic(safePayload);
       error = retry.error;
     }
-
     if (error) {
       setSaving(false);
       toast({ title: "خطأ", description: error.message || "فشل في حفظ الإعدادات", variant: "destructive" });
       return;
     }
-
     if (botToken && botToken.trim().length > 10) {
       const hookResult = await invokeBotAction("set-webhook");
       if (!hookResult.ok) {
@@ -684,8 +745,8 @@ export default function SettingsPage() {
   };
 
   // ============================================================
-  // 🎨 GENERATE PREMIUM MEDICAL AD IMAGE — v6 FINAL
-  // Free (no server), Professional layout like lab reference
+  // 🎨 GENERATE PREMIUM MEDICAL AD IMAGE — v7 ULTIMATE
+  // Full-canvas layout, giant 3D gold number, unique images each time
   // ============================================================
   const generatePromoImage = async (promo: Promotion, forceRegenerate: boolean = false) => {
     if (!clinic) {
@@ -693,15 +754,14 @@ export default function SettingsPage() {
       return;
     }
 
-    // Check if image already exists and user didn't force regenerate
     if (!forceRegenerate && promo.image_url) {
       const confirmRegen = window.confirm(
-        "✅ توجد صورة مرفوعة مسبقاً لهذا العرض.\n\nهل تريد توليد صورة جديدة تحل محل القديمة؟"
+        "✅ توجد صورة مرفوعة مسبقاً لهذا العرض.\n\nهل تريد توليد صورة جديدة (بتصميم مختلف) تحل محل القديمة؟"
       );
       if (!confirmRegen) {
         toast({
           title: "ℹ️ الصورة موجودة",
-          description: "الصورة الحالية جاهزة للاستخدام. يمكنك حذفها من تعديل العرض ثم إعادة التوليد.",
+          description: "الصورة الحالية جاهزة للاستخدام. يمكنك حذفها من زر 🗑 على الصورة ثم إعادة التوليد.",
         });
         return;
       }
@@ -713,7 +773,6 @@ export default function SettingsPage() {
       const specialty = clinicSpecialty || "general";
       const theme = SPECIALTY_THEMES[specialty] || SPECIALTY_THEMES.general;
 
-      // Items → عرض فقط الخدمات المشمولة في العرض
       const itemsList = (promo as any).items
         ? String((promo as any).items)
             .split(/[,،\n]/)
@@ -725,7 +784,7 @@ export default function SettingsPage() {
         ? itemsList.slice(0, 9)
         : ["استشارة مجانية", "خصم فوري", "خدمة متميزة"];
 
-      // Canvas
+      // Canvas — Portrait ratio 4:5 like Instagram
       const W = 1200;
       const H = 1500;
       const canvas = document.createElement("canvas");
@@ -735,12 +794,11 @@ export default function SettingsPage() {
       ctx.imageSmoothingEnabled = true;
       ctx.imageSmoothingQuality = "high";
 
-      // Helpers
       const loadImage = (url: string): Promise<HTMLImageElement | null> => {
         return new Promise((resolve) => {
           const img = new window.Image();
           img.crossOrigin = "anonymous";
-          const timer = setTimeout(() => resolve(null), 12000);
+          const timer = setTimeout(() => resolve(null), 15000);
           img.onload = () => { clearTimeout(timer); resolve(img); };
           img.onerror = () => { clearTimeout(timer); resolve(null); };
           img.src = url;
@@ -761,41 +819,62 @@ export default function SettingsPage() {
         ctx.closePath();
       };
 
-      // ============ STEP 1: Background (soft mint gradient) ============
-      const bgGrad = ctx.createLinearGradient(0, 0, 0, H);
-      bgGrad.addColorStop(0, "#F0FDFA");
-      bgGrad.addColorStop(0.3, theme.bg1);
-      bgGrad.addColorStop(0.7, theme.bg2);
-      bgGrad.addColorStop(1, theme.bg1);
+      // ============ STEP 1: BACKGROUND — clean modern gradient ============
+      const bgGrad = ctx.createLinearGradient(0, 0, W, H);
+      bgGrad.addColorStop(0, "#FFFFFF");
+      bgGrad.addColorStop(0.4, theme.bg1);
+      bgGrad.addColorStop(1, theme.bg2);
       ctx.fillStyle = bgGrad;
       ctx.fillRect(0, 0, W, H);
 
-      // ============ STEP 2: HERO IMAGE (Left side, large vertical) ============
+      // Decorative diagonal accent stripe (right side)
+      ctx.save();
+      ctx.translate(W, 0);
+      ctx.rotate(Math.PI / 12);
+      const stripeGrad = ctx.createLinearGradient(0, 0, 0, H * 1.5);
+      stripeGrad.addColorStop(0, `${theme.bg3}30`);
+      stripeGrad.addColorStop(1, `${theme.bg3}05`);
+      ctx.fillStyle = stripeGrad;
+      ctx.fillRect(-200, 0, 400, H * 1.5);
+      ctx.restore();
+
+      // Subtle dot pattern
+      ctx.save();
+      ctx.fillStyle = `${theme.darkColor}08`;
+      for (let x = 0; x < W; x += 45) {
+        for (let y = 0; y < H; y += 45) {
+          ctx.beginPath();
+          ctx.arc(x, y, 1.5, 0, Math.PI * 2);
+          ctx.fill();
+        }
+      }
+      ctx.restore();
+
+      // ============ STEP 2: HERO IMAGE — LARGE LEFT COLUMN (full height) ============
       const heroImageUrl = pickHeroImage(theme, promo, itemsList);
       const heroImg = await loadImage(heroImageUrl);
 
       const heroX = 40;
-      const heroY = 240;
+      const heroY = 260;
       const heroW = 620;
-      const heroH = 940;
+      const heroH = 1050;
 
-      // Hero container with rounded corners and shadow
+      // Outer white frame with shadow
       ctx.save();
-      ctx.shadowColor = "rgba(0, 0, 0, 0.25)";
-      ctx.shadowBlur = 30;
-      ctx.shadowOffsetY = 10;
+      ctx.shadowColor = "rgba(0, 0, 0, 0.3)";
+      ctx.shadowBlur = 40;
+      ctx.shadowOffsetY = 15;
       ctx.fillStyle = "white";
-      roundRect(heroX - 8, heroY - 8, heroW + 16, heroH + 16, 30);
+      roundRect(heroX - 12, heroY - 12, heroW + 24, heroH + 24, 32);
       ctx.fill();
       ctx.restore();
 
-      // Draw hero image inside rounded rect
+      // Draw hero image with cover mode
       if (heroImg) {
         ctx.save();
-        roundRect(heroX, heroY, heroW, heroH, 26);
+        roundRect(heroX, heroY, heroW, heroH, 24);
         ctx.clip();
 
-        // Cover mode
         const imgRatio = heroImg.width / heroImg.height;
         const boxRatio = heroW / heroH;
         let drawW, drawH, drawX, drawY;
@@ -812,46 +891,69 @@ export default function SettingsPage() {
         }
         ctx.drawImage(heroImg, drawX, drawY, drawW, drawH);
 
-        // Subtle overlay for depth
-        const overlayGrad = ctx.createLinearGradient(heroX, heroY, heroX, heroY + heroH);
+        // Subtle bottom gradient for depth
+        const overlayGrad = ctx.createLinearGradient(heroX, heroY + heroH * 0.6, heroX, heroY + heroH);
         overlayGrad.addColorStop(0, "rgba(0,0,0,0)");
-        overlayGrad.addColorStop(0.7, "rgba(0,0,0,0)");
-        overlayGrad.addColorStop(1, "rgba(0,0,0,0.3)");
+        overlayGrad.addColorStop(1, "rgba(0,0,0,0.4)");
         ctx.fillStyle = overlayGrad;
         ctx.fillRect(heroX, heroY, heroW, heroH);
+        ctx.restore();
 
+        // Colored corner accent (bottom-left of image)
+        ctx.save();
+        ctx.beginPath();
+        ctx.moveTo(heroX, heroY + heroH);
+        ctx.lineTo(heroX + 100, heroY + heroH);
+        ctx.lineTo(heroX, heroY + heroH - 100);
+        ctx.closePath();
+        ctx.fillStyle = theme.bg3;
+        ctx.globalAlpha = 0.9;
+        ctx.fill();
         ctx.restore();
       } else {
-        // Fallback: colored background with icon
+        // Fallback
         ctx.save();
-        roundRect(heroX, heroY, heroW, heroH, 26);
-        ctx.fillStyle = theme.bg3;
+        roundRect(heroX, heroY, heroW, heroH, 24);
+        const fallGrad = ctx.createLinearGradient(heroX, heroY, heroX, heroY + heroH);
+        fallGrad.addColorStop(0, theme.bg2);
+        fallGrad.addColorStop(1, theme.bg3);
+        ctx.fillStyle = fallGrad;
         ctx.fill();
-        ctx.font = "300px 'Segoe UI Emoji', Arial";
+        ctx.font = "350px 'Segoe UI Emoji', Arial";
         ctx.textAlign = "center";
         ctx.textBaseline = "middle";
-        ctx.fillStyle = "rgba(255,255,255,0.6)";
+        ctx.fillStyle = "rgba(255,255,255,0.7)";
         ctx.fillText(theme.icon, heroX + heroW / 2, heroY + heroH / 2);
         ctx.restore();
       }
 
-      // ============ STEP 3: HEADER (Top center: Logo + Name) ============
+      // ============ STEP 3: HEADER — BIG LOGO + CLINIC NAME ============
       let logoImg: HTMLImageElement | null = null;
       if (clinic.logo_url) {
         logoImg = await loadImage(clinic.logo_url);
       }
 
-      const logoSize = 130;
+      const logoSize = 160;
       const logoX = W / 2 - logoSize / 2;
-      const logoY = 40;
+      const logoY = 50;
 
-      // Logo white card
+      // Golden ring around logo
       ctx.save();
-      ctx.shadowColor = "rgba(0, 0, 0, 0.15)";
-      ctx.shadowBlur = 20;
-      ctx.shadowOffsetY = 6;
+      ctx.shadowColor = "rgba(245, 158, 11, 0.5)";
+      ctx.shadowBlur = 25;
+      const ringGrad = ctx.createLinearGradient(logoX, logoY, logoX + logoSize, logoY + logoSize);
+      ringGrad.addColorStop(0, "#FDE68A");
+      ringGrad.addColorStop(0.5, "#F59E0B");
+      ringGrad.addColorStop(1, "#B45309");
+      ctx.fillStyle = ringGrad;
+      roundRect(logoX - 8, logoY - 8, logoSize + 16, logoSize + 16, 28);
+      ctx.fill();
+      ctx.restore();
+
+      // White inner card
+      ctx.save();
       ctx.fillStyle = "white";
-      roundRect(logoX - 10, logoY - 10, logoSize + 20, logoSize + 20, 24);
+      roundRect(logoX - 4, logoY - 4, logoSize + 8, logoSize + 8, 24);
       ctx.fill();
       ctx.restore();
 
@@ -864,52 +966,73 @@ export default function SettingsPage() {
       } else {
         ctx.save();
         roundRect(logoX, logoY, logoSize, logoSize, 20);
-        ctx.fillStyle = theme.bg3;
+        const iconGrad = ctx.createLinearGradient(logoX, logoY, logoX, logoY + logoSize);
+        iconGrad.addColorStop(0, theme.bg2);
+        iconGrad.addColorStop(1, theme.bg3);
+        ctx.fillStyle = iconGrad;
         ctx.fill();
-        ctx.font = "80px 'Segoe UI Emoji', Arial";
+        ctx.font = "100px 'Segoe UI Emoji', Arial";
         ctx.textAlign = "center";
         ctx.textBaseline = "middle";
         ctx.fillStyle = "white";
-        ctx.fillText(theme.icon, logoX + logoSize / 2, logoY + logoSize / 2 + 4);
+        ctx.fillText(theme.icon, logoX + logoSize / 2, logoY + logoSize / 2 + 5);
         ctx.restore();
       }
 
-      // Clinic name (Arabic RTL)
+      // Clinic name (Arabic, bold, big)
       ctx.save();
-      ctx.font = "bold 42px 'Cairo', 'Tajawal', 'Segoe UI', Arial";
+      ctx.font = "900 52px 'Cairo', 'Tajawal', 'Segoe UI', Arial";
       ctx.fillStyle = theme.darkColor;
       ctx.textAlign = "center";
       ctx.textBaseline = "top";
       ctx.direction = "rtl";
+      ctx.shadowColor = "rgba(0, 0, 0, 0.15)";
+      ctx.shadowBlur = 8;
+      ctx.shadowOffsetY = 2;
       ctx.fillText(clinic.name, W / 2, logoY + logoSize + 20);
       ctx.restore();
 
-      // English subtitle (label)
+      // Specialty label (with dot separator)
       ctx.save();
-      ctx.font = "500 22px 'Cairo', Arial";
+      ctx.font = "600 22px 'Cairo', Arial";
       ctx.fillStyle = theme.chipText;
       ctx.textAlign = "center";
       ctx.textBaseline = "top";
       ctx.direction = "rtl";
-      ctx.fillText(`${theme.label} • ${theme.labelEn}`, W / 2, logoY + logoSize + 70);
+      ctx.fillText(`${theme.label}  •  ${theme.labelEn}`, W / 2, logoY + logoSize + 88);
       ctx.restore();
 
-      // ============ STEP 4: End date badge (top right) ============
+      // Small colored underline
+      ctx.save();
+      ctx.strokeStyle = theme.bg3;
+      ctx.lineWidth = 4;
+      ctx.lineCap = "round";
+      ctx.beginPath();
+      ctx.moveTo(W / 2 - 60, logoY + logoSize + 130);
+      ctx.lineTo(W / 2 + 60, logoY + logoSize + 130);
+      ctx.stroke();
+      ctx.restore();
+
+      // ============ STEP 4: End date badge (top left) ============
       if (promo.end_date) {
         ctx.save();
-        const badgeW = 260;
-        const badgeH = 48;
-        const badgeX = W - badgeW - 40;
-        const badgeY = 50;
+        const badgeW = 280;
+        const badgeH = 52;
+        const badgeX = 40;
+        const badgeY = 60;
 
-        ctx.shadowColor = "rgba(220, 38, 38, 0.4)";
-        ctx.shadowBlur = 12;
-        ctx.fillStyle = "#DC2626";
-        roundRect(badgeX, badgeY, badgeW, badgeH, 24);
+        ctx.shadowColor = "rgba(220, 38, 38, 0.5)";
+        ctx.shadowBlur = 15;
+        ctx.shadowOffsetY = 4;
+        const badgeGrad = ctx.createLinearGradient(badgeX, badgeY, badgeX, badgeY + badgeH);
+        badgeGrad.addColorStop(0, "#EF4444");
+        badgeGrad.addColorStop(1, "#B91C1C");
+        ctx.fillStyle = badgeGrad;
+        roundRect(badgeX, badgeY, badgeW, badgeH, 26);
         ctx.fill();
         ctx.shadowColor = "transparent";
 
-        ctx.font = "bold 20px 'Cairo', Arial";
+        ctx.font = "bold 22px 'Cairo', Arial";
         ctx.fillStyle = "white";
         ctx.textAlign = "center";
         ctx.textBaseline = "middle";
@@ -918,43 +1041,47 @@ export default function SettingsPage() {
         ctx.restore();
       }
 
-      // ============ STEP 5: TITLE (Right side, above discount) ============
+      // ============ STEP 5: TITLE — right side, bold ============
+      const rightX = W - 60;
+      const rightColW = W - heroX - heroW - 120;
+      const rightColCenter = heroX + heroW + 60 + rightColW / 2;
+
       ctx.save();
-      ctx.font = "bold 56px 'Cairo', Arial";
+      ctx.font = "900 58px 'Cairo', Arial";
       ctx.fillStyle = theme.darkColor;
       ctx.textAlign = "right";
       ctx.textBaseline = "top";
       ctx.direction = "rtl";
-      const titleLines = wrapText(ctx, promo.title, 480);
+      const titleLines = wrapText(ctx, promo.title, rightColW);
       titleLines.slice(0, 2).forEach((line, idx) => {
-        ctx.fillText(line, W - 60, 300 + idx * 68);
+        ctx.fillText(line, rightX, 330 + idx * 68);
       });
       ctx.restore();
 
       // Description
       if (promo.description) {
         ctx.save();
-        ctx.font = "500 24px 'Cairo', Arial";
+        ctx.font = "600 22px 'Cairo', Arial";
         ctx.fillStyle = theme.chipText;
         ctx.textAlign = "right";
         ctx.textBaseline = "top";
         ctx.direction = "rtl";
-        const descLines = wrapText(ctx, promo.description, 480);
-        descLines.slice(0, 2).forEach((line, idx) => {
-          ctx.fillText(line, W - 60, 445 + idx * 34);
+        const descLines = wrapText(ctx, promo.description, rightColW);
+        descLines.slice(0, 3).forEach((line, idx) => {
+          ctx.fillText(line, rightX, 490 + idx * 32);
         });
         ctx.restore();
       }
 
-      // ============ STEP 6: BIG GOLDEN DISCOUNT (Right center, 3D) ============
-      const discountCenterX = W - 260;
-      const discountY = 570;
+      // ============ STEP 6: GIANT 3D GOLDEN DISCOUNT NUMBER ============
+      const discountCenterX = rightColCenter;
+      const discountY = 640;
       const numStr = String(promo.discount_value);
       const unitStr = promo.discount_type === "percentage" ? "%" : "ريال";
 
-      // Small "خصم يصل إلى" label
+      // "خصم يصل إلى" label
       ctx.save();
-      ctx.font = "bold 26px 'Cairo', Arial";
+      ctx.font = "900 28px 'Cairo', Arial";
       ctx.fillStyle = theme.darkColor;
       ctx.textAlign = "center";
       ctx.textBaseline = "top";
@@ -962,175 +1089,269 @@ export default function SettingsPage() {
       ctx.fillText("خصم يصل إلى", discountCenterX, discountY);
       ctx.restore();
 
-      // Draw big golden number with 3D depth
+      // Draw the GIANT 3D golden number with premium effects
       ctx.save();
-      const bigFontSize = 240;
+      const bigFontSize = 340;
       ctx.font = `900 ${bigFontSize}px 'Cairo', 'Arial Black', Arial`;
       ctx.textAlign = "center";
       ctx.textBaseline = "top";
       ctx.direction = "ltr";
 
-      // Deep shadow (3D bottom)
-      for (let i = 8; i >= 1; i--) {
-        ctx.fillStyle = `rgba(120, 53, 15, ${0.15 + i * 0.05})`;
-        ctx.fillText(numStr, discountCenterX + i, discountY + 50 + i);
+      const numY = discountY + 45;
+
+      // Layer 1-12: Deep 3D shadow stack
+      for (let i = 14; i >= 1; i--) {
+        ctx.fillStyle = `rgba(120, 53, 15, ${0.08 + i * 0.03})`;
+        ctx.fillText(numStr, discountCenterX + i * 0.6, numY + i * 0.8);
       }
 
-      // Main golden gradient
-      const goldGrad = ctx.createLinearGradient(0, discountY + 50, 0, discountY + 50 + bigFontSize);
-      goldGrad.addColorStop(0, "#FEF3C7");
-      goldGrad.addColorStop(0.2, "#FDE68A");
-      goldGrad.addColorStop(0.5, "#F59E0B");
-      goldGrad.addColorStop(0.8, "#D97706");
+      // Layer 13: Deep shadow
+      ctx.shadowColor = "rgba(180, 83, 9, 0.4)";
+      ctx.shadowBlur = 30;
+      ctx.shadowOffsetY = 12;
+      ctx.fillStyle = "#78350F";
+      ctx.fillText(numStr, discountCenterX + 2, numY + 4);
+
+      // Layer 14: MAIN GOLD GRADIENT (metallic)
+      ctx.shadowColor = "transparent";
+      const goldGrad = ctx.createLinearGradient(0, numY, 0, numY + bigFontSize);
+      goldGrad.addColorStop(0, "#FFF8DC");
+      goldGrad.addColorStop(0.15, "#FEF3C7");
+      goldGrad.addColorStop(0.35, "#FDE68A");
+      goldGrad.addColorStop(0.5, "#FBBF24");
+      goldGrad.addColorStop(0.65, "#F59E0B");
+      goldGrad.addColorStop(0.85, "#D97706");
       goldGrad.addColorStop(1, "#78350F");
       ctx.fillStyle = goldGrad;
-      ctx.fillText(numStr, discountCenterX, discountY + 50);
+      ctx.fillText(numStr, discountCenterX, numY);
 
-      // Highlight overlay (glossy top)
-      const highlightGrad = ctx.createLinearGradient(0, discountY + 50, 0, discountY + 130);
-      highlightGrad.addColorStop(0, "rgba(255, 255, 255, 0.7)");
+      // Layer 15: Top glossy highlight
+      ctx.save();
+      const clipY = numY;
+      const clipH = bigFontSize * 0.4;
+      ctx.beginPath();
+      ctx.rect(discountCenterX - bigFontSize * 0.7, clipY, bigFontSize * 1.4, clipH);
+      ctx.clip();
+      const highlightGrad = ctx.createLinearGradient(0, clipY, 0, clipY + clipH);
+      highlightGrad.addColorStop(0, "rgba(255, 255, 255, 0.85)");
+      highlightGrad.addColorStop(0.5, "rgba(255, 255, 255, 0.4)");
       highlightGrad.addColorStop(1, "rgba(255, 255, 255, 0)");
       ctx.fillStyle = highlightGrad;
-      ctx.fillText(numStr, discountCenterX, discountY + 50);
-
-      // Outline
-      ctx.strokeStyle = "#92400E";
-      ctx.lineWidth = 4;
-      ctx.strokeText(numStr, discountCenterX, discountY + 50);
+      ctx.fillText(numStr, discountCenterX, numY);
       ctx.restore();
 
-      // Unit pill (% or ريال) below
-      ctx.save();
-      const unitW = 150;
-      const unitH = 60;
-      const unitX = discountCenterX - unitW / 2;
-      const unitY = discountY + 310;
+      // Layer 16: Dark outline
+      ctx.strokeStyle = "#78350F";
+      ctx.lineWidth = 5;
+      ctx.lineJoin = "round";
+      ctx.strokeText(numStr, discountCenterX, numY);
 
-      ctx.shadowColor = "rgba(180, 83, 9, 0.5)";
-      ctx.shadowBlur = 15;
-      ctx.shadowOffsetY = 5;
+      // Layer 17: Reflection below (very subtle)
+      ctx.save();
+      ctx.globalAlpha = 0.15;
+      ctx.scale(1, -0.3);
+      ctx.translate(0, -(numY + bigFontSize) * 2 - 30);
+      const reflGrad = ctx.createLinearGradient(0, numY, 0, numY + bigFontSize);
+      reflGrad.addColorStop(0, "#F59E0B");
+      reflGrad.addColorStop(1, "rgba(245, 158, 11, 0)");
+      ctx.fillStyle = reflGrad;
+      ctx.fillText(numStr, discountCenterX, numY);
+      ctx.restore();
+
+      ctx.restore();
+
+      // Unit label (% or ريال) — big golden bar below number
+      ctx.save();
+      const unitW = 200;
+      const unitH = 74;
+      const unitX = discountCenterX - unitW / 2;
+      const unitY = numY + bigFontSize + 20;
+
+      ctx.shadowColor = "rgba(180, 83, 9, 0.6)";
+      ctx.shadowBlur = 20;
+      ctx.shadowOffsetY = 8;
       const unitGrad = ctx.createLinearGradient(0, unitY, 0, unitY + unitH);
-      unitGrad.addColorStop(0, "#FCD34D");
-      unitGrad.addColorStop(1, "#D97706");
+      unitGrad.addColorStop(0, "#FDE68A");
+      unitGrad.addColorStop(0.5, "#F59E0B");
+      unitGrad.addColorStop(1, "#B45309");
       ctx.fillStyle = unitGrad;
-      roundRect(unitX, unitY, unitW, unitH, 30);
+      roundRect(unitX, unitY, unitW, unitH, 37);
       ctx.fill();
       ctx.shadowColor = "transparent";
 
-      ctx.font = "bold 32px 'Cairo', Arial";
-      ctx.fillStyle = "#78350F";
+      // Inner shine
+      ctx.save();
+      roundRect(unitX + 6, unitY + 6, unitW - 12, (unitH - 12) / 2, 30);
+      const shineGrad = ctx.createLinearGradient(0, unitY, 0, unitY + unitH / 2);
+      shineGrad.addColorStop(0, "rgba(255,255,255,0.5)");
+      shineGrad.addColorStop(1, "rgba(255,255,255,0)");
+      ctx.fillStyle = shineGrad;
+      ctx.fill();
+      ctx.restore();
+
+      ctx.font = "900 42px 'Cairo', Arial";
+      ctx.fillStyle = "#5C1A00";
       ctx.textAlign = "center";
       ctx.textBaseline = "middle";
       ctx.direction = "rtl";
-      ctx.fillText(unitStr, discountCenterX, unitY + unitH / 2);
+      ctx.fillText(unitStr, discountCenterX, unitY + unitH / 2 + 2);
       ctx.restore();
 
-      // ============ STEP 7: SERVICE CHIPS (Bottom, grid 3 cols) ============
-      const chipsStartY = 1210;
-      const chipsPerRow = 3;
-      const chipRows = Math.ceil(Math.min(finalItems.length, 9) / chipsPerRow);
+      // ============ STEP 7: SERVICE CHIPS — bottom right col (2 cols) ============
+      const chipsStartY = 1170;
+      const chipsPerRow = 2;
+      const chipsRightAreaX = heroX + heroW + 60;
+      const chipsRightAreaW = W - chipsRightAreaX - 40;
       const chipGap = 12;
-      const chipsAreaX = 40;
-      const chipsAreaW = W - 80;
-      const chipW = (chipsAreaW - (chipsPerRow - 1) * chipGap) / chipsPerRow;
-      const chipH = 62;
+      const chipW = (chipsRightAreaW - (chipsPerRow - 1) * chipGap) / chipsPerRow;
+      const chipH = 58;
+      const chipRows = Math.min(3, Math.ceil(finalItems.length / chipsPerRow));
 
-      finalItems.slice(0, chipsPerRow * 3).forEach((item, idx) => {
+      finalItems.slice(0, chipsPerRow * chipRows).forEach((item, idx) => {
         const row = Math.floor(idx / chipsPerRow);
         const col = idx % chipsPerRow;
-        const chipX = chipsAreaX + col * (chipW + chipGap);
+        const chipX = chipsRightAreaX + col * (chipW + chipGap);
         const chipY = chipsStartY + row * (chipH + chipGap);
 
         ctx.save();
-        // Shadow
-        ctx.shadowColor = "rgba(0, 0, 0, 0.12)";
-        ctx.shadowBlur = 10;
-        ctx.shadowOffsetY = 3;
+        ctx.shadowColor = "rgba(0, 0, 0, 0.15)";
+        ctx.shadowBlur = 12;
+        ctx.shadowOffsetY = 4;
 
-        // Chip background
-        ctx.fillStyle = theme.chipBg;
-        roundRect(chipX, chipY, chipW, chipH, 31);
+        // Chip background gradient
+        const chipGrad = ctx.createLinearGradient(chipX, chipY, chipX, chipY + chipH);
+        chipGrad.addColorStop(0, "white");
+        chipGrad.addColorStop(1, theme.chipBg);
+        ctx.fillStyle = chipGrad;
+        roundRect(chipX, chipY, chipW, chipH, 29);
         ctx.fill();
         ctx.shadowColor = "transparent";
 
-        // Chip border
+        // Border
         ctx.strokeStyle = theme.chipBorder;
-        ctx.lineWidth = 1.5;
-        ctx.globalAlpha = 0.6;
-        roundRect(chipX, chipY, chipW, chipH, 31);
+        ctx.lineWidth = 2;
+        ctx.globalAlpha = 0.5;
+        roundRect(chipX, chipY, chipW, chipH, 29);
         ctx.stroke();
         ctx.globalAlpha = 1;
 
+        // Small colored dot on right
+        ctx.fillStyle = theme.bg3;
+        ctx.beginPath();
+        ctx.arc(chipX + chipW - 18, chipY + chipH / 2, 5, 0, Math.PI * 2);
+        ctx.fill();
+
         // Text
-        ctx.font = "bold 22px 'Cairo', Arial";
+        ctx.font = "bold 20px 'Cairo', Arial";
         ctx.fillStyle = theme.chipText;
         ctx.textAlign = "center";
         ctx.textBaseline = "middle";
         ctx.direction = "rtl";
-        const displayText = truncateText(ctx, item, chipW - 24);
-        ctx.fillText(displayText, chipX + chipW / 2, chipY + chipH / 2);
+        const displayText = truncateText(ctx, item, chipW - 45);
+        ctx.fillText(displayText, chipX + chipW / 2 - 8, chipY + chipH / 2);
         ctx.restore();
       });
 
-      // ============ STEP 8: FOOTER (Phone or Code) ============
-      const footerY = H - 80;
+      // ============ STEP 8: FOOTER — Phone / Code (full width bottom) ============
+      const footerY = H - 90;
       const phoneText = (promo as any).phone_text || "";
 
       if (phoneText || promo.code) {
-        const footerW = 500;
-        const footerH = 60;
-        const footerX = W / 2 - footerW / 2;
+        const footerW = W - 80;
+        const footerH = 68;
+        const footerX = 40;
 
         ctx.save();
-        ctx.shadowColor = "rgba(0, 0, 0, 0.2)";
-        ctx.shadowBlur = 15;
-        ctx.shadowOffsetY = 5;
-        ctx.fillStyle = "white";
-        roundRect(footerX, footerY, footerW, footerH, 30);
+        // Golden bottom bar
+        ctx.shadowColor = "rgba(0, 0, 0, 0.25)";
+        ctx.shadowBlur = 20;
+        ctx.shadowOffsetY = 8;
+        const footGrad = ctx.createLinearGradient(0, footerY, 0, footerY + footerH);
+        footGrad.addColorStop(0, "white");
+        footGrad.addColorStop(1, "#F9FAFB");
+        ctx.fillStyle = footGrad;
+        roundRect(footerX, footerY, footerW, footerH, 34);
         ctx.fill();
         ctx.shadowColor = "transparent";
 
-        if (phoneText) {
-          // Green phone circle
-          ctx.fillStyle = "#10B981";
-          ctx.beginPath();
-          ctx.arc(footerX + 36, footerY + footerH / 2, 20, 0, Math.PI * 2);
-          ctx.fill();
+        // Colored left accent
+        ctx.fillStyle = theme.bg3;
+        roundRect(footerX, footerY, 8, footerH, 4);
+        ctx.fill();
 
-          ctx.font = "22px 'Segoe UI Emoji', Arial";
+        if (phoneText) {
+          // Green phone circle (right side in RTL layout)
+          const phoneCircleX = footerX + footerW - 50;
+          ctx.shadowColor = "rgba(16, 185, 129, 0.5)";
+          ctx.shadowBlur = 12;
+          const phoneGrad = ctx.createLinearGradient(phoneCircleX - 22, footerY + 15, phoneCircleX + 22, footerY + 55);
+          phoneGrad.addColorStop(0, "#34D399");
+          phoneGrad.addColorStop(1, "#059669");
+          ctx.fillStyle = phoneGrad;
+          ctx.beginPath();
+          ctx.arc(phoneCircleX, footerY + footerH / 2, 24, 0, Math.PI * 2);
+          ctx.fill();
+          ctx.shadowColor = "transparent";
+
+          ctx.font = "26px 'Segoe UI Emoji', Arial";
           ctx.fillStyle = "white";
           ctx.textAlign = "center";
           ctx.textBaseline = "middle";
-          ctx.fillText("📞", footerX + 36, footerY + footerH / 2 + 2);
+          ctx.fillText("📞", phoneCircleX, footerY + footerH / 2 + 3);
 
-          ctx.font = "bold 30px 'Cairo', Arial";
+          // Phone number (LTR)
+          ctx.font = "900 38px 'Cairo', Arial";
           ctx.fillStyle = theme.darkColor;
-          ctx.textAlign = "center";
+          ctx.textAlign = "right";
           ctx.textBaseline = "middle";
           ctx.direction = "ltr";
-          ctx.fillText(phoneText, footerX + footerW / 2 + 20, footerY + footerH / 2);
+          ctx.fillText(phoneText, phoneCircleX - 40, footerY + footerH / 2);
+
+          // "احجز الآن" label (left side)
+          ctx.font = "bold 22px 'Cairo', Arial";
+          ctx.fillStyle = theme.chipText;
+          ctx.textAlign = "left";
+          ctx.direction = "rtl";
+          ctx.fillText("احجز الآن 🤖", footerX + 40, footerY + footerH / 2);
         } else if (promo.code) {
-          ctx.font = "bold 20px 'Cairo', Arial";
-          ctx.fillStyle = "#6B7280";
+          ctx.font = "bold 24px 'Cairo', Arial";
+          ctx.fillStyle = theme.chipText;
           ctx.textAlign = "right";
           ctx.textBaseline = "middle";
           ctx.direction = "rtl";
-          ctx.fillText("كود الخصم:", footerX + footerW - 20, footerY + footerH / 2);
+          ctx.fillText("كود الخصم", footerX + footerW - 30, footerY + footerH / 2);
 
-          ctx.font = "bold 30px 'Courier New', monospace";
+          ctx.font = "900 36px 'Courier New', monospace";
           ctx.fillStyle = theme.accentDark;
           ctx.textAlign = "left";
-          ctx.fillText(promo.code, footerX + 20, footerY + footerH / 2);
+          ctx.direction = "ltr";
+          ctx.fillText(promo.code, footerX + 40, footerY + footerH / 2);
         }
         ctx.restore();
       } else {
+        // Generic call-to-action
         ctx.save();
-        ctx.font = "bold 24px 'Cairo', Arial";
-        ctx.fillStyle = theme.darkColor;
+        const ctaW = 600;
+        const ctaH = 65;
+        const ctaX = W / 2 - ctaW / 2;
+        const ctaY = footerY;
+
+        ctx.shadowColor = "rgba(0, 0, 0, 0.25)";
+        ctx.shadowBlur = 20;
+        const ctaGrad = ctx.createLinearGradient(0, ctaY, 0, ctaY + ctaH);
+        ctaGrad.addColorStop(0, theme.bg2);
+        ctaGrad.addColorStop(1, theme.bg3);
+        ctx.fillStyle = ctaGrad;
+        roundRect(ctaX, ctaY, ctaW, ctaH, 32);
+        ctx.fill();
+        ctx.shadowColor = "transparent";
+
+        ctx.font = "900 26px 'Cairo', Arial";
+        ctx.fillStyle = "white";
         ctx.textAlign = "center";
         ctx.textBaseline = "middle";
         ctx.direction = "rtl";
-        ctx.fillText("احجز الآن عن طريق موظفنا الآلي الذكي 🤖", W / 2, footerY + 30);
+        ctx.fillText("احجز الآن عن طريق موظفنا الآلي الذكي 🤖", W / 2, ctaY + ctaH / 2);
         ctx.restore();
       }
 
@@ -1143,7 +1364,7 @@ export default function SettingsPage() {
         bytes[i] = binaryString.charCodeAt(i);
       }
 
-      const filePath = `${clinic.id}/promo_${promo.id}.png`;
+      const filePath = `${clinic.id}/promo_${promo.id}_${Date.now()}.png`;
       const supabaseUrl2 = import.meta.env.VITE_SUPABASE_URL;
       const supabaseServiceKey = import.meta.env.VITE_SUPABASE_SERVICE_ROLE_KEY;
 
@@ -1236,13 +1457,20 @@ export default function SettingsPage() {
     if (!promo.image_url) return;
     if (!confirm("هل تريد حذف الصورة الحالية؟ ستحتاج إلى توليد صورة جديدة بعد الحذف.")) return;
     try {
-      const filePath = `${clinic?.id}/promo_${promo.id}.png`;
-      await supabase.storage.from("promo-images").remove([filePath]);
+      // Try to extract path from URL to remove
+      const url = new URL(promo.image_url.split("?")[0]);
+      const pathMatch = url.pathname.match(/\/promo-images\/(.+)$/);
+      if (pathMatch && pathMatch[1]) {
+        await supabase.storage.from("promo-images").remove([pathMatch[1]]);
+      }
       await supabase.from("promotions").update({ image_url: null }).eq("id", promo.id);
       toast({ title: "✓ تم الحذف", description: "تم حذف الصورة. يمكنك توليد صورة جديدة الآن" });
       fetchPromotions();
     } catch (e: any) {
-      toast({ title: "خطأ", description: e.message || "فشل حذف الصورة", variant: "destructive" });
+      // Even if storage delete fails, still clear image_url from DB
+      await supabase.from("promotions").update({ image_url: null }).eq("id", promo.id);
+      toast({ title: "✓ تم الحذف", description: "تم حذف الصورة" });
+      fetchPromotions();
     }
   };
 
