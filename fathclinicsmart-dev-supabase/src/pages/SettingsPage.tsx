@@ -47,6 +47,7 @@ interface Promotion {
   items?: string;
   phone_text?: string;
   created_at: string;
+  service_ids?: string[]; // ← ✏️ [V38.3] الخدمات الفعلية المشمولة بالعرض
 }
 
 // ============================================================
@@ -63,13 +64,12 @@ const SPECIALTY_THEMES: Record<string, any> = {
     icon: "🦷",
     label: "طب الأسنان",
     labelEn: "Dental Care",
-    // ✅ VERIFIED dental images (tested manually)
     heroImages: [
-      "https://images.unsplash.com/photo-1606811971618-4486d14f3f99?w=1200&q=85&auto=format&fit=crop", // Dental tools
-      "https://images.unsplash.com/photo-1588776814546-1ffcf47267a5?w=1200&q=85&auto=format&fit=crop", // Dental chair
-      "https://images.unsplash.com/photo-1609840114035-3c981b782dfe?w=1200&q=85&auto=format&fit=crop", // Dental clinic
-      "https://images.unsplash.com/photo-1629909613654-28e377c37b09?w=1200&q=85&auto=format&fit=crop", // Modern dental office
-      "https://images.unsplash.com/photo-1598256989800-fe5f95da9787?w=1200&q=85&auto=format&fit=crop", // Dentist working
+      "https://images.unsplash.com/photo-1606811971618-4486d14f3f99?w=1200&q=85&auto=format&fit=crop",
+      "https://images.unsplash.com/photo-1588776814546-1ffcf47267a5?w=1200&q=85&auto=format&fit=crop",
+      "https://images.unsplash.com/photo-1609840114035-3c981b782dfe?w=1200&q=85&auto=format&fit=crop",
+      "https://images.unsplash.com/photo-1629909613654-28e377c37b09?w=1200&q=85&auto=format&fit=crop",
+      "https://images.unsplash.com/photo-1598256989800-fe5f95da9787?w=1200&q=85&auto=format&fit=crop",
     ],
   },
   dermatology: {
@@ -82,11 +82,11 @@ const SPECIALTY_THEMES: Record<string, any> = {
     label: "الجلدية والتجميل",
     labelEn: "Dermatology",
     heroImages: [
-      "https://images.unsplash.com/photo-1570172619644-dfd03ed5d881?w=1200&q=85&auto=format&fit=crop", // Skincare
-      "https://images.unsplash.com/photo-1616394584738-fc6e612e71b9?w=1200&q=85&auto=format&fit=crop", // Facial treatment
-      "https://images.unsplash.com/photo-1571019613454-1cb2f99b2d8b?w=1200&q=85&auto=format&fit=crop", // Beauty clinic
-      "https://images.unsplash.com/photo-1596178060810-72c633ce5a55?w=1200&q=85&auto=format&fit=crop", // Skin care
-      "https://images.unsplash.com/photo-1487412720507-e7ab37603c6f?w=1200&q=85&auto=format&fit=crop", // Beautiful skin
+      "https://images.unsplash.com/photo-1570172619644-dfd03ed5d881?w=1200&q=85&auto=format&fit=crop",
+      "https://images.unsplash.com/photo-1616394584738-fc6e612e71b9?w=1200&q=85&auto=format&fit=crop",
+      "https://images.unsplash.com/photo-1571019613454-1cb2f99b2d8b?w=1200&q=85&auto=format&fit=crop",
+      "https://images.unsplash.com/photo-1596178060810-72c633ce5a55?w=1200&q=85&auto=format&fit=crop",
+      "https://images.unsplash.com/photo-1487412720507-e7ab37603c6f?w=1200&q=85&auto=format&fit=crop",
     ],
   },
   gynecology: {
@@ -99,11 +99,11 @@ const SPECIALTY_THEMES: Record<string, any> = {
     label: "النساء والولادة",
     labelEn: "Gynecology",
     heroImages: [
-      "https://images.unsplash.com/photo-1584515933487-779824d29309?w=1200&q=85&auto=format&fit=crop", // Ultrasound
-      "https://images.unsplash.com/photo-1519494026892-80bbd2d6fd0d?w=1200&q=85&auto=format&fit=crop", // Pregnant woman
-      "https://images.unsplash.com/photo-1544207240-6a3a819f2b8f?w=1200&q=85&auto=format&fit=crop", // Mother and baby
-      "https://images.unsplash.com/photo-1519824145371-296894a0daa9?w=1200&q=85&auto=format&fit=crop", // Pregnancy care
-      "https://images.unsplash.com/photo-1595939590890-b1cf80f9e6d7?w=1200&q=85&auto=format&fit=crop", // Women's health
+      "https://images.unsplash.com/photo-1584515933487-779824d29309?w=1200&q=85&auto=format&fit=crop",
+      "https://images.unsplash.com/photo-1519494026892-80bbd2d6fd0d?w=1200&q=85&auto=format&fit=crop",
+      "https://images.unsplash.com/photo-1544207240-6a3a819f2b8f?w=1200&q=85&auto=format&fit=crop",
+      "https://images.unsplash.com/photo-1519824145371-296894a0daa9?w=1200&q=85&auto=format&fit=crop",
+      "https://images.unsplash.com/photo-1595939590890-b1cf80f9e6d7?w=1200&q=85&auto=format&fit=crop",
     ],
   },
   ophthalmology: {
@@ -116,11 +116,11 @@ const SPECIALTY_THEMES: Record<string, any> = {
     label: "طب العيون",
     labelEn: "Ophthalmology",
     heroImages: [
-      "https://images.unsplash.com/photo-1587613757226-c22d09e4bd23?w=1200&q=85&auto=format&fit=crop", // Eye exam
-      "https://images.unsplash.com/photo-1616696301631-5c85a1b8b2f2?w=1200&q=85&auto=format&fit=crop", // Eye clinic equipment
-      "https://images.unsplash.com/photo-1517841905240-472988babdf9?w=1200&q=85&auto=format&fit=crop", // Beautiful eyes
-      "https://images.unsplash.com/photo-1574258495973-f010dfbb5371?w=1200&q=85&auto=format&fit=crop", // Optometry
-      "https://images.unsplash.com/photo-1622277498692-c8adae60d78e?w=1200&q=85&auto=format&fit=crop", // Eye doctor
+      "https://images.unsplash.com/photo-1587613757226-c22d09e4bd23?w=1200&q=85&auto=format&fit=crop",
+      "https://images.unsplash.com/photo-1616696301631-5c85a1b8b2f2?w=1200&q=85&auto=format&fit=crop",
+      "https://images.unsplash.com/photo-1517841905240-472988babdf9?w=1200&q=85&auto=format&fit=crop",
+      "https://images.unsplash.com/photo-1574258495973-f010dfbb5371?w=1200&q=85&auto=format&fit=crop",
+      "https://images.unsplash.com/photo-1622277498692-c8adae60d78e?w=1200&q=85&auto=format&fit=crop",
     ],
   },
   general: {
@@ -133,27 +133,23 @@ const SPECIALTY_THEMES: Record<string, any> = {
     label: "الطب العام",
     labelEn: "General Medicine",
     heroImages: [
-      "https://images.unsplash.com/photo-1631815589968-fdb09a223b1e?w=1200&q=85&auto=format&fit=crop", // Modern hospital
-      "https://images.unsplash.com/photo-1519494026892-80bbd2d6fd0d?w=1200&q=85&auto=format&fit=crop", // Medical
-      "https://images.unsplash.com/photo-1516549655169-df83a0774514?w=1200&q=85&auto=format&fit=crop", // Doctor consultation
-      "https://images.unsplash.com/photo-1584982751601-97dcc096659c?w=1200&q=85&auto=format&fit=crop", // Hospital room
-      "https://images.unsplash.com/photo-1666214280391-8ff5bd3c0bf0?w=1200&q=85&auto=format&fit=crop", // Modern clinic
+      "https://images.unsplash.com/photo-1631815589968-fdb09a223b1e?w=1200&q=85&auto=format&fit=crop",
+      "https://images.unsplash.com/photo-1519494026892-80bbd2d6fd0d?w=1200&q=85&auto=format&fit=crop",
+      "https://images.unsplash.com/photo-1516549655169-df83a0774514?w=1200&q=85&auto=format&fit=crop",
+      "https://images.unsplash.com/photo-1584982751601-97dcc096659c?w=1200&q=85&auto=format&fit=crop",
+      "https://images.unsplash.com/photo-1666214280391-8ff5bd3c0bf0?w=1200&q=85&auto=format&fit=crop",
     ],
   },
 };
 
-// ============================================================
-// Smart service matcher — Only shows service-specific image
-// if strong keyword match, otherwise falls back to specialty
-// ============================================================
 const SERVICE_KEYWORD_IMAGES: Array<{ keywords: string[]; images: string[] }> = [
   {
     keywords: ["تحليل", "تحاليل", "دم", "مختبر", "معمل", "cbc", "vitamin", "فيتامين"],
     images: [
-      "https://images.unsplash.com/photo-1579154204601-01588f351e67?w=1200&q=85&auto=format&fit=crop", // Blood samples
-      "https://images.unsplash.com/photo-1582719471384-894fbb16e074?w=1200&q=85&auto=format&fit=crop", // Lab tubes
-      "https://images.unsplash.com/photo-1576091160399-112ba8d25d1d?w=1200&q=85&auto=format&fit=crop", // Laboratory
-      "https://images.unsplash.com/photo-1611273426858-450d8e3c9fce?w=1200&q=85&auto=format&fit=crop", // Test tubes
+      "https://images.unsplash.com/photo-1579154204601-01588f351e67?w=1200&q=85&auto=format&fit=crop",
+      "https://images.unsplash.com/photo-1582719471384-894fbb16e074?w=1200&q=85&auto=format&fit=crop",
+      "https://images.unsplash.com/photo-1576091160399-112ba8d25d1d?w=1200&q=85&auto=format&fit=crop",
+      "https://images.unsplash.com/photo-1611273426858-450d8e3c9fce?w=1200&q=85&auto=format&fit=crop",
     ],
   },
   {
@@ -204,11 +200,8 @@ const SERVICE_KEYWORD_IMAGES: Array<{ keywords: string[]; images: string[] }> = 
   },
 ];
 
-// Smart image picker: matches service keyword, otherwise uses specialty
 function pickHeroImage(theme: any, promo: Promotion, items: string[]): string {
   const searchText = `${promo.title} ${promo.description || ""} ${items.join(" ")}`.toLowerCase();
-
-  // Hash for consistent uniqueness per promo
   let hash = 0;
   const seed = (promo.id || "") + (promo.updated_at || Date.now().toString());
   for (let i = 0; i < seed.length; i++) {
@@ -216,15 +209,11 @@ function pickHeroImage(theme: any, promo: Promotion, items: string[]): string {
     hash |= 0;
   }
   hash = Math.abs(hash);
-
-  // Try strong keyword match first
   for (const entry of SERVICE_KEYWORD_IMAGES) {
     if (entry.keywords.some(kw => searchText.includes(kw.toLowerCase()))) {
       return entry.images[hash % entry.images.length];
     }
   }
-
-  // Fallback to specialty hero pool (never returns wrong specialty image)
   const heros = theme.heroImages || [];
   if (heros.length === 0) return "";
   return heros[hash % heros.length];
@@ -236,10 +225,8 @@ export default function SettingsPage() {
   const { clinic, subscription, loading: clinicLoading, updateClinic } = useClinic();
   const { toast } = useToast();
 
-  // --- Refs ---
   const promoImageInputRef = useRef<HTMLInputElement>(null);
 
-  // --- Existing State ---
   const [clinicName, setClinicName] = useState("");
   const [clinicSpecialty, setClinicSpecialty] = useState("general");
   const [botToken, setBotToken] = useState("");
@@ -265,7 +252,6 @@ export default function SettingsPage() {
   const [workingHoursStart, setWorkingHoursStart] = useState("08:00");
   const [workingHoursEnd, setWorkingHoursEnd] = useState("16:00");
 
-  // --- Promotions State ---
   const [promotions, setPromotions] = useState<Promotion[]>([]);
   const [promoDialogOpen, setPromoDialogOpen] = useState(false);
   const [editingPromo, setEditingPromo] = useState<Promotion | null>(null);
@@ -276,6 +262,7 @@ export default function SettingsPage() {
     template: "auto",
     items: "",
     phone_text: "",
+    service_ids: [], // ← ✏️ [V38.3]
   });
   const [promoImageFile, setPromoImageFile] = useState<File | null>(null);
   const [promoImagePreview, setPromoImagePreview] = useState<string | null>(null);
@@ -327,9 +314,6 @@ export default function SettingsPage() {
     }
   }, [clinic]);
 
-  // ============================================================
-  // Data Fetching Functions
-  // ============================================================
   const fetchStaff = async () => {
     if (!clinic) return;
     const { data } = await supabase
@@ -436,9 +420,6 @@ export default function SettingsPage() {
     setPromotions(data || []);
   };
 
-  // ============================================================
-  // Save Clinic Settings
-  // ============================================================
   const handleSaveClinic = async () => {
     if (!clinic) {
       toast({ title: "تعذر تحميل العيادة", description: "أعد تحميل الصفحة.", variant: "destructive" });
@@ -446,13 +427,11 @@ export default function SettingsPage() {
     }
     setSaving(true);
     try {
-      // Save to vault
       await supabase.rpc("save_clinic_vault", { _bot_token: botToken || null } as any);
     } catch (e) {
       console.warn("vault save failed", e);
     }
 
-    // Always save specialty to localStorage as backup
     try {
       if (typeof window !== "undefined") {
         localStorage.setItem(`clinic_specialty_${clinic.id}`, clinicSpecialty);
@@ -473,7 +452,6 @@ export default function SettingsPage() {
 
     let { error } = await updateClinic(fullPayload);
 
-    // Fallback if specialty column doesn't exist
     if (error && String(error.message || "").toLowerCase().includes("specialty")) {
       console.warn("specialty column missing, retrying without it");
       const { specialty, ...safePayload } = fullPayload;
@@ -608,9 +586,6 @@ export default function SettingsPage() {
     }
   };
 
-  // ============================================================
-  // Promotion Handlers
-  // ============================================================
   const resetPromoForm = () => {
     setPromoForm({
       discount_type: "percentage",
@@ -619,6 +594,7 @@ export default function SettingsPage() {
       template: "auto",
       items: "",
       phone_text: "",
+      service_ids: [], // ← ✏️ [V38.3]
     });
     setPromoImageFile(null);
     setPromoImagePreview(null);
@@ -643,6 +619,7 @@ export default function SettingsPage() {
         template: promo.template || "auto",
         items: promo.items || "",
         phone_text: promo.phone_text || "",
+        service_ids: promo.service_ids || [], // ← ✏️ [V38.3]
       });
       if (promo.image_url) setPromoImagePreview(promo.image_url);
     } else {
@@ -671,6 +648,15 @@ export default function SettingsPage() {
     if (!clinic) return;
     if (!promoForm.title || !promoForm.discount_type || !promoForm.discount_value) {
       toast({ title: "بيانات ناقصة", description: "يرجى ملء جميع الحقول الأساسية", variant: "destructive" });
+      return;
+    }
+    // ✏️ [V38.3] تحقق من وجود خدمات مختارة
+    if (!promoForm.service_ids || promoForm.service_ids.length === 0) {
+      toast({
+        title: "⚠️ يجب اختيار خدمة واحدة على الأقل",
+        description: "العرض يحتاج خدمة واحدة على الأقل ليظهر للعملاء بشكل صحيح.",
+        variant: "destructive",
+      });
       return;
     }
     setUploadingPromoImage(true);
@@ -711,6 +697,7 @@ export default function SettingsPage() {
       template: promoForm.template || "auto",
       items: promoForm.items || null,
       phone_text: promoForm.phone_text || null,
+      service_ids: promoForm.service_ids || [], // ← ✏️ [V38.3] الحقل الحاسم
     };
     let error;
     if (editingPromo) {
@@ -731,19 +718,12 @@ export default function SettingsPage() {
     }
   };
 
-  // ============================================================
-  // 💎 GENERATE ULTRA-PREMIUM MEDICAL AD IMAGE — v9 FINAL
-  // ⚡ 100% Free (client-side rendering, no server costs)
-  // 🎨 Verified specialty-specific images with smart matching
-  // 🖼️ Full-canvas layout, giant 3D gold typography, no overlapping
-  // ============================================================
   const generatePromoImage = async (promo: Promotion, forceRegenerate: boolean = false) => {
     if (!clinic) {
       toast({ title: "خطأ", description: "لم يتم تحميل بيانات العيادة", variant: "destructive" });
       return;
     }
 
-    // Smart confirmation instead of error
     if (!forceRegenerate && promo.image_url) {
       const confirmRegen = window.confirm(
         "✅ توجد صورة مرفوعة مسبقاً لهذا العرض.\n\nهل تريد توليد تصميم إعلاني جديد يحل محل القديم؟"
@@ -764,7 +744,6 @@ export default function SettingsPage() {
       const specialty = clinicSpecialty || "general";
       const theme = SPECIALTY_THEMES[specialty] || SPECIALTY_THEMES.general;
 
-      // Items → only show services included in this promo
       const itemsList = (promo as any).items
         ? String((promo as any).items)
             .split(/[,،\n]/)
@@ -776,7 +755,6 @@ export default function SettingsPage() {
         ? itemsList.slice(0, 9)
         : ["استشارة مجانية", "خصم فوري", "خدمة متميزة"];
 
-      // Canvas — Instagram Portrait 4:5 ratio
       const W = 1200;
       const H = 1500;
       const canvas = document.createElement("canvas");
@@ -786,7 +764,6 @@ export default function SettingsPage() {
       ctx.imageSmoothingEnabled = true;
       ctx.imageSmoothingQuality = "high";
 
-      // ============ HELPERS ============
       const loadImage = (url: string): Promise<HTMLImageElement | null> => {
         return new Promise((resolve) => {
           const img = new window.Image();
@@ -812,7 +789,6 @@ export default function SettingsPage() {
         ctx.closePath();
       };
 
-      // ============ STEP 1: LUXURY BACKGROUND ============
       const bgGrad = ctx.createLinearGradient(0, 0, W, H);
       bgGrad.addColorStop(0, "#FFFFFF");
       bgGrad.addColorStop(0.35, theme.bg1);
@@ -820,7 +796,6 @@ export default function SettingsPage() {
       ctx.fillStyle = bgGrad;
       ctx.fillRect(0, 0, W, H);
 
-      // Diagonal luxury stripe (right side)
       ctx.save();
       ctx.translate(W, 0);
       ctx.rotate(Math.PI / 12);
@@ -831,7 +806,6 @@ export default function SettingsPage() {
       ctx.fillRect(-200, 0, 400, H * 1.5);
       ctx.restore();
 
-      // Subtle dot texture
       ctx.save();
       ctx.fillStyle = `${theme.darkColor}08`;
       for (let x = 0; x < W; x += 45) {
@@ -843,7 +817,6 @@ export default function SettingsPage() {
       }
       ctx.restore();
 
-      // Corner decorative circles
       ctx.save();
       const cornerGrad1 = ctx.createRadialGradient(W - 50, 100, 0, W - 50, 100, 350);
       cornerGrad1.addColorStop(0, `${theme.bg3}25`);
@@ -858,7 +831,6 @@ export default function SettingsPage() {
       ctx.fillRect(0, 0, W, H);
       ctx.restore();
 
-      // ============ STEP 2: HERO IMAGE (LARGE LEFT COLUMN) ============
       const heroImageUrl = pickHeroImage(theme, promo, itemsList);
       const heroImg = await loadImage(heroImageUrl);
 
@@ -867,7 +839,6 @@ export default function SettingsPage() {
       const heroW = 600;
       const heroH = 1030;
 
-      // Outer white frame with luxury shadow
       ctx.save();
       ctx.shadowColor = "rgba(0, 0, 0, 0.3)";
       ctx.shadowBlur = 40;
@@ -882,7 +853,6 @@ export default function SettingsPage() {
         roundRect(heroX, heroY, heroW, heroH, 24);
         ctx.clip();
 
-        // Smart cover crop (fill entire container)
         const imgRatio = heroImg.width / heroImg.height;
         const boxRatio = heroW / heroH;
         let drawW, drawH, drawX, drawY;
@@ -899,7 +869,6 @@ export default function SettingsPage() {
         }
         ctx.drawImage(heroImg, drawX, drawY, drawW, drawH);
 
-        // Subtle bottom overlay for depth
         const overlayGrad = ctx.createLinearGradient(heroX, heroY + heroH * 0.65, heroX, heroY + heroH);
         overlayGrad.addColorStop(0, "rgba(0,0,0,0)");
         overlayGrad.addColorStop(1, "rgba(0,0,0,0.35)");
@@ -907,7 +876,6 @@ export default function SettingsPage() {
         ctx.fillRect(heroX, heroY, heroW, heroH);
         ctx.restore();
 
-        // Colored corner accent (bottom-left of image)
         ctx.save();
         ctx.beginPath();
         ctx.moveTo(heroX, heroY + heroH);
@@ -919,7 +887,6 @@ export default function SettingsPage() {
         ctx.fill();
         ctx.restore();
       } else {
-        // Fallback gradient with icon
         ctx.save();
         roundRect(heroX, heroY, heroW, heroH, 24);
         const fallGrad = ctx.createLinearGradient(heroX, heroY, heroX, heroY + heroH);
@@ -935,7 +902,6 @@ export default function SettingsPage() {
         ctx.restore();
       }
 
-      // ============ STEP 3: HEADER (Logo + Clinic Name) ============
       let logoImg: HTMLImageElement | null = null;
       if (clinic.logo_url) {
         logoImg = await loadImage(clinic.logo_url);
@@ -945,7 +911,6 @@ export default function SettingsPage() {
       const logoX = W / 2 - logoSize / 2;
       const logoY = 50;
 
-      // Golden ring around logo (premium look)
       ctx.save();
       ctx.shadowColor = "rgba(245, 158, 11, 0.5)";
       ctx.shadowBlur = 25;
@@ -958,7 +923,6 @@ export default function SettingsPage() {
       ctx.fill();
       ctx.restore();
 
-      // White inner card
       ctx.save();
       ctx.fillStyle = "white";
       roundRect(logoX - 4, logoY - 4, logoSize + 8, logoSize + 8, 24);
@@ -987,7 +951,6 @@ export default function SettingsPage() {
         ctx.restore();
       }
 
-      // Clinic name (bold Arabic)
       ctx.save();
       ctx.font = "900 50px 'Cairo', 'Tajawal', 'Segoe UI', Arial";
       ctx.fillStyle = theme.darkColor;
@@ -1000,7 +963,6 @@ export default function SettingsPage() {
       ctx.fillText(clinic.name, W / 2, logoY + logoSize + 24);
       ctx.restore();
 
-      // Specialty label
       ctx.save();
       ctx.font = "600 22px 'Cairo', Arial";
       ctx.fillStyle = theme.chipText;
@@ -1010,7 +972,6 @@ export default function SettingsPage() {
       ctx.fillText(`${theme.label}  •  ${theme.labelEn}`, W / 2, logoY + logoSize + 88);
       ctx.restore();
 
-      // Decorative underline
       ctx.save();
       ctx.strokeStyle = theme.bg3;
       ctx.lineWidth = 4;
@@ -1021,7 +982,6 @@ export default function SettingsPage() {
       ctx.stroke();
       ctx.restore();
 
-      // ============ STEP 4: End date badge (top-left) ============
       if (promo.end_date) {
         ctx.save();
         const badgeW = 280;
@@ -1049,7 +1009,6 @@ export default function SettingsPage() {
         ctx.restore();
       }
 
-      // ============ STEP 5: TITLE + DESCRIPTION (Right column) ============
       const rightX = W - 60;
       const rightColW = W - heroX - heroW - 120;
       const rightColCenter = heroX + heroW + 60 + rightColW / 2;
@@ -1066,7 +1025,6 @@ export default function SettingsPage() {
       });
       ctx.restore();
 
-      // Description
       if (promo.description) {
         ctx.save();
         ctx.font = "600 22px 'Cairo', Arial";
@@ -1081,13 +1039,11 @@ export default function SettingsPage() {
         ctx.restore();
       }
 
-      // ============ STEP 6: 🔥 GIANT 3D GOLDEN DISCOUNT 🔥 ============
       const discountCenterX = rightColCenter;
       const discountY = 660;
       const numStr = String(promo.discount_value);
       const unitStr = promo.discount_type === "percentage" ? "%" : "ريال";
 
-      // "خصم يصل إلى" label
       ctx.save();
       ctx.font = "900 28px 'Cairo', Arial";
       ctx.fillStyle = theme.darkColor;
@@ -1097,7 +1053,6 @@ export default function SettingsPage() {
       ctx.fillText("خصم يصل إلى", discountCenterX, discountY);
       ctx.restore();
 
-      // Draw the GIANT 3D golden number
       ctx.save();
       const bigFontSize = 320;
       ctx.font = `900 ${bigFontSize}px 'Cairo', 'Arial Black', Arial`;
@@ -1107,20 +1062,17 @@ export default function SettingsPage() {
 
       const numY = discountY + 45;
 
-      // 15 layers of 3D depth
       for (let i = 15; i >= 1; i--) {
         ctx.fillStyle = `rgba(120, 53, 15, ${0.08 + i * 0.03})`;
         ctx.fillText(numStr, discountCenterX + i * 0.6, numY + i * 0.9);
       }
 
-      // Deep shadow
       ctx.shadowColor = "rgba(180, 83, 9, 0.5)";
       ctx.shadowBlur = 35;
       ctx.shadowOffsetY = 15;
       ctx.fillStyle = "#78350F";
       ctx.fillText(numStr, discountCenterX + 3, numY + 5);
 
-      // MAIN METALLIC GOLD GRADIENT
       ctx.shadowColor = "transparent";
       const goldGrad = ctx.createLinearGradient(0, numY, 0, numY + bigFontSize);
       goldGrad.addColorStop(0, "#FFF8DC");
@@ -1133,7 +1085,6 @@ export default function SettingsPage() {
       ctx.fillStyle = goldGrad;
       ctx.fillText(numStr, discountCenterX, numY);
 
-      // Glossy top highlight
       ctx.save();
       const clipY = numY;
       const clipH = bigFontSize * 0.42;
@@ -1148,14 +1099,12 @@ export default function SettingsPage() {
       ctx.fillText(numStr, discountCenterX, numY);
       ctx.restore();
 
-      // Sharp outline
       ctx.strokeStyle = "#78350F";
       ctx.lineWidth = 5;
       ctx.lineJoin = "round";
       ctx.strokeText(numStr, discountCenterX, numY);
       ctx.restore();
 
-      // Unit pill (% or ريال)
       ctx.save();
       const unitW = 190;
       const unitH = 72;
@@ -1174,7 +1123,6 @@ export default function SettingsPage() {
       ctx.fill();
       ctx.shadowColor = "transparent";
 
-      // Inner shine on pill
       ctx.save();
       roundRect(unitX + 6, unitY + 6, unitW - 12, (unitH - 12) / 2, 30);
       const shineGrad = ctx.createLinearGradient(0, unitY, 0, unitY + unitH / 2);
@@ -1192,7 +1140,6 @@ export default function SettingsPage() {
       ctx.fillText(unitStr, discountCenterX, unitY + unitH / 2 + 2);
       ctx.restore();
 
-      // ============ STEP 7: SERVICE CHIPS (2 columns bottom right) ============
       const chipsStartY = 1180;
       const chipsPerRow = 2;
       const chipsRightAreaX = heroX + heroW + 60;
@@ -1213,7 +1160,6 @@ export default function SettingsPage() {
         ctx.shadowBlur = 12;
         ctx.shadowOffsetY = 4;
 
-        // Chip background gradient
         const chipGrad = ctx.createLinearGradient(chipX, chipY, chipX, chipY + chipH);
         chipGrad.addColorStop(0, "white");
         chipGrad.addColorStop(1, theme.chipBg);
@@ -1222,7 +1168,6 @@ export default function SettingsPage() {
         ctx.fill();
         ctx.shadowColor = "transparent";
 
-        // Border
         ctx.strokeStyle = theme.chipBorder;
         ctx.lineWidth = 2;
         ctx.globalAlpha = 0.5;
@@ -1230,13 +1175,11 @@ export default function SettingsPage() {
         ctx.stroke();
         ctx.globalAlpha = 1;
 
-        // Small colored dot indicator
         ctx.fillStyle = theme.bg3;
         ctx.beginPath();
         ctx.arc(chipX + chipW - 18, chipY + chipH / 2, 5, 0, Math.PI * 2);
         ctx.fill();
 
-        // Text
         ctx.font = "bold 20px 'Cairo', Arial";
         ctx.fillStyle = theme.chipText;
         ctx.textAlign = "center";
@@ -1247,7 +1190,6 @@ export default function SettingsPage() {
         ctx.restore();
       });
 
-      // ============ STEP 8: FOOTER (Phone / Code / CTA) ============
       const footerY = H - 90;
       const phoneText = (promo as any).phone_text || "";
 
@@ -1268,13 +1210,11 @@ export default function SettingsPage() {
         ctx.fill();
         ctx.shadowColor = "transparent";
 
-        // Colored left accent bar
         ctx.fillStyle = theme.bg3;
         roundRect(footerX, footerY, 8, footerH, 4);
         ctx.fill();
 
         if (phoneText) {
-          // Green phone circle (right side in RTL)
           const phoneCircleX = footerX + footerW - 50;
           ctx.shadowColor = "rgba(16, 185, 129, 0.5)";
           ctx.shadowBlur = 12;
@@ -1293,7 +1233,6 @@ export default function SettingsPage() {
           ctx.textBaseline = "middle";
           ctx.fillText("📞", phoneCircleX, footerY + footerH / 2 + 3);
 
-          // Phone number
           ctx.font = "900 36px 'Cairo', Arial";
           ctx.fillStyle = theme.darkColor;
           ctx.textAlign = "right";
@@ -1301,7 +1240,6 @@ export default function SettingsPage() {
           ctx.direction = "ltr";
           ctx.fillText(phoneText, phoneCircleX - 40, footerY + footerH / 2);
 
-          // "احجز الآن" label (left)
           ctx.font = "bold 22px 'Cairo', Arial";
           ctx.fillStyle = theme.chipText;
           ctx.textAlign = "left";
@@ -1323,7 +1261,6 @@ export default function SettingsPage() {
         }
         ctx.restore();
       } else {
-        // Generic CTA
         ctx.save();
         const ctaW = 620;
         const ctaH = 65;
@@ -1349,7 +1286,6 @@ export default function SettingsPage() {
         ctx.restore();
       }
 
-      // ============ STEP 9: Convert canvas & Upload ============
       const imageDataUrl = canvas.toDataURL("image/png", 1.0);
       const base64Data = imageDataUrl.split(",")[1];
       const binaryString = atob(base64Data);
@@ -1364,7 +1300,6 @@ export default function SettingsPage() {
 
       let uploadSuccess = false;
 
-      // Try service role upload
       if (supabaseServiceKey) {
         try {
           const uploadResponse = await fetch(`${supabaseUrl2}/storage/v1/object/promo-images/${filePath}`, {
@@ -1381,7 +1316,6 @@ export default function SettingsPage() {
         } catch (e) { console.log("Service role upload failed", e); }
       }
 
-      // Fallback: session token
       if (!uploadSuccess) {
         try {
           const { data: sessionData } = await supabase.auth.getSession();
@@ -1403,7 +1337,6 @@ export default function SettingsPage() {
         } catch (e) { console.log("Session upload failed", e); }
       }
 
-      // Final fallback: supabase client
       if (!uploadSuccess) {
         try {
           const { error: uploadError } = await supabase.storage
@@ -1492,9 +1425,6 @@ export default function SettingsPage() {
     navigate("/");
   };
 
-  // ============================================================
-  // Loading State
-  // ============================================================
   if (authLoading || clinicLoading) {
     return (
       <div className="min-h-screen flex items-center justify-center bg-mesh">
@@ -1506,9 +1436,6 @@ export default function SettingsPage() {
     );
   }
 
-  // ============================================================
-  // Render
-  // ============================================================
   return (
     <div className="min-h-screen bg-mesh flex flex-col">
       <SubscriptionLock />
@@ -2167,7 +2094,7 @@ export default function SettingsPage() {
                           <span className="px-2 py-0.5 rounded-lg bg-amber-500/10 text-amber-700 font-bold text-xs">
                             {promo.discount_type === "percentage"
                               ? `${promo.discount_value}%`
-                              : `${promo.discount_value} ريال`}
+                              : `${promo.discount_value}`}
                           </span>
                           {promo.code && (
                             <span className="px-2 py-0.5 rounded-lg bg-primary/10 text-primary font-mono text-xs">
@@ -2184,6 +2111,11 @@ export default function SettingsPage() {
                             {promo.is_active ? "نشط" : "موقف"}
                           </span>
                         </div>
+                        {promo.service_ids && promo.service_ids.length > 0 && (
+                          <p className="text-[10px] text-emerald-700 mt-1 font-bold">
+                            ✓ مرتبط بـ {promo.service_ids.length} خدمة
+                          </p>
+                        )}
                         {promo.start_date && promo.end_date && (
                           <p className="text-[10px] text-muted-foreground mt-1">
                             {promo.start_date} → {promo.end_date}
@@ -2291,7 +2223,7 @@ export default function SettingsPage() {
                       <p className="text-sm text-primary font-bold">
                         {service.price === null
                           ? "حسب الفحص"
-                          : `${Number(service.price).toLocaleString()} ريال`}
+                          : `${Number(service.price).toLocaleString()}`}
                       </p>
                     </div>
                     <Button
@@ -2400,7 +2332,7 @@ export default function SettingsPage() {
                     </SelectTrigger>
                     <SelectContent>
                       <SelectItem value="percentage">نسبة مئوية (%)</SelectItem>
-                      <SelectItem value="fixed">مبلغ ثابت (ر.ي)</SelectItem>
+                      <SelectItem value="fixed">مبلغ ثابت</SelectItem>
                     </SelectContent>
                   </Select>
                 </div>
@@ -2426,16 +2358,71 @@ export default function SettingsPage() {
                 />
                 <p className="text-[10px] text-muted-foreground mt-1">اترك فارغاً للتوليد التلقائي</p>
               </div>
+
+              {/* ✏️ [V38.3] اختيار الخدمات الفعلية المشمولة بالعرض — الحقل الحاسم */}
               <div>
-                <Label className="text-sm font-medium">عناصر الإعلان (الخدمات المشمولة في العرض فقط)</Label>
+                <Label className="text-sm font-medium text-amber-700">
+                  🎁 الخدمات الفعلية المشمولة بالعرض (ضروري)
+                </Label>
+                <p className="text-[10px] text-muted-foreground mb-2">
+                  اختر من قائمة خدمات عيادتك. البوت سيعرض هذه الخدمات فقط عندما يضغط العميل "اطلب الآن".
+                </p>
+                {services.length === 0 ? (
+                  <div className="text-xs text-red-600 bg-red-50 p-2 rounded border border-red-200">
+                    ⚠️ لا توجد خدمات مسجلة. أضف خدمات أولاً من قسم "الخدمات والأسعار" بالأسفل.
+                  </div>
+                ) : (
+                  <div className="space-y-1 max-h-44 overflow-y-auto border border-input rounded-md p-3 bg-background">
+                    {services.map((svc) => {
+                      const isChecked = (promoForm.service_ids || []).includes(svc.id);
+                      return (
+                        <label
+                          key={svc.id}
+                          className="flex items-center gap-2 cursor-pointer hover:bg-muted/40 p-1.5 rounded"
+                        >
+                          <input
+                            type="checkbox"
+                            checked={isChecked}
+                            onChange={(e) => {
+                              const current = promoForm.service_ids || [];
+                              const next = e.target.checked
+                                ? [...current, svc.id]
+                                : current.filter((id) => id !== svc.id);
+                              setPromoForm({ ...promoForm, service_ids: next });
+                            }}
+                            className="w-4 h-4 accent-amber-600"
+                          />
+                          <span className="text-sm flex-1">{svc.name}</span>
+                          {svc.price !== null && (
+                            <span className="text-xs text-muted-foreground">{svc.price}</span>
+                          )}
+                        </label>
+                      );
+                    })}
+                  </div>
+                )}
+                {(promoForm.service_ids || []).length === 0 && services.length > 0 && (
+                  <p className="text-[10px] text-amber-700 mt-1 font-semibold">
+                    ⚠️ اختر خدمة واحدة على الأقل وإلا لن يعمل العرض.
+                  </p>
+                )}
+                {(promoForm.service_ids || []).length > 0 && (
+                  <p className="text-[10px] text-emerald-700 mt-1 font-semibold">
+                    ✅ تم اختيار {(promoForm.service_ids || []).length} خدمة.
+                  </p>
+                )}
+              </div>
+
+              <div>
+                <Label className="text-sm font-medium">عناصر الإعلان (نصوص زخرفية للصورة فقط)</Label>
                 <textarea
                   value={promoForm.items || ""}
                   onChange={(e) => setPromoForm({ ...promoForm, items: e.target.value })}
                   placeholder={"مثال:\nتحاليل دقيقة\nاستشارة مجانية\nخصم للعائلات"}
-                  className="w-full h-24 rounded-md border border-input bg-background px-3 py-2 text-sm"
+                  className="w-full h-20 rounded-md border border-input bg-background px-3 py-2 text-sm"
                 />
                 <p className="text-[10px] text-muted-foreground mt-1">
-                  اكتب فقط الخدمات المشمولة في العرض. افصل بين العناصر بسطر أو فاصلة.
+                  نصوص اختيارية تظهر في الصورة الإعلانية المولدة.
                 </p>
               </div>
             </div>
