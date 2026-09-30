@@ -17,7 +17,7 @@ import {
 import {
   Stethoscope, LogOut, ArrowRight, Save, Copy, Check, Link2, Key, Plus, Trash2, Loader2,
   Bot, Building2, CreditCard, Shield, Clock, Activity, Sparkles, Upload, Image, QrCode,
-  Download, CalendarClock, Tag, Gift, BadgePercent, ImagePlus, X, Edit, Eye,
+  Download, CalendarClock, Tag, Gift, BadgePercent, ImagePlus, X, Edit, Eye, Mail,
 } from "lucide-react";
 import html2canvas from "html2canvas";
 
@@ -27,6 +27,8 @@ import html2canvas from "html2canvas";
 interface Service {
   id: string;
   name: string;
+  name_en?: string | null;
+  name_en_edited_by_user?: boolean;
   price: number | null;
 }
 
@@ -47,12 +49,10 @@ interface Promotion {
   items?: string;
   phone_text?: string;
   created_at: string;
-  service_ids?: string[]; // ← ✏️ [V38.3] الخدمات الفعلية المشمولة بالعرض
 }
 
 // ============================================================
 // 💎 PREMIUM MEDICAL THEMES v9 (Verified Image URLs)
-// Every URL manually verified to match its specialty
 // ============================================================
 const SPECIALTY_THEMES: Record<string, any> = {
   dental: {
@@ -142,6 +142,9 @@ const SPECIALTY_THEMES: Record<string, any> = {
   },
 };
 
+// ============================================================
+// Smart service matcher
+// ============================================================
 const SERVICE_KEYWORD_IMAGES: Array<{ keywords: string[]; images: string[] }> = [
   {
     keywords: ["تحليل", "تحاليل", "دم", "مختبر", "معمل", "cbc", "vitamin", "فيتامين"],
@@ -202,6 +205,7 @@ const SERVICE_KEYWORD_IMAGES: Array<{ keywords: string[]; images: string[] }> = 
 
 function pickHeroImage(theme: any, promo: Promotion, items: string[]): string {
   const searchText = `${promo.title} ${promo.description || ""} ${items.join(" ")}`.toLowerCase();
+
   let hash = 0;
   const seed = (promo.id || "") + (promo.updated_at || Date.now().toString());
   for (let i = 0; i < seed.length; i++) {
@@ -209,11 +213,13 @@ function pickHeroImage(theme: any, promo: Promotion, items: string[]): string {
     hash |= 0;
   }
   hash = Math.abs(hash);
+
   for (const entry of SERVICE_KEYWORD_IMAGES) {
     if (entry.keywords.some(kw => searchText.includes(kw.toLowerCase()))) {
       return entry.images[hash % entry.images.length];
     }
   }
+
   const heros = theme.heroImages || [];
   if (heros.length === 0) return "";
   return heros[hash % heros.length];
@@ -225,8 +231,10 @@ export default function SettingsPage() {
   const { clinic, subscription, loading: clinicLoading, updateClinic } = useClinic();
   const { toast } = useToast();
 
+  // --- Refs ---
   const promoImageInputRef = useRef<HTMLInputElement>(null);
 
+  // --- Existing State ---
   const [clinicName, setClinicName] = useState("");
   const [clinicSpecialty, setClinicSpecialty] = useState("general");
   const [botToken, setBotToken] = useState("");
@@ -252,6 +260,18 @@ export default function SettingsPage() {
   const [workingHoursStart, setWorkingHoursStart] = useState("08:00");
   const [workingHoursEnd, setWorkingHoursEnd] = useState("16:00");
 
+  // --- ✏️ [NEW] New fields state ---
+  const [clinicNameEn, setClinicNameEn] = useState("");
+  const [receptionistEmail, setReceptionistEmail] = useState("");
+  const [clinicQrUrl, setClinicQrUrl] = useState<string | null>(null);
+  const [generatingQr, setGeneratingQr] = useState(false);
+  const [nameEnEdited, setNameEnEdited] = useState(false);
+  const [newServiceNameEn, setNewServiceNameEn] = useState("");
+  const [serviceNameEnEdited, setServiceNameEnEdited] = useState(false);
+  const [translatingName, setTranslatingName] = useState(false);
+  const [translatingService, setTranslatingService] = useState(false);
+
+  // --- Promotions State ---
   const [promotions, setPromotions] = useState<Promotion[]>([]);
   const [promoDialogOpen, setPromoDialogOpen] = useState(false);
   const [editingPromo, setEditingPromo] = useState<Promotion | null>(null);
@@ -262,7 +282,6 @@ export default function SettingsPage() {
     template: "auto",
     items: "",
     phone_text: "",
-    service_ids: [], // ← ✏️ [V38.3]
   });
   const [promoImageFile, setPromoImageFile] = useState<File | null>(null);
   const [promoImagePreview, setPromoImagePreview] = useState<string | null>(null);
@@ -308,12 +327,27 @@ export default function SettingsPage() {
       setReceptionistWhatsapp((clinic as any).receptionist_whatsapp || "");
       setWorkingHoursStart((clinic as any).working_hours_start || "08:00");
       setWorkingHoursEnd((clinic as any).working_hours_end || "16:00");
+      // ✏️ [NEW] الحقول الجديدة
+      setClinicNameEn((clinic as any).name_en || "");
+      setReceptionistEmail((clinic as any).receptionist_email || "");
+      setClinicQrUrl((clinic as any).qr_image_url || null);
+      setNameEnEdited(!!(clinic as any).name_en);
       fetchServices();
       fetchStaff();
       fetchPromotions();
     }
   }, [clinic]);
 
+  // ✏️ [NEW] توليد QR تلقائي عند أول فتح إن لم يكن موجوداً
+  useEffect(() => {
+    if (clinic?.id && !clinicQrUrl && !generatingQr) {
+      generateQrPoster(false);
+    }
+  }, [clinic?.id, clinicQrUrl]);
+
+  // ============================================================
+  // Data Fetching Functions
+  // ============================================================
   const fetchStaff = async () => {
     if (!clinic) return;
     const { data } = await supabase
@@ -420,6 +454,111 @@ export default function SettingsPage() {
     setPromotions(data || []);
   };
 
+  // ============================================================
+  // ✏️ [NEW] Translation helpers
+  // ============================================================
+  const translateArToEn = async (text: string): Promise<string> => {
+    if (!text || !text.trim() || !/[\u0600-\u06FF]/.test(text)) return text;
+    try {
+      const url = `https://translate.googleapis.com/translate_a/single?client=gtx&sl=ar&tl=en&dt=t&q=${encodeURIComponent(text)}`;
+      const res = await fetch(url);
+      if (!res.ok) return "";
+      const data = await res.json();
+      if (data && data[0] && Array.isArray(data[0])) {
+        const translated = data[0].map((item: any) => item[0]).join("").trim();
+        if (translated && !/[\u0600-\u06FF]/.test(translated)) {
+          return translated
+            .split(" ")
+            .filter(Boolean)
+            .map((w: string) => w.charAt(0).toUpperCase() + w.slice(1).toLowerCase())
+            .join(" ");
+        }
+      }
+    } catch (_) {}
+    return "";
+  };
+
+  const handleClinicNameChange = async (val: string) => {
+    setClinicName(val);
+    if (nameEnEdited) return;
+    if (!val.trim() || !/[\u0600-\u06FF]/.test(val)) return;
+    setTranslatingName(true);
+    try {
+      const en = await translateArToEn(val);
+      if (en) setClinicNameEn(en);
+    } finally {
+      setTranslatingName(false);
+    }
+  };
+
+  const handleServiceNameChange = async (val: string) => {
+    setNewServiceName(val);
+    if (serviceNameEnEdited) return;
+    if (!val.trim() || !/[\u0600-\u06FF]/.test(val)) return;
+    setTranslatingService(true);
+    try {
+      const en = await translateArToEn(val);
+      if (en) setNewServiceNameEn(en);
+    } finally {
+      setTranslatingService(false);
+    }
+  };
+
+  // ============================================================
+  // ✏️ [NEW] QR Poster generation
+  // ============================================================
+  const generateQrPoster = async (force: boolean = false) => {
+    if (!clinic?.id) return;
+    setGeneratingQr(true);
+    try {
+      const { data: sess } = await supabase.auth.getSession();
+      const token = sess?.session?.access_token;
+      const res = await fetch(`${supabaseUrl}/functions/v1/generate-clinic-qr`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          apikey: supabaseAnonKey,
+          ...(token ? { Authorization: `Bearer ${token}` } : {}),
+        },
+        body: JSON.stringify({ clinic_id: clinic.id, force }),
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok || !data?.ok) {
+        toast({
+          title: "فشل التوليد",
+          description: data?.error || "حدث خطأ أثناء توليد الملصق",
+          variant: "destructive",
+        });
+        return;
+      }
+      setClinicQrUrl(data.image_url);
+      toast({ title: "✅ تم التوليد", description: "ملصق QR الفاخر جاهز للطباعة" });
+    } catch (e: any) {
+      toast({ title: "خطأ", description: e?.message || "فشل الاتصال", variant: "destructive" });
+    } finally {
+      setGeneratingQr(false);
+    }
+  };
+
+  const downloadQrPoster = async () => {
+    if (!clinicQrUrl) return;
+    try {
+      const res = await fetch(clinicQrUrl);
+      const blob = await res.blob();
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = `qr-poster-${clinic?.name_en || clinic?.name || "clinic"}.png`;
+      a.click();
+      URL.revokeObjectURL(url);
+    } catch (e) {
+      toast({ title: "خطأ", description: "فشل التنزيل", variant: "destructive" });
+    }
+  };
+
+  // ============================================================
+  // Save Clinic Settings
+  // ============================================================
   const handleSaveClinic = async () => {
     if (!clinic) {
       toast({ title: "تعذر تحميل العيادة", description: "أعد تحميل الصفحة.", variant: "destructive" });
@@ -438,14 +577,17 @@ export default function SettingsPage() {
       }
     } catch (e) {}
 
+    // ✏️ [UPDATED] إضافة الحقول الجديدة
     const fullPayload: any = {
       name: clinicName,
+      name_en: clinicNameEn || null,
       specialty: clinicSpecialty,
       bot_token: botToken,
       voice_agent_enabled: voiceAgentEnabled,
       voice_tone: voiceTone,
       voice_mode: voiceMode,
       receptionist_whatsapp: receptionistWhatsapp || null,
+      receptionist_email: receptionistEmail || null,
       working_hours_start: workingHoursStart,
       working_hours_end: workingHoursEnd,
     };
@@ -549,10 +691,13 @@ export default function SettingsPage() {
     } else {
       setLogoUrl(publicUrl);
       toast({ title: "تم الرفع ✓", description: "تم رفع شعار العيادة بنجاح" });
+      // لو كان الشعار جديد، يمكن إعادة توليد الملصق بالشعار الجديد
+      // (اختياري: نتركه يدوياً بزر "إعادة توليد")
     }
     setUploadingLogo(false);
   };
 
+  // ✏️ [UPDATED] handleAddService مع name_en
   const handleAddService = async () => {
     if (!clinic || !newServiceName.trim()) return;
     const trimmedPrice = newServicePrice.trim();
@@ -561,9 +706,19 @@ export default function SettingsPage() {
       toast({ title: "خطأ", description: "السعر غير صالح", variant: "destructive" });
       return;
     }
+
+    // ترجمة تلقائية إن لم يملأ المستخدم الاسم الإنجليزي
+    let nameEn = newServiceNameEn.trim();
+    if (!nameEn) {
+      const auto = await translateArToEn(newServiceName.trim());
+      if (auto) nameEn = auto;
+    }
+
     const { error } = await supabase.from("services").insert({
       clinic_id: clinic.id,
       name: newServiceName.trim(),
+      name_en: nameEn || null,
+      name_en_edited_by_user: serviceNameEnEdited,
       price: priceValue,
     });
     if (error) {
@@ -571,6 +726,8 @@ export default function SettingsPage() {
     } else {
       setNewServiceName("");
       setNewServicePrice("");
+      setNewServiceNameEn("");
+      setServiceNameEnEdited(false);
       fetchServices();
       toast({ title: "تمت الإضافة ✓", description: "تمت إضافة الخدمة بنجاح" });
     }
@@ -586,6 +743,9 @@ export default function SettingsPage() {
     }
   };
 
+  // ============================================================
+  // Promotion Handlers
+  // ============================================================
   const resetPromoForm = () => {
     setPromoForm({
       discount_type: "percentage",
@@ -594,7 +754,6 @@ export default function SettingsPage() {
       template: "auto",
       items: "",
       phone_text: "",
-      service_ids: [], // ← ✏️ [V38.3]
     });
     setPromoImageFile(null);
     setPromoImagePreview(null);
@@ -619,7 +778,6 @@ export default function SettingsPage() {
         template: promo.template || "auto",
         items: promo.items || "",
         phone_text: promo.phone_text || "",
-        service_ids: promo.service_ids || [], // ← ✏️ [V38.3]
       });
       if (promo.image_url) setPromoImagePreview(promo.image_url);
     } else {
@@ -648,15 +806,6 @@ export default function SettingsPage() {
     if (!clinic) return;
     if (!promoForm.title || !promoForm.discount_type || !promoForm.discount_value) {
       toast({ title: "بيانات ناقصة", description: "يرجى ملء جميع الحقول الأساسية", variant: "destructive" });
-      return;
-    }
-    // ✏️ [V38.3] تحقق من وجود خدمات مختارة
-    if (!promoForm.service_ids || promoForm.service_ids.length === 0) {
-      toast({
-        title: "⚠️ يجب اختيار خدمة واحدة على الأقل",
-        description: "العرض يحتاج خدمة واحدة على الأقل ليظهر للعملاء بشكل صحيح.",
-        variant: "destructive",
-      });
       return;
     }
     setUploadingPromoImage(true);
@@ -697,7 +846,6 @@ export default function SettingsPage() {
       template: promoForm.template || "auto",
       items: promoForm.items || null,
       phone_text: promoForm.phone_text || null,
-      service_ids: promoForm.service_ids || [], // ← ✏️ [V38.3] الحقل الحاسم
     };
     let error;
     if (editingPromo) {
@@ -718,6 +866,9 @@ export default function SettingsPage() {
     }
   };
 
+  // ============================================================
+  // 💎 GENERATE ULTRA-PREMIUM MEDICAL AD IMAGE — v9 FINAL
+  // ============================================================
   const generatePromoImage = async (promo: Promotion, forceRegenerate: boolean = false) => {
     if (!clinic) {
       toast({ title: "خطأ", description: "لم يتم تحميل بيانات العيادة", variant: "destructive" });
@@ -789,6 +940,7 @@ export default function SettingsPage() {
         ctx.closePath();
       };
 
+      // BACKGROUND
       const bgGrad = ctx.createLinearGradient(0, 0, W, H);
       bgGrad.addColorStop(0, "#FFFFFF");
       bgGrad.addColorStop(0.35, theme.bg1);
@@ -831,6 +983,7 @@ export default function SettingsPage() {
       ctx.fillRect(0, 0, W, H);
       ctx.restore();
 
+      // HERO IMAGE
       const heroImageUrl = pickHeroImage(theme, promo, itemsList);
       const heroImg = await loadImage(heroImageUrl);
 
@@ -902,6 +1055,7 @@ export default function SettingsPage() {
         ctx.restore();
       }
 
+      // HEADER
       let logoImg: HTMLImageElement | null = null;
       if (clinic.logo_url) {
         logoImg = await loadImage(clinic.logo_url);
@@ -982,6 +1136,7 @@ export default function SettingsPage() {
       ctx.stroke();
       ctx.restore();
 
+      // End date badge
       if (promo.end_date) {
         ctx.save();
         const badgeW = 280;
@@ -1009,6 +1164,7 @@ export default function SettingsPage() {
         ctx.restore();
       }
 
+      // TITLE
       const rightX = W - 60;
       const rightColW = W - heroX - heroW - 120;
       const rightColCenter = heroX + heroW + 60 + rightColW / 2;
@@ -1039,6 +1195,7 @@ export default function SettingsPage() {
         ctx.restore();
       }
 
+      // GIANT GOLD DISCOUNT
       const discountCenterX = rightColCenter;
       const discountY = 660;
       const numStr = String(promo.discount_value);
@@ -1140,6 +1297,7 @@ export default function SettingsPage() {
       ctx.fillText(unitStr, discountCenterX, unitY + unitH / 2 + 2);
       ctx.restore();
 
+      // CHIPS
       const chipsStartY = 1180;
       const chipsPerRow = 2;
       const chipsRightAreaX = heroX + heroW + 60;
@@ -1190,6 +1348,7 @@ export default function SettingsPage() {
         ctx.restore();
       });
 
+      // FOOTER
       const footerY = H - 90;
       const phoneText = (promo as any).phone_text || "";
 
@@ -1286,6 +1445,7 @@ export default function SettingsPage() {
         ctx.restore();
       }
 
+      // Convert & Upload
       const imageDataUrl = canvas.toDataURL("image/png", 1.0);
       const base64Data = imageDataUrl.split(",")[1];
       const binaryString = atob(base64Data);
@@ -1425,6 +1585,9 @@ export default function SettingsPage() {
     navigate("/");
   };
 
+  // ============================================================
+  // Loading State
+  // ============================================================
   if (authLoading || clinicLoading) {
     return (
       <div className="min-h-screen flex items-center justify-center bg-mesh">
@@ -1436,6 +1599,9 @@ export default function SettingsPage() {
     );
   }
 
+  // ============================================================
+  // Render
+  // ============================================================
   return (
     <div className="min-h-screen bg-mesh flex flex-col">
       <SubscriptionLock />
@@ -1525,15 +1691,55 @@ export default function SettingsPage() {
                 </div>
               </div>
 
+              {/* ✏️ [NEW] Clinic Name AR + EN */}
               <div className="space-y-2">
-                <Label htmlFor="clinicName" className="text-sm font-medium">اسم العيادة</Label>
+                <Label htmlFor="clinicName" className="text-sm font-medium">اسم العيادة (بالعربي)</Label>
                 <Input
                   id="clinicName"
                   value={clinicName}
-                  onChange={(e) => setClinicName(e.target.value)}
+                  onChange={(e) => handleClinicNameChange(e.target.value)}
                   placeholder="أدخل اسم العيادة"
                   className="input-modern"
                 />
+              </div>
+
+              <div className="space-y-2">
+                <Label htmlFor="clinicNameEn" className="text-sm font-medium flex items-center gap-2">
+                  اسم العيادة (بالإنجليزي)
+                  {translatingName && <Loader2 className="w-3 h-3 animate-spin text-primary" />}
+                </Label>
+                <Input
+                  id="clinicNameEn"
+                  value={clinicNameEn}
+                  onChange={(e) => {
+                    setClinicNameEn(e.target.value);
+                    setNameEnEdited(true);
+                  }}
+                  placeholder="Clinic Name in English"
+                  className="input-modern"
+                  dir="ltr"
+                />
+                <p className="text-xs text-muted-foreground">يظهر في بطاقة الحجز الرسمية — قابل للتعديل يدوياً</p>
+              </div>
+
+              {/* ✏️ [NEW] Receptionist Email */}
+              <div className="space-y-2">
+                <Label htmlFor="receptionistEmail" className="text-sm font-medium flex items-center gap-2">
+                  <Mail className="w-4 h-4" />
+                  بريد موظف الاستقبال
+                </Label>
+                <Input
+                  id="receptionistEmail"
+                  type="email"
+                  value={receptionistEmail}
+                  onChange={(e) => setReceptionistEmail(e.target.value)}
+                  placeholder="reception@clinic.com"
+                  className="input-modern"
+                  dir="ltr"
+                />
+                <p className="text-xs text-muted-foreground">
+                  يصل إليه إشعار كل حجز جديد مع صورة بطاقة الحجز
+                </p>
               </div>
 
               <div className="space-y-2">
@@ -1791,59 +1997,66 @@ export default function SettingsPage() {
             </div>
           </section>
 
-          {/* QR CODE */}
+          {/* ✏️ [NEW] QR POSTER — الملصق الفاخر */}
           <section className="card-modern p-6 animate-slide-up delay-100">
             <div className="flex items-center gap-3 mb-4">
               <div className="w-12 h-12 rounded-2xl bg-gradient-to-br from-fuchsia-500 to-pink-600 flex items-center justify-center shadow-lg">
                 <QrCode className="w-6 h-6 text-white" />
               </div>
-              <div>
-                <h2 className="text-xl font-bold text-foreground">رمز QR للحجز</h2>
-                <p className="text-sm text-muted-foreground">اطبعه وعلّقه في العيادة — الزبون يمسحه ويُحجز فوراً</p>
+              <div className="flex-1">
+                <h2 className="text-xl font-bold text-foreground">ملصق QR الفاخر للعيادة</h2>
+                <p className="text-sm text-muted-foreground">
+                  ملصق A5 احترافي للطباعة — يُعلَّق في العيادة أو يُوزَّع
+                </p>
               </div>
             </div>
-            {(() => {
-              const effectiveBotUsername = botUsername || "SmartClinc_bot";
-              if (!clinic?.id) return null;
-              const link = `https://t.me/${effectiveBotUsername}?start=clinic_${clinic.id}`;
-              return (
-                <div className="bg-accent/5 border border-accent/20 rounded-2xl p-5 flex flex-col sm:flex-row items-center gap-6">
-                  <div className="bg-white p-4 rounded-2xl shadow-md">
-                    <QRCodeCanvas id="clinic-qr" value={link} size={200} level="M" includeMargin={false} />
-                  </div>
-                  <div className="flex-1 space-y-3 w-full">
-                    <p className="text-sm text-foreground">
-                      عند مسح الرمز يفتح موظفنا الآلي الذكي <b dir="ltr">@{effectiveBotUsername}</b> مباشرةً على عيادتك.
-                    </p>
-                    <div className="flex gap-2">
-                      <Input value={link} readOnly className="font-mono text-xs bg-background" dir="ltr" />
-                      <Button
-                        variant="outline"
-                        size="icon"
-                        onClick={() => copyToClipboard(link, "qrLink")}
-                        className="shrink-0"
-                      >
-                        {copiedField === "qrLink" ? (
-                          <Check className="w-4 h-4 text-success" />
-                        ) : (
-                          <Copy className="w-4 h-4" />
-                        )}
-                      </Button>
-                    </div>
-                    <div className="flex gap-2">
-                      <Button onClick={downloadQr} className="flex-1">
-                        <Download className="w-4 h-4" /> تنزيل صورة QR
-                      </Button>
-                      {botToken && (
-                        <Button variant="outline" onClick={refreshBotUsername} disabled={loadingBotInfo}>
-                          {loadingBotInfo ? <Loader2 className="w-4 h-4 animate-spin" /> : "تحديث اسم الموظف الآلي"}
-                        </Button>
-                      )}
-                    </div>
-                  </div>
+
+            {generatingQr && !clinicQrUrl ? (
+              <div className="bg-accent/5 border border-accent/20 rounded-2xl p-12 text-center">
+                <Loader2 className="w-10 h-10 animate-spin text-amber-500 mx-auto mb-4" />
+                <p className="text-sm text-muted-foreground">جاري تصميم الملصق الفاخر...</p>
+                <p className="text-xs text-muted-foreground mt-2">يستغرق 10-20 ثانية</p>
+              </div>
+            ) : clinicQrUrl ? (
+              <div className="bg-gradient-to-br from-amber-50 to-pink-50 border border-amber-200 rounded-2xl p-5">
+                <div className="rounded-xl overflow-hidden shadow-2xl border-4 border-white bg-white mb-4">
+                  <img
+                    src={clinicQrUrl}
+                    alt="ملصق QR الفاخر للعيادة"
+                    className="w-full h-auto"
+                    loading="lazy"
+                  />
                 </div>
-              );
-            })()}
+                <div className="flex flex-wrap gap-2">
+                  <Button
+                    onClick={downloadQrPoster}
+                    className="flex-1 bg-amber-600 hover:bg-amber-700 text-white"
+                  >
+                    <Download className="w-4 h-4 ml-1" /> تحميل الملصق (A5 PNG)
+                  </Button>
+                  <Button
+                    variant="outline"
+                    onClick={() => generateQrPoster(true)}
+                    disabled={generatingQr}
+                  >
+                    {generatingQr ? <Loader2 className="w-4 h-4 animate-spin ml-1" /> : <Sparkles className="w-4 h-4 ml-1" />}
+                    إعادة توليد 🔄
+                  </Button>
+                </div>
+                <p className="text-xs text-muted-foreground mt-3 text-center">
+                  💡 جاهز للطباعة بمقاس A5 (1748×2480 بكسل) — استخدم طبقة عالية الجودة
+                </p>
+              </div>
+            ) : (
+              <div className="bg-accent/5 border border-accent/20 rounded-2xl p-8 text-center">
+                <QrCode className="w-12 h-12 text-muted-foreground mx-auto mb-3" />
+                <p className="text-sm text-muted-foreground mb-4">لم يتم توليد الملصق بعد</p>
+                <Button onClick={() => generateQrPoster(false)} disabled={generatingQr}>
+                  {generatingQr ? <Loader2 className="w-4 h-4 animate-spin ml-1" /> : <Sparkles className="w-4 h-4 ml-1" />}
+                  توليد الملصق الفاخر
+                </Button>
+              </div>
+            )}
           </section>
 
           {/* VOICE AGENT */}
@@ -2094,7 +2307,7 @@ export default function SettingsPage() {
                           <span className="px-2 py-0.5 rounded-lg bg-amber-500/10 text-amber-700 font-bold text-xs">
                             {promo.discount_type === "percentage"
                               ? `${promo.discount_value}%`
-                              : `${promo.discount_value}`}
+                              : `${promo.discount_value} ريال`}
                           </span>
                           {promo.code && (
                             <span className="px-2 py-0.5 rounded-lg bg-primary/10 text-primary font-mono text-xs">
@@ -2111,11 +2324,6 @@ export default function SettingsPage() {
                             {promo.is_active ? "نشط" : "موقف"}
                           </span>
                         </div>
-                        {promo.service_ids && promo.service_ids.length > 0 && (
-                          <p className="text-[10px] text-emerald-700 mt-1 font-bold">
-                            ✓ مرتبط بـ {promo.service_ids.length} خدمة
-                          </p>
-                        )}
                         {promo.start_date && promo.end_date && (
                           <p className="text-[10px] text-muted-foreground mt-1">
                             {promo.start_date} → {promo.end_date}
@@ -2185,23 +2393,42 @@ export default function SettingsPage() {
                 <p className="text-sm text-muted-foreground">قائمة الخدمات المتاحة في عيادتك</p>
               </div>
             </div>
-            <div className="flex flex-col sm:flex-row gap-3 mb-6">
-              <Input
-                value={newServiceName}
-                onChange={(e) => setNewServiceName(e.target.value)}
-                placeholder="اسم الخدمة"
-                className="flex-1 input-modern"
-              />
-              <Input
-                type="number"
-                value={newServicePrice}
-                onChange={(e) => setNewServicePrice(e.target.value)}
-                placeholder="السعر (اختياري)"
-                className="w-full sm:w-40 input-modern"
-              />
-              <Button onClick={handleAddService} disabled={!newServiceName}>
-                <Plus className="w-4 h-4" /> إضافة
-              </Button>
+
+            {/* ✏️ [UPDATED] حقل إضافة الخدمة مع name_en */}
+            <div className="space-y-3 mb-6">
+              <div className="flex flex-col sm:flex-row gap-3">
+                <Input
+                  value={newServiceName}
+                  onChange={(e) => handleServiceNameChange(e.target.value)}
+                  placeholder="اسم الخدمة (بالعربي)"
+                  className="flex-1 input-modern"
+                />
+                <Input
+                  value={newServiceNameEn}
+                  onChange={(e) => {
+                    setNewServiceNameEn(e.target.value);
+                    setServiceNameEnEdited(true);
+                  }}
+                  placeholder="Service name in English"
+                  className="flex-1 input-modern"
+                  dir="ltr"
+                />
+                {translatingService && (
+                  <Loader2 className="w-4 h-4 animate-spin text-primary self-center" />
+                )}
+              </div>
+              <div className="flex flex-col sm:flex-row gap-3">
+                <Input
+                  type="number"
+                  value={newServicePrice}
+                  onChange={(e) => setNewServicePrice(e.target.value)}
+                  placeholder="السعر (اختياري)"
+                  className="w-full sm:w-40 input-modern"
+                />
+                <Button onClick={handleAddService} disabled={!newServiceName}>
+                  <Plus className="w-4 h-4" /> إضافة الخدمة
+                </Button>
+              </div>
             </div>
             <p className="text-xs text-muted-foreground -mt-3 mb-4">
               اترك حقل السعر فارغاً ليظهر للزبون كـ <b>«حسب الفحص»</b>
@@ -2220,10 +2447,13 @@ export default function SettingsPage() {
                   <div key={service.id} className="flex items-center justify-between py-4">
                     <div>
                       <p className="font-semibold text-foreground">{service.name}</p>
+                      {service.name_en && (
+                        <p className="text-xs text-muted-foreground" dir="ltr">{service.name_en}</p>
+                      )}
                       <p className="text-sm text-primary font-bold">
                         {service.price === null
                           ? "حسب الفحص"
-                          : `${Number(service.price).toLocaleString()}`}
+                          : `${Number(service.price).toLocaleString()} ريال`}
                       </p>
                     </div>
                     <Button
@@ -2332,7 +2562,7 @@ export default function SettingsPage() {
                     </SelectTrigger>
                     <SelectContent>
                       <SelectItem value="percentage">نسبة مئوية (%)</SelectItem>
-                      <SelectItem value="fixed">مبلغ ثابت</SelectItem>
+                      <SelectItem value="fixed">مبلغ ثابت (ر.ي)</SelectItem>
                     </SelectContent>
                   </Select>
                 </div>
@@ -2358,71 +2588,16 @@ export default function SettingsPage() {
                 />
                 <p className="text-[10px] text-muted-foreground mt-1">اترك فارغاً للتوليد التلقائي</p>
               </div>
-
-              {/* ✏️ [V38.3] اختيار الخدمات الفعلية المشمولة بالعرض — الحقل الحاسم */}
               <div>
-                <Label className="text-sm font-medium text-amber-700">
-                  🎁 الخدمات الفعلية المشمولة بالعرض (ضروري)
-                </Label>
-                <p className="text-[10px] text-muted-foreground mb-2">
-                  اختر من قائمة خدمات عيادتك. البوت سيعرض هذه الخدمات فقط عندما يضغط العميل "اطلب الآن".
-                </p>
-                {services.length === 0 ? (
-                  <div className="text-xs text-red-600 bg-red-50 p-2 rounded border border-red-200">
-                    ⚠️ لا توجد خدمات مسجلة. أضف خدمات أولاً من قسم "الخدمات والأسعار" بالأسفل.
-                  </div>
-                ) : (
-                  <div className="space-y-1 max-h-44 overflow-y-auto border border-input rounded-md p-3 bg-background">
-                    {services.map((svc) => {
-                      const isChecked = (promoForm.service_ids || []).includes(svc.id);
-                      return (
-                        <label
-                          key={svc.id}
-                          className="flex items-center gap-2 cursor-pointer hover:bg-muted/40 p-1.5 rounded"
-                        >
-                          <input
-                            type="checkbox"
-                            checked={isChecked}
-                            onChange={(e) => {
-                              const current = promoForm.service_ids || [];
-                              const next = e.target.checked
-                                ? [...current, svc.id]
-                                : current.filter((id) => id !== svc.id);
-                              setPromoForm({ ...promoForm, service_ids: next });
-                            }}
-                            className="w-4 h-4 accent-amber-600"
-                          />
-                          <span className="text-sm flex-1">{svc.name}</span>
-                          {svc.price !== null && (
-                            <span className="text-xs text-muted-foreground">{svc.price}</span>
-                          )}
-                        </label>
-                      );
-                    })}
-                  </div>
-                )}
-                {(promoForm.service_ids || []).length === 0 && services.length > 0 && (
-                  <p className="text-[10px] text-amber-700 mt-1 font-semibold">
-                    ⚠️ اختر خدمة واحدة على الأقل وإلا لن يعمل العرض.
-                  </p>
-                )}
-                {(promoForm.service_ids || []).length > 0 && (
-                  <p className="text-[10px] text-emerald-700 mt-1 font-semibold">
-                    ✅ تم اختيار {(promoForm.service_ids || []).length} خدمة.
-                  </p>
-                )}
-              </div>
-
-              <div>
-                <Label className="text-sm font-medium">عناصر الإعلان (نصوص زخرفية للصورة فقط)</Label>
+                <Label className="text-sm font-medium">عناصر الإعلان (الخدمات المشمولة في العرض فقط)</Label>
                 <textarea
                   value={promoForm.items || ""}
                   onChange={(e) => setPromoForm({ ...promoForm, items: e.target.value })}
                   placeholder={"مثال:\nتحاليل دقيقة\nاستشارة مجانية\nخصم للعائلات"}
-                  className="w-full h-20 rounded-md border border-input bg-background px-3 py-2 text-sm"
+                  className="w-full h-24 rounded-md border border-input bg-background px-3 py-2 text-sm"
                 />
                 <p className="text-[10px] text-muted-foreground mt-1">
-                  نصوص اختيارية تظهر في الصورة الإعلانية المولدة.
+                  اكتب فقط الخدمات المشمولة في العرض. افصل بين العناصر بسطر أو فاصلة.
                 </p>
               </div>
             </div>
