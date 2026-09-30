@@ -1,4 +1,4 @@
-import { useEffect, useState, useRef } from "react";
+import { useEffect, useState, useRef, useCallback } from "react";
 import { useNavigate } from "react-router-dom";
 import { useAuth } from "@/lib/auth";
 import { useClinic } from "@/hooks/useClinic";
@@ -9,7 +9,6 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Footer } from "@/components/layout/Footer";
 import { useToast } from "@/hooks/use-toast";
-import { QRCodeCanvas } from "qrcode.react";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import {
   Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter,
@@ -17,9 +16,87 @@ import {
 import {
   Stethoscope, LogOut, ArrowRight, Save, Copy, Check, Link2, Key, Plus, Trash2, Loader2,
   Bot, Building2, CreditCard, Shield, Clock, Activity, Sparkles, Upload, Image, QrCode,
-  Download, CalendarClock, Tag, Gift, BadgePercent, ImagePlus, X, Edit, Eye, Mail,
+  Download, CalendarClock, Tag, Gift, BadgePercent, ImagePlus, X, Edit, Eye,
 } from "lucide-react";
 import html2canvas from "html2canvas";
+
+// ============================================================
+// MEDICAL TRANSLATION DICTIONARY (V39)
+// ============================================================
+const MEDICAL_DICT_AR_EN: Record<string, string> = {
+  "معاينة":"Examination","كشف":"Consultation","كشف عام":"General Consultation",
+  "كشف طبي":"Medical Consultation","استشارة":"Consultation","فحص":"Check-up",
+  "فحص عام":"General Check-up","فحص طبي":"Medical Check-up","فحص شامل":"Comprehensive Check-up",
+  "متابعة":"Follow-up","مراجعة":"Review","طوارئ":"Emergency","إسعاف":"First Aid",
+  "تحليل":"Lab Test","تحليل دم":"Blood Test","تحليل دم شامل":"Complete Blood Count",
+  "صورة دم كاملة":"CBC","CBC":"CBC","فحص السكر":"Blood Sugar Test",
+  "فحص السكري":"Diabetes Test","سكر صائم":"Fasting Blood Sugar",
+  "سكر تراكمي":"HbA1c","فحص الحمل":"Pregnancy Test","اختبار الحمل":"Pregnancy Test",
+  "فحص البول":"Urine Test","فحص البراز":"Stool Test","فحص الكوليسترول":"Cholesterol Test",
+  "فحص وظائف الكلى":"Kidney Function Test","فحص وظائف الكبد":"Liver Function Test",
+  "فحص الغدة الدرقية":"Thyroid Function Test","فحص هرمونات":"Hormone Panel",
+  "فحص فيتامين د":"Vitamin D Test","فحص فيتامين ب12":"Vitamin B12 Test",
+  "فحص الحديد":"Iron Test","فحص الكالسيوم":"Calcium Test","فحص الحساسية":"Allergy Test",
+  "مزرعة بول":"Urine Culture","مزرعة دم":"Blood Culture","سرعة الترسيب":"ESR Test",
+  "CRP":"CRP Test","سي آر بي":"CRP Test","بروتين سي التفاعلي":"C-Reactive Protein Test",
+  "تنظيف أسنان":"Dental Cleaning","تنظيف وتلميع الأسنان":"Dental Cleaning & Polishing",
+  "إزالة الجير":"Tartar Removal","حشو":"Filling","حشو أسنان":"Dental Filling",
+  "حشوة مؤقتة":"Temporary Filling","حشوة دائمة":"Permanent Filling",
+  "خلع سن":"Tooth Extraction","خلع ضرس العقل":"Wisdom Tooth Extraction",
+  "تقويم أسنان":"Dental Braces","تقويم":"Orthodontics","زراعة أسنان":"Dental Implant",
+  "تركيبة أسنان":"Dental Crown","تاج":"Crown","جسر أسنان":"Dental Bridge",
+  "علاج عصب":"Root Canal Treatment","تبييض الأسنان":"Teeth Whitening",
+  "عدسات أسنان":"Dental Veneers","فينير":"Veneer","ابتسامة هوليوود":"Hollywood Smile",
+  "أشعة أسنان":"Dental X-Ray","أشعة بانوراما":"Panoramic X-Ray",
+  "ليزر إزالة الشعر":"Laser Hair Removal","فيلر":"Dermal Filler","بوتوكس":"Botox",
+  "تقشير البشرة":"Skin Peeling","تنظيف البشرة":"Facial Cleansing",
+  "علاج حب الشباب":"Acne Treatment","ميزوثيرابي":"Mesotherapy",
+  "بلازما للشعر":"PRP Hair Treatment","تكبير الشفايف":"Lip Augmentation",
+  "نضارة البشرة":"Skin Rejuvenation","هايفو":"HIFU","كربوكسي":"Carboxy Therapy",
+  "سونار الحمل":"Pregnancy Ultrasound","متابعة الحمل":"Prenatal Care",
+  "سونار مهبلي":"Transvaginal Ultrasound","سونار بطن":"Abdominal Ultrasound",
+  "تركيب لولب":"IUD Insertion","إزالة لولب":"IUD Removal","مسحة عنق الرحم":"Pap Smear",
+  "ولادة طبيعية":"Natural Delivery","ولادة قيصرية":"Cesarean Section",
+  "فحص النظر":"Vision Test","قياس ضغط العين":"Eye Pressure Test",
+  "فحص قاع العين":"Fundus Examination","قياس النظر للعدسات":"Contact Lens Fitting",
+  "عملية الليزك":"LASIK Surgery","عملية المياه البيضاء":"Cataract Surgery",
+  "أشعة سينية":"X-Ray","أشعة مقطعية":"CT Scan","رنين مغناطيسي":"MRI",
+  "إيكو":"Echocardiography","تخطيط قلب":"ECG","هولتر":"Holter Monitor",
+  "ماموجرام":"Mammogram","كثافة العظام":"Bone Density Test",
+  "قياس ضغط الدم":"Blood Pressure Measurement","متابعة ضغط":"Hypertension Follow-up",
+  "متابعة سكر":"Diabetes Follow-up","متابعة كوليسترول":"Cholesterol Follow-up",
+  "تطعيم":"Vaccination","متابعة نمو":"Growth Follow-up","فحص حديثي الولادة":"Newborn Screening",
+  "حقنة":"Injection","إبرة":"Injection","محلول وريدي":"IV Fluids",
+  "جبس":"Cast","تضميد":"Bandage","خياطة جرح":"Wound Suturing","غيار":"Wound Dressing",
+};
+
+function translateMedicalToEnglish(input: string): string {
+  if (!input || !/[\u0600-\u06FF]/.test(input)) return input || "";
+  const clean = input.trim().replace(/[\u064B-\u065F\u0670]/g, "");
+  if (MEDICAL_DICT_AR_EN[clean]) return MEDICAL_DICT_AR_EN[clean];
+  const noAl = clean.replace(/^ال/, "");
+  if (MEDICAL_DICT_AR_EN[noAl]) return MEDICAL_DICT_AR_EN[noAl];
+  const parts = clean.split(/\s+/);
+  const out: string[] = [];
+  let allFound = true;
+  for (const w of parts) {
+    const w2 = w.replace(/^ال/, "");
+    if (MEDICAL_DICT_AR_EN[w]) out.push(MEDICAL_DICT_AR_EN[w]);
+    else if (MEDICAL_DICT_AR_EN[w2]) out.push(MEDICAL_DICT_AR_EN[w2]);
+    else { allFound = false; break; }
+  }
+  if (allFound && out.length) return out.join(" ");
+  const arMap: Record<string,string> = {ا:"a",أ:"a",إ:"e",آ:"a",ب:"b",ت:"t",ث:"th",ج:"j",ح:"h",خ:"kh",د:"d",ذ:"dh",ر:"r",ز:"z",س:"s",ش:"sh",ص:"s",ض:"d",ط:"t",ظ:"z",ع:"a",غ:"gh",ف:"f",ق:"q",ك:"k",ل:"l",م:"m",ن:"n",ه:"h",و:"o",ي:"i",ى:"a",ة:"a",ئ:"e",ؤ:"o",ء:""," ":" "};
+  const tr = (s:string) => s.split("").map(c => arMap[c] ?? "").join("").replace(/[\u0600-\u06FF]/g,"").trim();
+  const words = parts.map(w => {
+    const w2 = w.replace(/^ال/, "");
+    if (MEDICAL_DICT_AR_EN[w]) return MEDICAL_DICT_AR_EN[w];
+    if (MEDICAL_DICT_AR_EN[w2]) return MEDICAL_DICT_AR_EN[w2];
+    const t = tr(w2);
+    return t ? t.charAt(0).toUpperCase() + t.slice(1).toLowerCase() : w;
+  });
+  return words.filter(Boolean).join(" ") || tr(clean);
+}
 
 // ============================================================
 // Interfaces
@@ -49,11 +126,9 @@ interface Promotion {
   items?: string;
   phone_text?: string;
   created_at: string;
+  service_ids?: string[];
 }
 
-// ============================================================
-// 💎 PREMIUM MEDICAL THEMES v9 (Verified Image URLs)
-// ============================================================
 const SPECIALTY_THEMES: Record<string, any> = {
   dental: {
     bg1: "#E0F2FE", bg2: "#7DD3FC", bg3: "#0369A1",
@@ -142,9 +217,6 @@ const SPECIALTY_THEMES: Record<string, any> = {
   },
 };
 
-// ============================================================
-// Smart service matcher
-// ============================================================
 const SERVICE_KEYWORD_IMAGES: Array<{ keywords: string[]; images: string[] }> = [
   {
     keywords: ["تحليل", "تحاليل", "دم", "مختبر", "معمل", "cbc", "vitamin", "فيتامين"],
@@ -205,21 +277,18 @@ const SERVICE_KEYWORD_IMAGES: Array<{ keywords: string[]; images: string[] }> = 
 
 function pickHeroImage(theme: any, promo: Promotion, items: string[]): string {
   const searchText = `${promo.title} ${promo.description || ""} ${items.join(" ")}`.toLowerCase();
-
   let hash = 0;
-  const seed = (promo.id || "") + (promo.updated_at || Date.now().toString());
+  const seed = (promo.id || "") + ((promo as any).updated_at || Date.now().toString());
   for (let i = 0; i < seed.length; i++) {
     hash = ((hash << 5) - hash) + seed.charCodeAt(i);
     hash |= 0;
   }
   hash = Math.abs(hash);
-
   for (const entry of SERVICE_KEYWORD_IMAGES) {
     if (entry.keywords.some(kw => searchText.includes(kw.toLowerCase()))) {
       return entry.images[hash % entry.images.length];
     }
   }
-
   const heros = theme.heroImages || [];
   if (heros.length === 0) return "";
   return heros[hash % heros.length];
@@ -231,10 +300,8 @@ export default function SettingsPage() {
   const { clinic, subscription, loading: clinicLoading, updateClinic } = useClinic();
   const { toast } = useToast();
 
-  // --- Refs ---
   const promoImageInputRef = useRef<HTMLInputElement>(null);
 
-  // --- Existing State ---
   const [clinicName, setClinicName] = useState("");
   const [clinicSpecialty, setClinicSpecialty] = useState("general");
   const [botToken, setBotToken] = useState("");
@@ -260,18 +327,17 @@ export default function SettingsPage() {
   const [workingHoursStart, setWorkingHoursStart] = useState("08:00");
   const [workingHoursEnd, setWorkingHoursEnd] = useState("16:00");
 
-  // --- ✏️ [NEW] New fields state ---
+  // ===== V39 States =====
   const [clinicNameEn, setClinicNameEn] = useState("");
+  const [clinicNameEnEdited, setClinicNameEnEdited] = useState(false);
   const [receptionistEmail, setReceptionistEmail] = useState("");
-  const [clinicQrUrl, setClinicQrUrl] = useState<string | null>(null);
-  const [generatingQr, setGeneratingQr] = useState(false);
-  const [nameEnEdited, setNameEnEdited] = useState(false);
+  const [qrPosterUrl, setQrPosterUrl] = useState<string | null>(null);
+  const [generatingQrPoster, setGeneratingQrPoster] = useState(false);
   const [newServiceNameEn, setNewServiceNameEn] = useState("");
-  const [serviceNameEnEdited, setServiceNameEnEdited] = useState(false);
-  const [translatingName, setTranslatingName] = useState(false);
-  const [translatingService, setTranslatingService] = useState(false);
+  const [newServiceNameEnEdited, setNewServiceNameEnEdited] = useState(false);
+  const [editingServiceId, setEditingServiceId] = useState<string | null>(null);
+  const [editingServiceNameEn, setEditingServiceNameEn] = useState("");
 
-  // --- Promotions State ---
   const [promotions, setPromotions] = useState<Promotion[]>([]);
   const [promoDialogOpen, setPromoDialogOpen] = useState(false);
   const [editingPromo, setEditingPromo] = useState<Promotion | null>(null);
@@ -282,6 +348,7 @@ export default function SettingsPage() {
     template: "auto",
     items: "",
     phone_text: "",
+    service_ids: [],
   });
   const [promoImageFile, setPromoImageFile] = useState<File | null>(null);
   const [promoImagePreview, setPromoImagePreview] = useState<string | null>(null);
@@ -291,9 +358,6 @@ export default function SettingsPage() {
   const supabaseUrl = import.meta.env.VITE_SUPABASE_URL;
   const supabaseAnonKey = import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY;
 
-  // ============================================================
-  // UseEffects
-  // ============================================================
   useEffect(() => {
     if (!authLoading && !user) navigate("/auth");
   }, [user, authLoading, navigate]);
@@ -327,27 +391,28 @@ export default function SettingsPage() {
       setReceptionistWhatsapp((clinic as any).receptionist_whatsapp || "");
       setWorkingHoursStart((clinic as any).working_hours_start || "08:00");
       setWorkingHoursEnd((clinic as any).working_hours_end || "16:00");
-      // ✏️ [NEW] الحقول الجديدة
       setClinicNameEn((clinic as any).name_en || "");
       setReceptionistEmail((clinic as any).receptionist_email || "");
-      setClinicQrUrl((clinic as any).qr_image_url || null);
-      setNameEnEdited(!!(clinic as any).name_en);
+      setQrPosterUrl((clinic as any).qr_image_url || null);
+      setClinicNameEnEdited(!!(clinic as any).name_en);
       fetchServices();
       fetchStaff();
       fetchPromotions();
     }
   }, [clinic]);
 
-  // ✏️ [NEW] توليد QR تلقائي عند أول فتح إن لم يكن موجوداً
   useEffect(() => {
-    if (clinic?.id && !clinicQrUrl && !generatingQr) {
-      generateQrPoster(false);
-    }
-  }, [clinic?.id, clinicQrUrl]);
+    if (clinicNameEnEdited) return;
+    if (!clinicName) { setClinicNameEn(""); return; }
+    setClinicNameEn(translateMedicalToEnglish(clinicName));
+  }, [clinicName, clinicNameEnEdited]);
 
-  // ============================================================
-  // Data Fetching Functions
-  // ============================================================
+  useEffect(() => {
+    if (newServiceNameEnEdited) return;
+    if (!newServiceName) { setNewServiceNameEn(""); return; }
+    setNewServiceNameEn(translateMedicalToEnglish(newServiceName));
+  }, [newServiceName, newServiceNameEnEdited]);
+
   const fetchStaff = async () => {
     if (!clinic) return;
     const { data } = await supabase
@@ -424,16 +489,6 @@ export default function SettingsPage() {
     }
   };
 
-  const downloadQr = () => {
-    const canvas = document.getElementById("clinic-qr") as HTMLCanvasElement | null;
-    if (!canvas) return;
-    const url = canvas.toDataURL("image/png");
-    const a = document.createElement("a");
-    a.href = url;
-    a.download = `qr-${clinic?.name || "clinic"}.png`;
-    a.click();
-  };
-
   const fetchServices = async () => {
     if (!clinic) return;
     const { data } = await supabase
@@ -454,111 +509,6 @@ export default function SettingsPage() {
     setPromotions(data || []);
   };
 
-  // ============================================================
-  // ✏️ [NEW] Translation helpers
-  // ============================================================
-  const translateArToEn = async (text: string): Promise<string> => {
-    if (!text || !text.trim() || !/[\u0600-\u06FF]/.test(text)) return text;
-    try {
-      const url = `https://translate.googleapis.com/translate_a/single?client=gtx&sl=ar&tl=en&dt=t&q=${encodeURIComponent(text)}`;
-      const res = await fetch(url);
-      if (!res.ok) return "";
-      const data = await res.json();
-      if (data && data[0] && Array.isArray(data[0])) {
-        const translated = data[0].map((item: any) => item[0]).join("").trim();
-        if (translated && !/[\u0600-\u06FF]/.test(translated)) {
-          return translated
-            .split(" ")
-            .filter(Boolean)
-            .map((w: string) => w.charAt(0).toUpperCase() + w.slice(1).toLowerCase())
-            .join(" ");
-        }
-      }
-    } catch (_) {}
-    return "";
-  };
-
-  const handleClinicNameChange = async (val: string) => {
-    setClinicName(val);
-    if (nameEnEdited) return;
-    if (!val.trim() || !/[\u0600-\u06FF]/.test(val)) return;
-    setTranslatingName(true);
-    try {
-      const en = await translateArToEn(val);
-      if (en) setClinicNameEn(en);
-    } finally {
-      setTranslatingName(false);
-    }
-  };
-
-  const handleServiceNameChange = async (val: string) => {
-    setNewServiceName(val);
-    if (serviceNameEnEdited) return;
-    if (!val.trim() || !/[\u0600-\u06FF]/.test(val)) return;
-    setTranslatingService(true);
-    try {
-      const en = await translateArToEn(val);
-      if (en) setNewServiceNameEn(en);
-    } finally {
-      setTranslatingService(false);
-    }
-  };
-
-  // ============================================================
-  // ✏️ [NEW] QR Poster generation
-  // ============================================================
-  const generateQrPoster = async (force: boolean = false) => {
-    if (!clinic?.id) return;
-    setGeneratingQr(true);
-    try {
-      const { data: sess } = await supabase.auth.getSession();
-      const token = sess?.session?.access_token;
-      const res = await fetch(`${supabaseUrl}/functions/v1/generate-clinic-qr`, {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          apikey: supabaseAnonKey,
-          ...(token ? { Authorization: `Bearer ${token}` } : {}),
-        },
-        body: JSON.stringify({ clinic_id: clinic.id, force }),
-      });
-      const data = await res.json().catch(() => ({}));
-      if (!res.ok || !data?.ok) {
-        toast({
-          title: "فشل التوليد",
-          description: data?.error || "حدث خطأ أثناء توليد الملصق",
-          variant: "destructive",
-        });
-        return;
-      }
-      setClinicQrUrl(data.image_url);
-      toast({ title: "✅ تم التوليد", description: "ملصق QR الفاخر جاهز للطباعة" });
-    } catch (e: any) {
-      toast({ title: "خطأ", description: e?.message || "فشل الاتصال", variant: "destructive" });
-    } finally {
-      setGeneratingQr(false);
-    }
-  };
-
-  const downloadQrPoster = async () => {
-    if (!clinicQrUrl) return;
-    try {
-      const res = await fetch(clinicQrUrl);
-      const blob = await res.blob();
-      const url = URL.createObjectURL(blob);
-      const a = document.createElement("a");
-      a.href = url;
-      a.download = `qr-poster-${clinic?.name_en || clinic?.name || "clinic"}.png`;
-      a.click();
-      URL.revokeObjectURL(url);
-    } catch (e) {
-      toast({ title: "خطأ", description: "فشل التنزيل", variant: "destructive" });
-    }
-  };
-
-  // ============================================================
-  // Save Clinic Settings
-  // ============================================================
   const handleSaveClinic = async () => {
     if (!clinic) {
       toast({ title: "تعذر تحميل العيادة", description: "أعد تحميل الصفحة.", variant: "destructive" });
@@ -577,7 +527,6 @@ export default function SettingsPage() {
       }
     } catch (e) {}
 
-    // ✏️ [UPDATED] إضافة الحقول الجديدة
     const fullPayload: any = {
       name: clinicName,
       name_en: clinicNameEn || null,
@@ -691,13 +640,10 @@ export default function SettingsPage() {
     } else {
       setLogoUrl(publicUrl);
       toast({ title: "تم الرفع ✓", description: "تم رفع شعار العيادة بنجاح" });
-      // لو كان الشعار جديد، يمكن إعادة توليد الملصق بالشعار الجديد
-      // (اختياري: نتركه يدوياً بزر "إعادة توليد")
     }
     setUploadingLogo(false);
   };
 
-  // ✏️ [UPDATED] handleAddService مع name_en
   const handleAddService = async () => {
     if (!clinic || !newServiceName.trim()) return;
     const trimmedPrice = newServicePrice.trim();
@@ -706,19 +652,12 @@ export default function SettingsPage() {
       toast({ title: "خطأ", description: "السعر غير صالح", variant: "destructive" });
       return;
     }
-
-    // ترجمة تلقائية إن لم يملأ المستخدم الاسم الإنجليزي
-    let nameEn = newServiceNameEn.trim();
-    if (!nameEn) {
-      const auto = await translateArToEn(newServiceName.trim());
-      if (auto) nameEn = auto;
-    }
-
+    const nameEn = newServiceNameEn.trim() || translateMedicalToEnglish(newServiceName.trim());
     const { error } = await supabase.from("services").insert({
       clinic_id: clinic.id,
       name: newServiceName.trim(),
       name_en: nameEn || null,
-      name_en_edited_by_user: serviceNameEnEdited,
+      name_en_edited_by_user: newServiceNameEnEdited,
       price: priceValue,
     });
     if (error) {
@@ -727,9 +666,24 @@ export default function SettingsPage() {
       setNewServiceName("");
       setNewServicePrice("");
       setNewServiceNameEn("");
-      setServiceNameEnEdited(false);
+      setNewServiceNameEnEdited(false);
       fetchServices();
       toast({ title: "تمت الإضافة ✓", description: "تمت إضافة الخدمة بنجاح" });
+    }
+  };
+
+  const handleUpdateServiceNameEn = async (id: string) => {
+    const { error } = await supabase.from("services").update({
+      name_en: editingServiceNameEn.trim() || null,
+      name_en_edited_by_user: true,
+    }).eq("id", id).eq("clinic_id", clinic?.id || "");
+    if (error) {
+      toast({ title: "خطأ", description: "فشل تحديث الاسم الإنجليزي", variant: "destructive" });
+    } else {
+      toast({ title: "تم التحديث ✓" });
+      setEditingServiceId(null);
+      setEditingServiceNameEn("");
+      fetchServices();
     }
   };
 
@@ -744,8 +698,259 @@ export default function SettingsPage() {
   };
 
   // ============================================================
-  // Promotion Handlers
+  // V39 — QR POSTER GENERATOR (Client-side Canvas)
   // ============================================================
+  const generateQrPoster = async (force = false): Promise<string | null> => {
+    if (!clinic?.id) {
+      toast({ title: "خطأ", description: "لم يتم تحميل العيادة", variant: "destructive" });
+      return null;
+    }
+    if (qrPosterUrl && !force) return qrPosterUrl;
+
+    setGeneratingQrPoster(true);
+    try {
+      const effectiveBotUsername = botUsername || "SmartClinc_bot";
+      const tgLink = `https://t.me/${effectiveBotUsername}?start=clinic_${clinic.id}`;
+      const spec = SPECIALTY_THEMES[clinicSpecialty] || SPECIALTY_THEMES.general;
+
+      const W = 1240, H = 1754;
+      const canvas = document.createElement("canvas");
+      canvas.width = W; canvas.height = H;
+      const ctx = canvas.getContext("2d")!;
+      ctx.imageSmoothingEnabled = true;
+      ctx.imageSmoothingQuality = "high";
+
+      const loadImg = (url: string): Promise<HTMLImageElement | null> =>
+        new Promise((resolve) => {
+          const img = new window.Image();
+          img.crossOrigin = "anonymous";
+          const t = setTimeout(() => resolve(null), 12000);
+          img.onload = () => { clearTimeout(t); resolve(img); };
+          img.onerror = () => { clearTimeout(t); resolve(null); };
+          img.src = url;
+        });
+
+      const roundRect = (x: number, y: number, w: number, h: number, r: number) => {
+        ctx.beginPath();
+        ctx.moveTo(x + r, y);
+        ctx.lineTo(x + w - r, y);
+        ctx.quadraticCurveTo(x + w, y, x + w, y + r);
+        ctx.lineTo(x + w, y + h - r);
+        ctx.quadraticCurveTo(x + w, y + h, x + w - r, y + h);
+        ctx.lineTo(x + r, y + h);
+        ctx.quadraticCurveTo(x, y + h, x, y + h - r);
+        ctx.lineTo(x, y + r);
+        ctx.quadraticCurveTo(x, y, x + r, y);
+        ctx.closePath();
+      };
+
+      const bg = ctx.createLinearGradient(0, 0, 0, H);
+      bg.addColorStop(0, "#0B1F3A");
+      bg.addColorStop(0.5, "#13294D");
+      bg.addColorStop(1, "#0B1F3A");
+      ctx.fillStyle = bg;
+      ctx.fillRect(0, 0, W, H);
+
+      ctx.save();
+      ctx.fillStyle = "rgba(212,175,55,0.06)";
+      for (let x = 40; x < W; x += 60) {
+        for (let y = 40; y < H; y += 60) {
+          ctx.beginPath(); ctx.arc(x, y, 1.6, 0, Math.PI * 2); ctx.fill();
+        }
+      }
+      ctx.restore();
+
+      ctx.strokeStyle = "#D4AF37";
+      ctx.lineWidth = 6;
+      roundRect(34, 34, W - 68, H - 68, 28); ctx.stroke();
+      ctx.strokeStyle = "rgba(244,229,177,0.35)";
+      ctx.lineWidth = 1.5;
+      roundRect(52, 52, W - 104, H - 104, 20); ctx.stroke();
+
+      const logoSize = 260;
+      const logoY = 150;
+      let logoImg: HTMLImageElement | null = null;
+      if (clinic.logo_url) logoImg = await loadImg(clinic.logo_url);
+
+      ctx.save();
+      ctx.shadowColor = "rgba(212,175,55,0.55)";
+      ctx.shadowBlur = 35;
+      ctx.fillStyle = "#D4AF37";
+      ctx.beginPath(); ctx.arc(W / 2, logoY + logoSize / 2, logoSize / 2 + 14, 0, Math.PI * 2); ctx.fill();
+      ctx.restore();
+
+      ctx.fillStyle = "#FFFFFF";
+      ctx.beginPath(); ctx.arc(W / 2, logoY + logoSize / 2, logoSize / 2 + 4, 0, Math.PI * 2); ctx.fill();
+
+      ctx.save();
+      ctx.beginPath(); ctx.arc(W / 2, logoY + logoSize / 2, logoSize / 2, 0, Math.PI * 2); ctx.clip();
+      if (logoImg) {
+        ctx.drawImage(logoImg, W / 2 - logoSize / 2, logoY, logoSize, logoSize);
+      } else {
+        ctx.fillStyle = "#0B1F3A";
+        ctx.fillRect(W / 2 - logoSize / 2, logoY, logoSize, logoSize);
+        ctx.fillStyle = "#D4AF37";
+        ctx.font = "900 150px 'Segoe UI', Arial";
+        ctx.textAlign = "center"; ctx.textBaseline = "middle";
+        ctx.fillText("+", W / 2, logoY + logoSize / 2 + 8);
+      }
+      ctx.restore();
+
+      ctx.textAlign = "center"; ctx.textBaseline = "top";
+      ctx.direction = "rtl";
+      const nameAr = (clinic.name || "").trim();
+      let nameFontSize = 84;
+      ctx.font = `900 ${nameFontSize}px 'Cairo','Tajawal',Arial`;
+      while (ctx.measureText(nameAr).width > W - 260 && nameFontSize > 48) {
+        nameFontSize -= 4;
+        ctx.font = `900 ${nameFontSize}px 'Cairo','Tajawal',Arial`;
+      }
+      ctx.fillStyle = "#FFFFFF";
+      ctx.shadowColor = "rgba(0,0,0,0.35)";
+      ctx.shadowBlur = 12;
+      ctx.fillText(nameAr, W / 2, logoY + logoSize + 70);
+      ctx.shadowColor = "transparent";
+
+      ctx.direction = "ltr";
+      ctx.fillStyle = "#D4AF37";
+      ctx.font = "600 40px 'Cairo','Segoe UI',Arial";
+      const nameEn = (clinicNameEn || "").trim();
+      if (nameEn) ctx.fillText(nameEn, W / 2, logoY + logoSize + 175);
+
+      const divY = logoY + logoSize + 250;
+      ctx.strokeStyle = "#D4AF37";
+      ctx.lineWidth = 2.5;
+      ctx.beginPath();
+      ctx.moveTo(W / 2 - 240, divY); ctx.lineTo(W / 2 - 50, divY);
+      ctx.moveTo(W / 2 + 50, divY); ctx.lineTo(W / 2 + 240, divY);
+      ctx.stroke();
+      ctx.fillStyle = "#D4AF37";
+      ctx.beginPath();
+      ctx.moveTo(W / 2, divY - 12); ctx.lineTo(W / 2 + 12, divY);
+      ctx.lineTo(W / 2, divY + 12); ctx.lineTo(W / 2 - 12, divY);
+      ctx.closePath(); ctx.fill();
+
+      const specText = `${spec.icon}  ${spec.label}`;
+      ctx.font = "700 30px 'Cairo','Segoe UI Emoji',Arial";
+      const specW = ctx.measureText(specText).width + 70;
+      const specH = 60;
+      const specX = W / 2 - specW / 2;
+      const specY = divY + 55;
+      ctx.fillStyle = "rgba(212,175,55,0.15)";
+      roundRect(specX, specY, specW, specH, 30); ctx.fill();
+      ctx.strokeStyle = "rgba(212,175,55,0.65)";
+      ctx.lineWidth = 2;
+      roundRect(specX, specY, specW, specH, 30); ctx.stroke();
+      ctx.fillStyle = "#F4E5B1";
+      ctx.textAlign = "center"; ctx.textBaseline = "middle";
+      ctx.direction = "rtl";
+      ctx.fillText(specText, W / 2, specY + specH / 2 + 2);
+
+      ctx.direction = "rtl";
+      ctx.textBaseline = "top";
+      ctx.fillStyle = "#FFFFFF";
+      ctx.font = "900 52px 'Cairo','Tajawal',Arial";
+      ctx.fillText("امسح الرمز واحجز موعدك", W / 2, specY + specH + 65);
+
+      ctx.fillStyle = "#F4E5B1";
+      ctx.font = "600 28px 'Cairo',Arial";
+      ctx.fillText("بدون انتظار — في ثوانٍ فقط", W / 2, specY + specH + 140);
+
+      const qrBoxSize = 640;
+      const qrBoxX = W / 2 - qrBoxSize / 2;
+      const qrBoxY = specY + specH + 215;
+
+      ctx.save();
+      ctx.shadowColor = "rgba(212,175,55,0.55)";
+      ctx.shadowBlur = 45;
+      ctx.fillStyle = "#FFFFFF";
+      roundRect(qrBoxX, qrBoxY, qrBoxSize, qrBoxSize, 42);
+      ctx.fill();
+      ctx.restore();
+
+      const qrApi = `https://api.qrserver.com/v1/create-qr-code/?size=520x520&data=${encodeURIComponent(tgLink)}&color=0B1F3A&bgcolor=FFFFFF&margin=0&qzone=1`;
+      const qrImg = await loadImg(qrApi);
+      if (qrImg) {
+        ctx.drawImage(qrImg, qrBoxX + 60, qrBoxY + 60, qrBoxSize - 120, qrBoxSize - 120);
+      } else {
+        ctx.fillStyle = "#0B1F3A";
+        ctx.font = "600 20px 'Courier New', monospace";
+        ctx.textAlign = "center"; ctx.textBaseline = "middle";
+        ctx.direction = "ltr";
+        const parts = tgLink.match(/.{1,34}/g) || [tgLink];
+        parts.forEach((p, i) => ctx.fillText(p, W / 2, qrBoxY + qrBoxSize / 2 + (i - parts.length / 2) * 26));
+      }
+
+      const contactY = qrBoxY + qrBoxSize + 55;
+      ctx.textAlign = "center"; ctx.textBaseline = "top"; ctx.direction = "rtl";
+      const contacts: string[] = [];
+      const phone = (clinic as any).phone || "";
+      if (phone) contacts.push(`📞  ${phone}`);
+      if (receptionistEmail) contacts.push(`✉️  ${receptionistEmail}`);
+
+      ctx.font = "600 28px 'Cairo','Segoe UI Emoji',Arial";
+      ctx.fillStyle = "#F4E5B1";
+      contacts.forEach((c, i) => ctx.fillText(c, W / 2, contactY + i * 46));
+
+      ctx.fillStyle = "rgba(244,229,177,0.45)";
+      ctx.font = "500 20px 'Cairo',Arial";
+      ctx.textBaseline = "alphabetic";
+      ctx.fillText("Smart Clinic System  •  2026", W / 2, H - 72);
+
+      const blob: Blob = await new Promise((res, rej) => {
+        canvas.toBlob((b) => b ? res(b) : rej(new Error("toBlob failed")), "image/png", 0.95);
+      });
+
+      const path = `${clinic.id}/qr-poster.png`;
+      let uploaded = false;
+      try {
+        const { error: upErr } = await supabase.storage
+          .from("clinic-qr-posters")
+          .upload(path, blob, { upsert: true, contentType: "image/png" });
+        uploaded = !upErr;
+        if (upErr) console.warn("QR upload failed:", upErr);
+      } catch (e) { console.warn(e); }
+
+      let publicUrl = "";
+      if (uploaded) {
+        const { data: urlData } = supabase.storage.from("clinic-qr-posters").getPublicUrl(path);
+        publicUrl = `${urlData.publicUrl}?t=${Date.now()}`;
+        await supabase.from("clinics").update({
+          qr_image_url: publicUrl,
+          qr_generated_at: new Date().toISOString(),
+        }).eq("id", clinic.id);
+        setQrPosterUrl(publicUrl);
+      } else {
+        publicUrl = URL.createObjectURL(blob);
+        setQrPosterUrl(publicUrl);
+      }
+
+      toast({ title: "✅ تم توليد الملصق الفاخر", description: "جاهز للطباعة بحجم A5" });
+      return publicUrl;
+    } catch (e: any) {
+      console.error(e);
+      toast({
+        title: "❌ فشل توليد الملصق",
+        description: e?.message || "حدث خطأ غير متوقع",
+        variant: "destructive",
+      });
+      return null;
+    } finally {
+      setGeneratingQrPoster(false);
+    }
+  };
+
+  const downloadQrPoster = async () => {
+    let url = qrPosterUrl;
+    if (!url) url = await generateQrPoster(true);
+    if (!url) return;
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = `QR-${clinic?.name || "clinic"}.png`;
+    a.target = "_blank";
+    a.click();
+  };
+
   const resetPromoForm = () => {
     setPromoForm({
       discount_type: "percentage",
@@ -754,6 +959,7 @@ export default function SettingsPage() {
       template: "auto",
       items: "",
       phone_text: "",
+      service_ids: [],
     });
     setPromoImageFile(null);
     setPromoImagePreview(null);
@@ -778,6 +984,7 @@ export default function SettingsPage() {
         template: promo.template || "auto",
         items: promo.items || "",
         phone_text: promo.phone_text || "",
+        service_ids: promo.service_ids || [],
       });
       if (promo.image_url) setPromoImagePreview(promo.image_url);
     } else {
@@ -806,6 +1013,14 @@ export default function SettingsPage() {
     if (!clinic) return;
     if (!promoForm.title || !promoForm.discount_type || !promoForm.discount_value) {
       toast({ title: "بيانات ناقصة", description: "يرجى ملء جميع الحقول الأساسية", variant: "destructive" });
+      return;
+    }
+    if (!promoForm.service_ids || promoForm.service_ids.length === 0) {
+      toast({
+        title: "⚠️ يجب اختيار خدمة واحدة على الأقل",
+        description: "العرض يحتاج خدمة واحدة على الأقل ليظهر للعملاء بشكل صحيح.",
+        variant: "destructive",
+      });
       return;
     }
     setUploadingPromoImage(true);
@@ -846,6 +1061,7 @@ export default function SettingsPage() {
       template: promoForm.template || "auto",
       items: promoForm.items || null,
       phone_text: promoForm.phone_text || null,
+      service_ids: promoForm.service_ids || [],
     };
     let error;
     if (editingPromo) {
@@ -866,9 +1082,6 @@ export default function SettingsPage() {
     }
   };
 
-  // ============================================================
-  // 💎 GENERATE ULTRA-PREMIUM MEDICAL AD IMAGE — v9 FINAL
-  // ============================================================
   const generatePromoImage = async (promo: Promotion, forceRegenerate: boolean = false) => {
     if (!clinic) {
       toast({ title: "خطأ", description: "لم يتم تحميل بيانات العيادة", variant: "destructive" });
@@ -940,7 +1153,6 @@ export default function SettingsPage() {
         ctx.closePath();
       };
 
-      // BACKGROUND
       const bgGrad = ctx.createLinearGradient(0, 0, W, H);
       bgGrad.addColorStop(0, "#FFFFFF");
       bgGrad.addColorStop(0.35, theme.bg1);
@@ -983,7 +1195,6 @@ export default function SettingsPage() {
       ctx.fillRect(0, 0, W, H);
       ctx.restore();
 
-      // HERO IMAGE
       const heroImageUrl = pickHeroImage(theme, promo, itemsList);
       const heroImg = await loadImage(heroImageUrl);
 
@@ -1055,7 +1266,6 @@ export default function SettingsPage() {
         ctx.restore();
       }
 
-      // HEADER
       let logoImg: HTMLImageElement | null = null;
       if (clinic.logo_url) {
         logoImg = await loadImage(clinic.logo_url);
@@ -1136,7 +1346,6 @@ export default function SettingsPage() {
       ctx.stroke();
       ctx.restore();
 
-      // End date badge
       if (promo.end_date) {
         ctx.save();
         const badgeW = 280;
@@ -1164,7 +1373,6 @@ export default function SettingsPage() {
         ctx.restore();
       }
 
-      // TITLE
       const rightX = W - 60;
       const rightColW = W - heroX - heroW - 120;
       const rightColCenter = heroX + heroW + 60 + rightColW / 2;
@@ -1195,7 +1403,6 @@ export default function SettingsPage() {
         ctx.restore();
       }
 
-      // GIANT GOLD DISCOUNT
       const discountCenterX = rightColCenter;
       const discountY = 660;
       const numStr = String(promo.discount_value);
@@ -1297,7 +1504,6 @@ export default function SettingsPage() {
       ctx.fillText(unitStr, discountCenterX, unitY + unitH / 2 + 2);
       ctx.restore();
 
-      // CHIPS
       const chipsStartY = 1180;
       const chipsPerRow = 2;
       const chipsRightAreaX = heroX + heroW + 60;
@@ -1348,7 +1554,6 @@ export default function SettingsPage() {
         ctx.restore();
       });
 
-      // FOOTER
       const footerY = H - 90;
       const phoneText = (promo as any).phone_text || "";
 
@@ -1445,7 +1650,6 @@ export default function SettingsPage() {
         ctx.restore();
       }
 
-      // Convert & Upload
       const imageDataUrl = canvas.toDataURL("image/png", 1.0);
       const base64Data = imageDataUrl.split(",")[1];
       const binaryString = atob(base64Data);
@@ -1585,9 +1789,6 @@ export default function SettingsPage() {
     navigate("/");
   };
 
-  // ============================================================
-  // Loading State
-  // ============================================================
   if (authLoading || clinicLoading) {
     return (
       <div className="min-h-screen flex items-center justify-center bg-mesh">
@@ -1599,9 +1800,6 @@ export default function SettingsPage() {
     );
   }
 
-  // ============================================================
-  // Render
-  // ============================================================
   return (
     <div className="min-h-screen bg-mesh flex flex-col">
       <SubscriptionLock />
@@ -1691,43 +1889,39 @@ export default function SettingsPage() {
                 </div>
               </div>
 
-              {/* ✏️ [NEW] Clinic Name AR + EN */}
               <div className="space-y-2">
-                <Label htmlFor="clinicName" className="text-sm font-medium">اسم العيادة (بالعربي)</Label>
+                <Label htmlFor="clinicName" className="text-sm font-medium">اسم العيادة (عربي)</Label>
                 <Input
                   id="clinicName"
                   value={clinicName}
-                  onChange={(e) => handleClinicNameChange(e.target.value)}
+                  onChange={(e) => setClinicName(e.target.value)}
                   placeholder="أدخل اسم العيادة"
                   className="input-modern"
                 />
               </div>
 
               <div className="space-y-2">
-                <Label htmlFor="clinicNameEn" className="text-sm font-medium flex items-center gap-2">
-                  اسم العيادة (بالإنجليزي)
-                  {translatingName && <Loader2 className="w-3 h-3 animate-spin text-primary" />}
+                <Label htmlFor="clinicNameEn" className="text-sm font-medium flex items-center justify-between">
+                  <span>اسم العيادة (إنجليزي)</span>
+                  <span className="text-[10px] text-primary font-normal">
+                    {clinicNameEnEdited ? "✏️ معدّل يدوياً" : "🤖 مترجم تلقائياً — يمكنك تعديله"}
+                  </span>
                 </Label>
                 <Input
                   id="clinicNameEn"
                   value={clinicNameEn}
-                  onChange={(e) => {
-                    setClinicNameEn(e.target.value);
-                    setNameEnEdited(true);
-                  }}
-                  placeholder="Clinic Name in English"
+                  onChange={(e) => { setClinicNameEn(e.target.value); setClinicNameEnEdited(true); }}
+                  placeholder="Clinic Name In English"
                   className="input-modern"
                   dir="ltr"
                 />
-                <p className="text-xs text-muted-foreground">يظهر في بطاقة الحجز الرسمية — قابل للتعديل يدوياً</p>
+                <p className="text-xs text-muted-foreground">
+                  يظهر في بطاقة الحجز وفي ملصق QR. تأكد من صحته طبياً.
+                </p>
               </div>
 
-              {/* ✏️ [NEW] Receptionist Email */}
               <div className="space-y-2">
-                <Label htmlFor="receptionistEmail" className="text-sm font-medium flex items-center gap-2">
-                  <Mail className="w-4 h-4" />
-                  بريد موظف الاستقبال
-                </Label>
+                <Label htmlFor="receptionistEmail" className="text-sm font-medium">📧 بريد موظف الاستقبال</Label>
                 <Input
                   id="receptionistEmail"
                   type="email"
@@ -1738,7 +1932,7 @@ export default function SettingsPage() {
                   dir="ltr"
                 />
                 <p className="text-xs text-muted-foreground">
-                  يصل إليه إشعار كل حجز جديد مع صورة بطاقة الحجز
+                  تصل إليه إشعارات الحجز الجديدة (نصّية فقط — بدون صور توفيراً للموارد).
                 </p>
               </div>
 
@@ -1756,7 +1950,7 @@ export default function SettingsPage() {
                     <SelectItem value="general">🏥 عام</SelectItem>
                   </SelectContent>
                 </Select>
-                <p className="text-xs text-muted-foreground">يستخدم هذا التخصص في تصميم صور العروض الإعلانية</p>
+                <p className="text-xs text-muted-foreground">يستخدم هذا التخصص في تصميم صور العروض وملصق QR</p>
               </div>
 
               {isAdmin ? (
@@ -1997,66 +2191,82 @@ export default function SettingsPage() {
             </div>
           </section>
 
-          {/* ✏️ [NEW] QR POSTER — الملصق الفاخر */}
+          {/* QR CODE POSTER — V39 */}
           <section className="card-modern p-6 animate-slide-up delay-100">
             <div className="flex items-center gap-3 mb-4">
               <div className="w-12 h-12 rounded-2xl bg-gradient-to-br from-fuchsia-500 to-pink-600 flex items-center justify-center shadow-lg">
                 <QrCode className="w-6 h-6 text-white" />
               </div>
-              <div className="flex-1">
-                <h2 className="text-xl font-bold text-foreground">ملصق QR الفاخر للعيادة</h2>
+              <div>
+                <h2 className="text-xl font-bold text-foreground">ملصق QR الفاخر</h2>
                 <p className="text-sm text-muted-foreground">
-                  ملصق A5 احترافي للطباعة — يُعلَّق في العيادة أو يُوزَّع
+                  تصميم عالمي جاهز للطباعة (A5) — يُولَّد مرة واحدة ولا يتغيّر أبداً
                 </p>
               </div>
             </div>
 
-            {generatingQr && !clinicQrUrl ? (
-              <div className="bg-accent/5 border border-accent/20 rounded-2xl p-12 text-center">
-                <Loader2 className="w-10 h-10 animate-spin text-amber-500 mx-auto mb-4" />
-                <p className="text-sm text-muted-foreground">جاري تصميم الملصق الفاخر...</p>
-                <p className="text-xs text-muted-foreground mt-2">يستغرق 10-20 ثانية</p>
-              </div>
-            ) : clinicQrUrl ? (
-              <div className="bg-gradient-to-br from-amber-50 to-pink-50 border border-amber-200 rounded-2xl p-5">
-                <div className="rounded-xl overflow-hidden shadow-2xl border-4 border-white bg-white mb-4">
-                  <img
-                    src={clinicQrUrl}
-                    alt="ملصق QR الفاخر للعيادة"
-                    className="w-full h-auto"
-                    loading="lazy"
-                  />
+            {(() => {
+              const effectiveBotUsername = botUsername || "SmartClinc_bot";
+              if (!clinic?.id) return null;
+              const link = `https://t.me/${effectiveBotUsername}?start=clinic_${clinic.id}`;
+              return (
+                <div className="space-y-4">
+                  {qrPosterUrl ? (
+                    <div className="bg-gradient-to-br from-slate-900 to-slate-800 p-4 rounded-2xl border border-amber-500/30">
+                      <img
+                        src={qrPosterUrl}
+                        alt="QR Poster"
+                        className="w-full max-w-md mx-auto rounded-xl shadow-2xl"
+                      />
+                    </div>
+                  ) : (
+                    <div className="bg-muted/30 border-2 border-dashed border-amber-500/40 rounded-2xl p-10 text-center">
+                      <Sparkles className="w-10 h-10 text-amber-500 mx-auto mb-3" />
+                      <p className="text-sm text-muted-foreground">
+                        اضغط "توليد الملصق" لإنشاء تصميم احترافي يحمل شعار العيادة، اسمها، تخصصها، بريدها، والـ QR.
+                      </p>
+                    </div>
+                  )}
+
+                  <div className="flex gap-2">
+                    <Input value={link} readOnly className="font-mono text-xs bg-background" dir="ltr" />
+                    <Button
+                      variant="outline"
+                      size="icon"
+                      onClick={() => copyToClipboard(link, "qrLink")}
+                      className="shrink-0"
+                    >
+                      {copiedField === "qrLink" ? <Check className="w-4 h-4 text-success" /> : <Copy className="w-4 h-4" />}
+                    </Button>
+                  </div>
+
+                  <div className="flex flex-wrap gap-2">
+                    <Button
+                      onClick={() => generateQrPoster(!!qrPosterUrl)}
+                      disabled={generatingQrPoster}
+                      className="flex-1 bg-amber-600 hover:bg-amber-700 text-white"
+                    >
+                      {generatingQrPoster ? <Loader2 className="w-4 h-4 animate-spin ml-1" /> : <ImagePlus className="w-4 h-4 ml-1" />}
+                      {qrPosterUrl ? "🔄 إعادة توليد التصميم" : "🎨 توليد الملصق الفاخر"}
+                    </Button>
+                    {qrPosterUrl && (
+                      <Button onClick={downloadQrPoster} variant="outline" className="flex-1">
+                        <Download className="w-4 h-4 ml-1" /> تنزيل للطباعة
+                      </Button>
+                    )}
+                    {botToken && (
+                      <Button variant="outline" onClick={refreshBotUsername} disabled={loadingBotInfo}>
+                        {loadingBotInfo ? <Loader2 className="w-4 h-4 animate-spin" /> : "تحديث اسم البوت"}
+                      </Button>
+                    )}
+                  </div>
+
+                  <p className="text-xs text-muted-foreground">
+                    💡 يُحفظ التصميم في قاعدة البيانات مرة واحدة فقط. يُفضّل عدم تغييره لأن الرابط ثابت مع العيادة.
+                  </p>
                 </div>
-                <div className="flex flex-wrap gap-2">
-                  <Button
-                    onClick={downloadQrPoster}
-                    className="flex-1 bg-amber-600 hover:bg-amber-700 text-white"
-                  >
-                    <Download className="w-4 h-4 ml-1" /> تحميل الملصق (A5 PNG)
-                  </Button>
-                  <Button
-                    variant="outline"
-                    onClick={() => generateQrPoster(true)}
-                    disabled={generatingQr}
-                  >
-                    {generatingQr ? <Loader2 className="w-4 h-4 animate-spin ml-1" /> : <Sparkles className="w-4 h-4 ml-1" />}
-                    إعادة توليد 🔄
-                  </Button>
-                </div>
-                <p className="text-xs text-muted-foreground mt-3 text-center">
-                  💡 جاهز للطباعة بمقاس A5 (1748×2480 بكسل) — استخدم طبقة عالية الجودة
-                </p>
-              </div>
-            ) : (
-              <div className="bg-accent/5 border border-accent/20 rounded-2xl p-8 text-center">
-                <QrCode className="w-12 h-12 text-muted-foreground mx-auto mb-3" />
-                <p className="text-sm text-muted-foreground mb-4">لم يتم توليد الملصق بعد</p>
-                <Button onClick={() => generateQrPoster(false)} disabled={generatingQr}>
-                  {generatingQr ? <Loader2 className="w-4 h-4 animate-spin ml-1" /> : <Sparkles className="w-4 h-4 ml-1" />}
-                  توليد الملصق الفاخر
-                </Button>
-              </div>
-            )}
+              );
+            })()}
           </section>
 
           {/* VOICE AGENT */}
@@ -2307,7 +2517,7 @@ export default function SettingsPage() {
                           <span className="px-2 py-0.5 rounded-lg bg-amber-500/10 text-amber-700 font-bold text-xs">
                             {promo.discount_type === "percentage"
                               ? `${promo.discount_value}%`
-                              : `${promo.discount_value} ريال`}
+                              : `${promo.discount_value}`}
                           </span>
                           {promo.code && (
                             <span className="px-2 py-0.5 rounded-lg bg-primary/10 text-primary font-mono text-xs">
@@ -2324,6 +2534,11 @@ export default function SettingsPage() {
                             {promo.is_active ? "نشط" : "موقف"}
                           </span>
                         </div>
+                        {promo.service_ids && promo.service_ids.length > 0 && (
+                          <p className="text-[10px] text-emerald-700 mt-1 font-bold">
+                            ✓ مرتبط بـ {promo.service_ids.length} خدمة
+                          </p>
+                        )}
                         {promo.start_date && promo.end_date && (
                           <p className="text-[10px] text-muted-foreground mt-1">
                             {promo.start_date} → {promo.end_date}
@@ -2390,48 +2605,37 @@ export default function SettingsPage() {
               </div>
               <div>
                 <h2 className="text-xl font-bold text-foreground">الخدمات والأسعار</h2>
-                <p className="text-sm text-muted-foreground">قائمة الخدمات المتاحة في عيادتك</p>
+                <p className="text-sm text-muted-foreground">كل خدمة لها اسم عربي وإنجليزي طبي</p>
               </div>
             </div>
 
-            {/* ✏️ [UPDATED] حقل إضافة الخدمة مع name_en */}
-            <div className="space-y-3 mb-6">
-              <div className="flex flex-col sm:flex-row gap-3">
-                <Input
-                  value={newServiceName}
-                  onChange={(e) => handleServiceNameChange(e.target.value)}
-                  placeholder="اسم الخدمة (بالعربي)"
-                  className="flex-1 input-modern"
-                />
-                <Input
-                  value={newServiceNameEn}
-                  onChange={(e) => {
-                    setNewServiceNameEn(e.target.value);
-                    setServiceNameEnEdited(true);
-                  }}
-                  placeholder="Service name in English"
-                  className="flex-1 input-modern"
-                  dir="ltr"
-                />
-                {translatingService && (
-                  <Loader2 className="w-4 h-4 animate-spin text-primary self-center" />
-                )}
-              </div>
-              <div className="flex flex-col sm:flex-row gap-3">
-                <Input
-                  type="number"
-                  value={newServicePrice}
-                  onChange={(e) => setNewServicePrice(e.target.value)}
-                  placeholder="السعر (اختياري)"
-                  className="w-full sm:w-40 input-modern"
-                />
-                <Button onClick={handleAddService} disabled={!newServiceName}>
-                  <Plus className="w-4 h-4" /> إضافة الخدمة
-                </Button>
-              </div>
+            <div className="flex flex-col sm:flex-row gap-3 mb-2">
+              <Input
+                value={newServiceName}
+                onChange={(e) => setNewServiceName(e.target.value)}
+                placeholder="اسم الخدمة (عربي) — مثال: فحص السكر"
+                className="flex-1 input-modern"
+              />
+              <Input
+                value={newServiceNameEn}
+                onChange={(e) => { setNewServiceNameEn(e.target.value); setNewServiceNameEnEdited(true); }}
+                placeholder="English name"
+                className="flex-1 input-modern"
+                dir="ltr"
+              />
+              <Input
+                type="number"
+                value={newServicePrice}
+                onChange={(e) => setNewServicePrice(e.target.value)}
+                placeholder="السعر (اختياري)"
+                className="w-full sm:w-32 input-modern"
+              />
+              <Button onClick={handleAddService} disabled={!newServiceName}>
+                <Plus className="w-4 h-4" /> إضافة
+              </Button>
             </div>
-            <p className="text-xs text-muted-foreground -mt-3 mb-4">
-              اترك حقل السعر فارغاً ليظهر للزبون كـ <b>«حسب الفحص»</b>
+            <p className="text-xs text-muted-foreground mb-4">
+              🤖 يُقترح الاسم الإنجليزي تلقائياً من قاموس طبي — يمكنك تعديله. اترك السعر فارغاً ليظهر «حسب الفحص».
             </p>
 
             <div className="divide-y divide-border">
@@ -2443,27 +2647,52 @@ export default function SettingsPage() {
                   <p className="text-muted-foreground">لم تتم إضافة أي خدمات بعد</p>
                 </div>
               ) : (
-                services.map((service) => (
-                  <div key={service.id} className="flex items-center justify-between py-4">
-                    <div>
-                      <p className="font-semibold text-foreground">{service.name}</p>
-                      {service.name_en && (
-                        <p className="text-xs text-muted-foreground" dir="ltr">{service.name_en}</p>
-                      )}
-                      <p className="text-sm text-primary font-bold">
-                        {service.price === null
-                          ? "حسب الفحص"
-                          : `${Number(service.price).toLocaleString()} ريال`}
-                      </p>
+                services.map((service: any) => (
+                  <div key={service.id} className="py-4">
+                    <div className="flex items-start justify-between gap-3">
+                      <div className="flex-1 min-w-0">
+                        <p className="font-semibold text-foreground">{service.name}</p>
+                        {editingServiceId === service.id ? (
+                          <div className="flex gap-2 mt-2">
+                            <Input
+                              value={editingServiceNameEn}
+                              onChange={(e) => setEditingServiceNameEn(e.target.value)}
+                              dir="ltr"
+                              className="h-8 text-sm"
+                              placeholder="English name"
+                              autoFocus
+                            />
+                            <Button size="sm" onClick={() => handleUpdateServiceNameEn(service.id)}>
+                              <Check className="w-4 h-4" />
+                            </Button>
+                            <Button size="sm" variant="ghost" onClick={() => setEditingServiceId(null)}>
+                              <X className="w-4 h-4" />
+                            </Button>
+                          </div>
+                        ) : (
+                          <p className="text-xs text-muted-foreground mt-0.5 flex items-center gap-2" dir="ltr">
+                            <span className="font-mono">{service.name_en || "—"}</span>
+                            <button
+                              onClick={() => { setEditingServiceId(service.id); setEditingServiceNameEn(service.name_en || ""); }}
+                              className="text-primary hover:underline text-[10px]"
+                            >
+                              ✏️ تعديل
+                            </button>
+                          </p>
+                        )}
+                        <p className="text-sm text-primary font-bold mt-1">
+                          {service.price === null ? "حسب الفحص" : Number(service.price).toLocaleString()}
+                        </p>
+                      </div>
+                      <Button
+                        variant="ghost"
+                        size="icon"
+                        onClick={() => handleDeleteService(service.id)}
+                        className="text-destructive hover:text-destructive hover:bg-destructive/10"
+                      >
+                        <Trash2 className="w-4 h-4" />
+                      </Button>
                     </div>
-                    <Button
-                      variant="ghost"
-                      size="icon"
-                      onClick={() => handleDeleteService(service.id)}
-                      className="text-destructive hover:text-destructive hover:bg-destructive/10"
-                    >
-                      <Trash2 className="w-4 h-4" />
-                    </Button>
                   </div>
                 ))
               )}
@@ -2562,7 +2791,7 @@ export default function SettingsPage() {
                     </SelectTrigger>
                     <SelectContent>
                       <SelectItem value="percentage">نسبة مئوية (%)</SelectItem>
-                      <SelectItem value="fixed">مبلغ ثابت (ر.ي)</SelectItem>
+                      <SelectItem value="fixed">مبلغ ثابت</SelectItem>
                     </SelectContent>
                   </Select>
                 </div>
@@ -2588,16 +2817,70 @@ export default function SettingsPage() {
                 />
                 <p className="text-[10px] text-muted-foreground mt-1">اترك فارغاً للتوليد التلقائي</p>
               </div>
+
               <div>
-                <Label className="text-sm font-medium">عناصر الإعلان (الخدمات المشمولة في العرض فقط)</Label>
+                <Label className="text-sm font-medium text-amber-700">
+                  🎁 الخدمات الفعلية المشمولة بالعرض (ضروري)
+                </Label>
+                <p className="text-[10px] text-muted-foreground mb-2">
+                  اختر من قائمة خدمات عيادتك. البوت سيعرض هذه الخدمات فقط عندما يضغط العميل "اطلب الآن".
+                </p>
+                {services.length === 0 ? (
+                  <div className="text-xs text-red-600 bg-red-50 p-2 rounded border border-red-200">
+                    ⚠️ لا توجد خدمات مسجلة. أضف خدمات أولاً من قسم "الخدمات والأسعار" بالأسفل.
+                  </div>
+                ) : (
+                  <div className="space-y-1 max-h-44 overflow-y-auto border border-input rounded-md p-3 bg-background">
+                    {services.map((svc) => {
+                      const isChecked = (promoForm.service_ids || []).includes(svc.id);
+                      return (
+                        <label
+                          key={svc.id}
+                          className="flex items-center gap-2 cursor-pointer hover:bg-muted/40 p-1.5 rounded"
+                        >
+                          <input
+                            type="checkbox"
+                            checked={isChecked}
+                            onChange={(e) => {
+                              const current = promoForm.service_ids || [];
+                              const next = e.target.checked
+                                ? [...current, svc.id]
+                                : current.filter((id) => id !== svc.id);
+                              setPromoForm({ ...promoForm, service_ids: next });
+                            }}
+                            className="w-4 h-4 accent-amber-600"
+                          />
+                          <span className="text-sm flex-1">{svc.name}</span>
+                          {svc.price !== null && (
+                            <span className="text-xs text-muted-foreground">{svc.price}</span>
+                          )}
+                        </label>
+                      );
+                    })}
+                  </div>
+                )}
+                {(promoForm.service_ids || []).length === 0 && services.length > 0 && (
+                  <p className="text-[10px] text-amber-700 mt-1 font-semibold">
+                    ⚠️ اختر خدمة واحدة على الأقل وإلا لن يعمل العرض.
+                  </p>
+                )}
+                {(promoForm.service_ids || []).length > 0 && (
+                  <p className="text-[10px] text-emerald-700 mt-1 font-semibold">
+                    ✅ تم اختيار {(promoForm.service_ids || []).length} خدمة.
+                  </p>
+                )}
+              </div>
+
+              <div>
+                <Label className="text-sm font-medium">عناصر الإعلان (نصوص زخرفية للصورة فقط)</Label>
                 <textarea
                   value={promoForm.items || ""}
                   onChange={(e) => setPromoForm({ ...promoForm, items: e.target.value })}
                   placeholder={"مثال:\nتحاليل دقيقة\nاستشارة مجانية\nخصم للعائلات"}
-                  className="w-full h-24 rounded-md border border-input bg-background px-3 py-2 text-sm"
+                  className="w-full h-20 rounded-md border border-input bg-background px-3 py-2 text-sm"
                 />
                 <p className="text-[10px] text-muted-foreground mt-1">
-                  اكتب فقط الخدمات المشمولة في العرض. افصل بين العناصر بسطر أو فاصلة.
+                  نصوص اختيارية تظهر في الصورة الإعلانية المولدة.
                 </p>
               </div>
             </div>
