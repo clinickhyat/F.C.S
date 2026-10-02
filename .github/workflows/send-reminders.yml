@@ -2,18 +2,41 @@ name: إرسال تذكيرات المواعيد
 
 on:
   schedule:
+    # يعمل كل ساعة في الدقيقة 0 (بتوقيت UTC)
     - cron: '0 * * * *'
   workflow_dispatch:
 
 jobs:
   send-reminders:
     runs-on: ubuntu-latest
+    timeout-minutes: 5
     steps:
       - name: استدعاء دالة التذكيرات
         run: |
-          curl -X POST \
-            -H "Content-Type: application/json" \
-            -H "Authorization: Bearer ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}" \
-            -d '{"source":"github-actions"}' \
-            https://ebuumyqofptnjjaujlyd.supabase.co/functions/v1/send-reminders
-             
+          for attempt in 1 2 3; do
+            echo "🔄 محاولة رقم $attempt..."
+            RESPONSE=$(curl -sS -X POST \
+              --max-time 60 \
+              -H "Content-Type: application/json" \
+              -H "Authorization: Bearer ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}" \
+              -d '{"source":"github-actions"}' \
+              -w "\n%{http_code}" \
+              https://ebuumyqofptnjjaujlyd.supabase.co/functions/v1/send-reminders)
+            
+            HTTP_CODE=$(echo "$RESPONSE" | tail -n1)
+            BODY=$(echo "$RESPONSE" | sed '$d')
+            
+            echo "📊 كود الاستجابة: $HTTP_CODE"
+            echo "📩 الرد: $BODY"
+            
+            if [ "$HTTP_CODE" = "200" ]; then
+              echo "✅ نجحت العملية"
+              exit 0
+            fi
+            
+            echo "⚠️ فشلت المحاولة $attempt، إعادة المحاولة بعد 10 ثوان..."
+            sleep 10
+          done
+          
+          echo "❌ فشلت جميع المحاولات"
+          exit 1
