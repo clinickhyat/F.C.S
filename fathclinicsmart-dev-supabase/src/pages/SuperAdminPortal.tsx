@@ -18,12 +18,16 @@ import {
   Globe, Save, Webhook, Bot, Link2, Settings,
   TrendingUp, Zap, BarChart3, PieChart as PieChartIcon,
   Bell, Wifi, Database, Server, ArrowUpRight, CalendarDays, Download, Trash2, Upload,
-  HardDrive, AlertTriangle
+  HardDrive, AlertTriangle, Mail, Clock
 } from "lucide-react";
 
+// ============================================================
+// ✏️ V39: ClinicData — إضافة email
+// ============================================================
 interface ClinicData {
   id: string;
   name: string;
+  email?: string | null;        // ✏️ NEW
   owner_id: string;
   created_at: string;
   type: string;
@@ -43,7 +47,63 @@ const CHART_COLORS = [
   'hsl(38, 92%, 50%)', 'hsl(340, 82%, 52%)', 'hsl(180, 70%, 50%)',
 ];
 
-const MAX_DB_SIZE_BYTES = 500 * 1024 * 1024; // 500 MB
+const MAX_DB_SIZE_BYTES = 500 * 1024 * 1024;
+
+// ============================================================
+// ✏️ V39: دالة حساب الوقت المتبقي (يوم/ساعة/دقيقة/ثانية)
+// ============================================================
+function getRemainingTime(
+  endDateStr: string | null | undefined,
+  now: number
+): { text: string; className: string; isExpired: boolean } {
+  if (!endDateStr) {
+    return { text: '—', className: 'text-muted-foreground', isExpired: false };
+  }
+  const end = new Date(endDateStr).getTime();
+  if (Number.isNaN(end)) {
+    return { text: '—', className: 'text-muted-foreground', isExpired: false };
+  }
+  const diff = end - now;
+  if (diff <= 0) {
+    return { text: 'منتهي', className: 'text-destructive font-bold', isExpired: true };
+  }
+  const d = Math.floor(diff / 86400000);
+  const h = Math.floor((diff % 86400000) / 3600000);
+  const m = Math.floor((diff % 3600000) / 60000);
+  const s = Math.floor((diff % 60000) / 1000);
+  let text = '';
+  if (d > 0) text = `${d}ي ${h}س ${m}د`;
+  else if (h > 0) text = `${h}س ${m}د ${s}ث`;
+  else if (m > 0) text = `${m}د ${s}ث`;
+  else text = `${s}ث`;
+  const cls =
+    diff < 3_600_000
+      ? 'text-destructive font-bold'
+      : diff < 86_400_000
+      ? 'text-amber-500 font-semibold'
+      : 'text-emerald-600 font-semibold';
+  return { text, className: cls, isExpired: false };
+}
+
+// ============================================================
+// ✏️ V39: خيارات التفعيل (بالدقائق — دقة كاملة)
+// ============================================================
+const ACTIVATION_OPTIONS: Array<{ value: string; label: string }> = [
+  { value: '20',      label: '20 دقيقة' },
+  { value: '60',      label: 'ساعة واحدة' },
+  { value: '180',     label: '3 ساعات' },
+  { value: '360',     label: '6 ساعات' },
+  { value: '720',     label: '12 ساعة' },
+  { value: '1440',    label: 'يوم واحد' },
+  { value: '2880',    label: 'يومان' },
+  { value: '10080',   label: 'أسبوع' },
+  { value: '43200',   label: 'شهر' },
+  { value: '129600',  label: '3 أشهر' },
+  { value: '259200',  label: '6 أشهر' },
+  { value: '525600',  label: 'سنة كاملة' },
+  { value: '1051200', label: 'سنتان' },
+  { value: 'custom',  label: 'تاريخ ووقت مخصص…' },
+];
 
 export default function SuperAdminPortal() {
   const navigate = useNavigate();
@@ -56,31 +116,35 @@ export default function SuperAdminPortal() {
   const [searchQuery, setSearchQuery] = useState("");
   const [activeTab, setActiveTab] = useState<'overview' | 'clinics' | 'settings'>('overview');
   const [activationClinic, setActivationClinic] = useState<ClinicData | null>(null);
-  const [activationPeriod, setActivationPeriod] = useState("30");
+  const [activationPeriod, setActivationPeriod] = useState("43200");
   const [customActivationDate, setCustomActivationDate] = useState("");
   
-  // Settings
   const [webhookUrl, setWebhookUrl] = useState("");
   const [botToken, setBotToken] = useState("");
   const [updatingWebhook, setUpdatingWebhook] = useState(false);
   const [savingSettings, setSavingSettings] = useState(false);
   const [settingWebhook, setSettingWebhook] = useState(false);
 
-  // Heartbeat
   const [heartbeat, setHeartbeat] = useState<{ last_ping: string; ping_count: number } | null>(null);
 
-  // Export states
   const [exporting, setExporting] = useState(false);
   const [showDeleteDialog, setShowDeleteDialog] = useState(false);
   const [deleting, setDeleting] = useState(false);
 
-  // Import states
   const [importing, setImporting] = useState(false);
   const [selectedClinicForImport, setSelectedClinicForImport] = useState<string>("");
 
-  // Database size
   const [dbSizeBytes, setDbSizeBytes] = useState<number | null>(null);
   const [dbUsagePercent, setDbUsagePercent] = useState<number>(0);
+
+  // ============================================================
+  // ✏️ V39: مؤقّت حي لتحديث العدّاد كل ثانية
+  // ============================================================
+  const [currentTime, setCurrentTime] = useState<number>(Date.now());
+  useEffect(() => {
+    const t = setInterval(() => setCurrentTime(Date.now()), 1000);
+    return () => clearInterval(t);
+  }, []);
 
   useEffect(() => {
     if (!authLoading && !user) {
@@ -152,7 +216,6 @@ export default function SuperAdminPortal() {
     }
   };
 
-  // جلب حجم قاعدة البيانات
   const fetchDatabaseSize = async () => {
     try {
       const { data, error } = await supabase.rpc('get_database_size');
@@ -164,7 +227,6 @@ export default function SuperAdminPortal() {
       }
     } catch (e) {
       console.error('Error fetching DB size:', e);
-      // fallback: لا نعرض الشريط
     }
   };
 
@@ -247,23 +309,31 @@ export default function SuperAdminPortal() {
 
   const openActivationDialog = (clinic: ClinicData) => {
     setActivationClinic(clinic);
-    setActivationPeriod("30");
+    setActivationPeriod("43200");
     setCustomActivationDate("");
   };
 
+  // ============================================================
+  // ✏️ V39: submitActivation — بالدقائق + datetime-local
+  // ============================================================
   const submitActivation = async () => {
     if (!activationClinic) return;
-    const days = Number(activationPeriod);
-    const end = activationPeriod === "custom"
-      ? new Date(`${customActivationDate}T23:59:59`)
-      : new Date(Date.now() + days * 86400000);
-
+    let end: Date;
+    if (activationPeriod === "custom") {
+      if (!customActivationDate) {
+        toast({ title: "خطأ", description: "يرجى اختيار التاريخ والوقت", variant: "destructive" });
+        return;
+      }
+      end = new Date(customActivationDate);
+    } else {
+      const minutes = Number(activationPeriod);
+      end = new Date(Date.now() + minutes * 60_000);
+    }
     if (Number.isNaN(end.getTime()) || end.getTime() <= Date.now()) {
       toast({ title: "خطأ", description: "يرجى اختيار فترة أو تاريخ صحيح", variant: "destructive" });
       return;
     }
-
-    await activateForRange(activationClinic.id, end.toISOString(), end.toLocaleDateString('ar-SA'));
+    await activateForRange(activationClinic.id, end.toISOString(), end.toLocaleString('ar-SA'));
     setActivationClinic(null);
   };
 
@@ -305,7 +375,6 @@ export default function SuperAdminPortal() {
     navigate("/");
   };
 
-  // === دالة تصدير ZIP (مجلد لكل عيادة / ملف CSV لكل شهر) ===
   const handleExport = async () => {
     setExporting(true);
     try {
@@ -356,7 +425,6 @@ export default function SuperAdminPortal() {
     }
   };
 
-  // === دالة حذف البيانات القديمة ===
   const handleDeleteOld = async () => {
     setDeleting(true);
     try {
@@ -380,7 +448,6 @@ export default function SuperAdminPortal() {
     }
   };
 
-  // === دالة استيراد CSV ===
   const handleImportCSV = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
@@ -410,10 +477,8 @@ export default function SuperAdminPortal() {
         for (const row of rows) {
           const cols = row.split(',').map(c => c.trim());
           if (cols.length < 8) continue;
-          // تنسيق CSV: Clinic,Date,Time,Patient,Phone,Department,Payment,Arrived
           const [clinicName, date, time, patientName, phone, department, paymentStatus, arrived] = cols;
 
-          // جلب أو إنشاء المريض
           let patientId: string | null = null;
           const { data: existingPatient } = await supabase
             .from('patients')
@@ -443,7 +508,6 @@ export default function SuperAdminPortal() {
 
           if (!patientId) continue;
 
-          // إنشاء الموعد
           const { error: apptError } = await supabase
             .from('appointments')
             .insert({
@@ -466,7 +530,7 @@ export default function SuperAdminPortal() {
           title: "تم الاستيراد ✓",
           description: `تم استيراد ${inserted} موعد بنجاح للعيادة المختارة`,
         });
-        fetchClinics(); // تحديث الإحصائيات
+        fetchClinics();
       } catch (err) {
         toast({ title: "خطأ", description: "فشل في معالجة الملف", variant: "destructive" });
       } finally {
@@ -477,12 +541,13 @@ export default function SuperAdminPortal() {
     reader.readAsText(file);
   };
 
+  // ✏️ V39: البحث يشمل البريد
   const filteredClinics = clinics.filter(clinic =>
     clinic.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
-    clinic.id.includes(searchQuery)
+    clinic.id.includes(searchQuery) ||
+    (clinic.email || '').toLowerCase().includes(searchQuery.toLowerCase())
   );
 
-  // Analytics data
   const totalPatients = useMemo(() => clinics.reduce((sum, c) => sum + c.patients_count, 0), [clinics]);
   const totalAppointments = useMemo(() => clinics.reduce((sum, c) => sum + c.appointments_count, 0), [clinics]);
   const activeClinics = useMemo(() => clinics.filter(c => c.subscription?.is_active).length, [clinics]);
@@ -538,7 +603,6 @@ export default function SuperAdminPortal() {
 
   return (
     <div className="min-h-screen bg-mesh flex flex-col">
-      {/* Header */}
       <header className="glass-dark sticky top-0 z-40">
         <div className="container mx-auto px-4">
           <div className="flex items-center justify-between h-18 py-3">
@@ -568,7 +632,6 @@ export default function SuperAdminPortal() {
             </div>
           </div>
           
-          {/* Tabs */}
           <div className="flex gap-1 pb-2 overflow-x-auto">
             {[
               { id: 'overview' as const, label: 'نظرة عامة', icon: BarChart3 },
@@ -596,7 +659,6 @@ export default function SuperAdminPortal() {
         {/* ===== OVERVIEW TAB ===== */}
         {activeTab === 'overview' && (
           <>
-            {/* KPI Cards */}
             <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
               {[
                 { label: "إجمالي العيادات", value: clinics.length, icon: Building2, color: "from-blue-500 to-indigo-600", sub: `${activeClinics} نشطة` },
@@ -618,9 +680,7 @@ export default function SuperAdminPortal() {
               ))}
             </div>
 
-            {/* System Health + Database Storage */}
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-              {/* Health Card */}
               <div className="card-modern p-5 animate-slide-up delay-100">
                 <div className="flex items-center gap-3 mb-4">
                   <div className="w-10 h-10 rounded-xl bg-emerald-500/10 flex items-center justify-center">
@@ -653,7 +713,6 @@ export default function SuperAdminPortal() {
                 )}
               </div>
 
-              {/* Database Storage Card */}
               <div className="card-modern p-5 animate-slide-up delay-100">
                 <div className="flex items-center gap-3 mb-3">
                   <div className="w-10 h-10 rounded-xl bg-amber-500/10 flex items-center justify-center">
@@ -709,9 +768,7 @@ export default function SuperAdminPortal() {
               </div>
             </div>
 
-            {/* Charts Grid */}
             <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-              {/* Top Clinics Bar Chart */}
               <div className="card-modern p-6 animate-slide-up delay-150">
                 <div className="flex items-center gap-3 mb-5">
                   <div className="w-10 h-10 rounded-xl bg-primary/10 flex items-center justify-center">
@@ -749,7 +806,6 @@ export default function SuperAdminPortal() {
                 </div>
               </div>
 
-              {/* Subscription Pie */}
               <div className="card-modern p-6 animate-slide-up delay-200">
                 <div className="flex items-center gap-3 mb-5">
                   <div className="w-10 h-10 rounded-xl bg-accent/10 flex items-center justify-center">
@@ -796,7 +852,6 @@ export default function SuperAdminPortal() {
                 </div>
               </div>
 
-              {/* Growth Area Chart */}
               <div className="card-modern p-6 animate-slide-up delay-250">
                 <div className="flex items-center gap-3 mb-5">
                   <div className="w-10 h-10 rounded-xl bg-violet-500/10 flex items-center justify-center">
@@ -839,7 +894,6 @@ export default function SuperAdminPortal() {
                 </div>
               </div>
 
-              {/* Clinic Types Distribution */}
               <div className="card-modern p-6 animate-slide-up delay-300">
                 <div className="flex items-center gap-3 mb-5">
                   <div className="w-10 h-10 rounded-xl bg-amber-500/10 flex items-center justify-center">
@@ -876,11 +930,11 @@ export default function SuperAdminPortal() {
               </div>
             </div>
 
-            {/* Per-Clinic Stats Table */}
+            {/* ✏️ V39: جدول الإحصائيات — إضافة عمود الوقت المتبقي */}
             <div className="card-modern overflow-hidden animate-slide-up delay-400">
               <div className="p-5 border-b border-border">
                 <h3 className="font-bold text-foreground text-lg">إحصائيات تفصيلية لكل عيادة</h3>
-                <p className="text-xs text-muted-foreground">مقارنة شاملة بين جميع العيادات</p>
+                <p className="text-xs text-muted-foreground">الوقت المتبقي محدّث لحظياً</p>
               </div>
               <div className="overflow-x-auto">
                 <table className="w-full">
@@ -888,18 +942,18 @@ export default function SuperAdminPortal() {
                     <tr>
                       <th className="px-4 py-3 text-right text-xs font-semibold text-muted-foreground">#</th>
                       <th className="px-4 py-3 text-right text-xs font-semibold text-muted-foreground">العيادة</th>
+                      <th className="px-4 py-3 text-right text-xs font-semibold text-muted-foreground">البريد</th>
                       <th className="px-4 py-3 text-right text-xs font-semibold text-muted-foreground">النوع</th>
                       <th className="px-4 py-3 text-right text-xs font-semibold text-muted-foreground">المرضى</th>
                       <th className="px-4 py-3 text-right text-xs font-semibold text-muted-foreground">الحجوزات</th>
+                      <th className="px-4 py-3 text-right text-xs font-semibold text-muted-foreground">الوقت المتبقي</th>
                       <th className="px-4 py-3 text-right text-xs font-semibold text-muted-foreground">الحالة</th>
-                      <th className="px-4 py-3 text-right text-xs font-semibold text-muted-foreground">الأداء</th>
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-border">
                     {clinics.map((clinic, i) => {
-                      const perf = clinic.appointments_count + clinic.patients_count;
-                      const maxPerf = Math.max(...clinics.map(c => c.appointments_count + c.patients_count), 1);
-                      const perfPct = Math.round((perf / maxPerf) * 100);
+                      const endDate = clinic.subscription?.trial_ends_at;
+                      const remaining = getRemainingTime(endDate, currentTime);
                       return (
                         <tr key={clinic.id} className="hover:bg-muted/20 transition-colors">
                           <td className="px-4 py-3 text-sm text-muted-foreground">{i + 1}</td>
@@ -908,28 +962,27 @@ export default function SuperAdminPortal() {
                             <p className="text-xs text-muted-foreground font-mono">{clinic.id.slice(0, 8)}</p>
                           </td>
                           <td className="px-4 py-3">
+                            {clinic.email ? (
+                              <a href={`mailto:${clinic.email}`} className="text-xs text-primary hover:underline flex items-center gap-1" dir="ltr">
+                                <Mail className="w-3 h-3" />
+                                {clinic.email}
+                              </a>
+                            ) : (
+                              <span className="text-xs text-muted-foreground">—</span>
+                            )}
+                          </td>
+                          <td className="px-4 py-3">
                             <span className="badge-accent">{clinic.type === 'salon' ? 'صالون' : 'عيادة'}</span>
                           </td>
                           <td className="px-4 py-3 font-semibold text-foreground text-sm">{clinic.patients_count}</td>
                           <td className="px-4 py-3 font-semibold text-foreground text-sm">{clinic.appointments_count}</td>
-                          <td className="px-4 py-3">
-                            <span className={clinic.subscription?.is_active ? "badge-success" : "badge-destructive"}>
-                              {clinic.subscription?.is_active ? "نشط" : "متوقف"}
-                            </span>
+                          <td className={`px-4 py-3 text-sm font-mono ${remaining.className}`}>
+                            {remaining.text}
                           </td>
                           <td className="px-4 py-3">
-                            <div className="flex items-center gap-2">
-                              <div className="flex-1 h-2 bg-muted rounded-full overflow-hidden">
-                                <div
-                                  className="h-full rounded-full transition-all duration-500"
-                                  style={{
-                                    width: `${perfPct}%`,
-                                    background: perfPct > 70 ? 'hsl(152, 69%, 40%)' : perfPct > 30 ? 'hsl(38, 92%, 50%)' : 'hsl(0, 84%, 60%)',
-                                  }}
-                                />
-                              </div>
-                              <span className="text-xs font-mono text-muted-foreground w-8">{perfPct}%</span>
-                            </div>
+                            <span className={clinic.subscription?.is_active && !remaining.isExpired ? "badge-success" : "badge-destructive"}>
+                              {clinic.subscription?.is_active && !remaining.isExpired ? "نشط" : "متوقف"}
+                            </span>
                           </td>
                         </tr>
                       );
@@ -950,7 +1003,7 @@ export default function SuperAdminPortal() {
                 <Input
                   value={searchQuery}
                   onChange={(e) => setSearchQuery(e.target.value)}
-                  placeholder="ابحث عن عيادة..."
+                  placeholder="ابحث بالاسم أو البريد أو المعرّف..."
                   className="pr-10 input-modern"
                 />
               </div>
@@ -978,11 +1031,12 @@ export default function SuperAdminPortal() {
               </div>
             </div>
 
+            {/* ✏️ V39: جدول العيادات — إضافة عمود البريد + الوقت المتبقي */}
             <div className="card-modern overflow-hidden animate-slide-up delay-200">
               <div className="p-5 border-b border-border flex items-center justify-between">
                 <div>
                   <h2 className="text-lg font-bold text-foreground">جميع العيادات ({filteredClinics.length})</h2>
-                  <p className="text-xs text-muted-foreground">تفعيل/تعطيل الاشتراكات</p>
+                  <p className="text-xs text-muted-foreground">تفعيل/تعطيل الاشتراكات بدقة الدقيقة</p>
                 </div>
                 <Button variant="outline" size="sm" onClick={fetchClinics}>
                   <RefreshCw className="w-4 h-4" />
@@ -994,54 +1048,67 @@ export default function SuperAdminPortal() {
                   <thead className="bg-muted/30">
                     <tr>
                       <th className="px-4 py-3 text-right text-xs font-semibold text-muted-foreground">العيادة</th>
-                      <th className="px-4 py-3 text-right text-xs font-semibold text-muted-foreground hidden sm:table-cell">المرضى</th>
-                      <th className="px-4 py-3 text-right text-xs font-semibold text-muted-foreground hidden sm:table-cell">المواعيد</th>
+                      <th className="px-4 py-3 text-right text-xs font-semibold text-muted-foreground">البريد الإلكتروني</th>
+                      <th className="px-4 py-3 text-right text-xs font-semibold text-muted-foreground hidden lg:table-cell">المرضى</th>
+                      <th className="px-4 py-3 text-right text-xs font-semibold text-muted-foreground hidden lg:table-cell">المواعيد</th>
                       <th className="px-4 py-3 text-right text-xs font-semibold text-muted-foreground hidden md:table-cell">التسجيل</th>
-                      <th className="px-4 py-3 text-right text-xs font-semibold text-muted-foreground">الحالة</th>
+                      <th className="px-4 py-3 text-right text-xs font-semibold text-muted-foreground">الوقت المتبقي</th>
                       <th className="px-4 py-3 text-right text-xs font-semibold text-muted-foreground">إجراء</th>
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-border">
                     {filteredClinics.length === 0 ? (
                       <tr>
-                        <td colSpan={6} className="px-6 py-16 text-center text-muted-foreground">
+                        <td colSpan={7} className="px-6 py-16 text-center text-muted-foreground">
                           لا توجد عيادات مسجلة
                         </td>
                       </tr>
                     ) : (
-                      filteredClinics.map((clinic, index) => (
-                        <tr key={clinic.id} className="hover:bg-muted/20 transition-colors animate-fade-in" style={{ animationDelay: `${index * 30}ms` }}>
-                          <td className="px-4 py-3">
-                            <p className="font-semibold text-foreground text-sm">{clinic.name}</p>
-                            <p className="text-xs text-muted-foreground font-mono">{clinic.id.slice(0, 8)}...</p>
-                          </td>
-                          <td className="px-4 py-3 hidden sm:table-cell font-semibold text-foreground text-sm">{clinic.patients_count}</td>
-                          <td className="px-4 py-3 hidden sm:table-cell font-semibold text-foreground text-sm">{clinic.appointments_count}</td>
-                          <td className="px-4 py-3 text-muted-foreground text-xs hidden md:table-cell">
-                            {new Date(clinic.created_at).toLocaleDateString("ar-SA")}
-                          </td>
-                          <td className="px-4 py-3">
-                            <span className={clinic.subscription?.is_active ? "badge-success" : "badge-destructive"}>
-                              {clinic.subscription?.is_active ? "نشط" : "متوقف"}
-                            </span>
-                          </td>
-                          <td className="px-4 py-3">
-                            {clinic.subscription?.is_active ? (
-                              <Button
-                                variant="outline"
-                                size="sm"
-                                onClick={() => toggleSubscription(clinic.id, true)}
-                              >
-                                <X className="w-3 h-3 ml-1" />إلغاء
-                              </Button>
-                            ) : (
-                              <Button variant="default" size="sm" onClick={() => openActivationDialog(clinic)}>
-                                <CalendarDays className="w-3 h-3 ml-1" />تفعيل
-                              </Button>
-                            )}
-                          </td>
-                        </tr>
-                      ))
+                      filteredClinics.map((clinic, index) => {
+                        const endDate = clinic.subscription?.trial_ends_at;
+                        const remaining = getRemainingTime(endDate, currentTime);
+                        return (
+                          <tr key={clinic.id} className="hover:bg-muted/20 transition-colors animate-fade-in" style={{ animationDelay: `${index * 30}ms` }}>
+                            <td className="px-4 py-3">
+                              <p className="font-semibold text-foreground text-sm">{clinic.name}</p>
+                              <p className="text-xs text-muted-foreground font-mono">{clinic.id.slice(0, 8)}...</p>
+                            </td>
+                            <td className="px-4 py-3">
+                              {clinic.email ? (
+                                <a href={`mailto:${clinic.email}`} className="text-xs text-primary hover:underline flex items-center gap-1" dir="ltr">
+                                  <Mail className="w-3 h-3" />
+                                  {clinic.email}
+                                </a>
+                              ) : (
+                                <span className="text-xs text-muted-foreground">—</span>
+                              )}
+                            </td>
+                            <td className="px-4 py-3 hidden lg:table-cell font-semibold text-foreground text-sm">{clinic.patients_count}</td>
+                            <td className="px-4 py-3 hidden lg:table-cell font-semibold text-foreground text-sm">{clinic.appointments_count}</td>
+                            <td className="px-4 py-3 text-muted-foreground text-xs hidden md:table-cell">
+                              {new Date(clinic.created_at).toLocaleDateString("ar-SA")}
+                            </td>
+                            <td className={`px-4 py-3 text-sm font-mono ${remaining.className}`}>
+                              {remaining.text}
+                            </td>
+                            <td className="px-4 py-3">
+                              {clinic.subscription?.is_active && !remaining.isExpired ? (
+                                <Button
+                                  variant="outline"
+                                  size="sm"
+                                  onClick={() => toggleSubscription(clinic.id, true)}
+                                >
+                                  <X className="w-3 h-3 ml-1" />إلغاء
+                                </Button>
+                              ) : (
+                                <Button variant="default" size="sm" onClick={() => openActivationDialog(clinic)}>
+                                  <CalendarDays className="w-3 h-3 ml-1" />تفعيل
+                                </Button>
+                              )}
+                            </td>
+                          </tr>
+                        );
+                      })
                     )}
                   </tbody>
                 </table>
@@ -1113,7 +1180,6 @@ export default function SuperAdminPortal() {
               </div>
             </div>
 
-            {/* === بطاقة التصدير والأرشفة === */}
             <div className="card-modern p-6 animate-slide-up delay-50">
               <div className="flex items-center gap-3 mb-4">
                 <div className="w-10 h-10 rounded-xl bg-amber-500/10 flex items-center justify-center">
@@ -1130,7 +1196,6 @@ export default function SuperAdminPortal() {
               </Button>
             </div>
 
-            {/* === بطاقة الاستيراد === */}
             <div className="card-modern p-6 animate-slide-up delay-100">
               <div className="flex items-center gap-3 mb-4">
                 <div className="w-10 h-10 rounded-xl bg-emerald-500/10 flex items-center justify-center">
@@ -1175,7 +1240,6 @@ export default function SuperAdminPortal() {
               </div>
             </div>
 
-            {/* System Info */}
             <div className="card-modern p-6 animate-slide-up delay-200">
               <div className="flex items-center gap-3 mb-4">
                 <div className="w-10 h-10 rounded-xl bg-emerald-500/10 flex items-center justify-center">
@@ -1221,7 +1285,6 @@ export default function SuperAdminPortal() {
         )}
       </main>
 
-      {/* نافذة تأكيد الحذف */}
       <Dialog open={showDeleteDialog} onOpenChange={setShowDeleteDialog}>
         <DialogContent className="max-w-md" dir="rtl">
           <DialogHeader>
@@ -1245,11 +1308,19 @@ export default function SuperAdminPortal() {
         </DialogContent>
       </Dialog>
 
-      {/* نافذة تفعيل الاشتراك */}
+      {/* ✏️ V39: نافذة تفعيل الاشتراك — دقة الدقيقة + datetime-local */}
       <Dialog open={!!activationClinic} onOpenChange={(open) => !open && setActivationClinic(null)}>
         <DialogContent className="max-w-md" dir="rtl">
           <DialogHeader>
-            <DialogTitle>تفعيل اشتراك {activationClinic?.name}</DialogTitle>
+            <DialogTitle className="flex items-center gap-2">
+              <Clock className="w-5 h-5 text-primary" />
+              تفعيل اشتراك {activationClinic?.name}
+            </DialogTitle>
+            {activationClinic?.email && (
+              <DialogDescription className="text-xs" dir="ltr">
+                {activationClinic.email}
+              </DialogDescription>
+            )}
           </DialogHeader>
           <div className="space-y-4">
             <div className="space-y-2">
@@ -1259,28 +1330,37 @@ export default function SuperAdminPortal() {
                 onChange={(e) => setActivationPeriod(e.target.value)}
                 className="w-full h-10 px-3 rounded-md border border-input bg-background text-foreground text-sm focus:outline-none focus:ring-2 focus:ring-ring"
               >
-                <option value="30">شهر واحد</option>
-                <option value="90">3 أشهر</option>
-                <option value="180">6 أشهر</option>
-                <option value="365">سنة كاملة</option>
-                <option value="730">سنتان</option>
-                <option value="1825">5 سنوات</option>
-                <option value="3650">10 سنوات</option>
-                <option value="custom">تاريخ مخصص…</option>
+                {ACTIVATION_OPTIONS.map(opt => (
+                  <option key={opt.value} value={opt.value}>{opt.label}</option>
+                ))}
               </select>
             </div>
+
+            {activationPeriod !== "custom" && (
+              <div className="bg-primary/5 rounded-xl p-3 border border-primary/20">
+                <p className="text-xs text-muted-foreground mb-1">سينتهي في</p>
+                <p className="text-sm font-bold text-primary" dir="rtl">
+                  {new Date(Date.now() + Number(activationPeriod) * 60_000).toLocaleString('ar-SA')}
+                </p>
+              </div>
+            )}
+
             {activationPeriod === "custom" && (
               <div className="space-y-2">
-                <label className="text-sm font-medium text-foreground">تاريخ الانتهاء</label>
+                <label className="text-sm font-medium text-foreground">التاريخ والوقت</label>
                 <Input
-                  type="date"
+                  type="datetime-local"
                   value={customActivationDate}
-                  min={new Date(Date.now() + 86400000).toISOString().slice(0, 10)}
+                  min={new Date(Date.now() + 60_000).toISOString().slice(0, 16)}
                   onChange={(e) => setCustomActivationDate(e.target.value)}
                   dir="ltr"
                 />
+                <p className="text-[10px] text-muted-foreground">
+                  مثال: لتفعيل لمدة ساعة فقط، اختر وقتاً بعد ساعة من الآن
+                </p>
               </div>
             )}
+
             <div className="flex gap-2 justify-end pt-2">
               <Button variant="outline" onClick={() => setActivationClinic(null)}>إلغاء</Button>
               <Button onClick={submitActivation}>
