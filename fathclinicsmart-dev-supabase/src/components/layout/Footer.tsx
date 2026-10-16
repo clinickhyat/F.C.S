@@ -1,4 +1,4 @@
-import { Stethoscope, Heart } from "lucide-react";
+import { Stethoscope } from "lucide-react";
 
 export function Footer() {
   return (
@@ -14,15 +14,16 @@ export function Footer() {
               <span className="text-xs text-muted-foreground block">نظام العيادات الذكي</span>
             </div>
           </div>
-          
+
           <div className="flex items-center gap-2 text-muted-foreground text-sm">
-            <span>إعداد وتطوير:</span>
-            <span className="font-bold text-primary">م/ فتح الرحمن الخياط</span>
-            <Heart className="w-4 h-4 text-destructive fill-destructive animate-pulse" />
+            <span>للتواصل:</span>
+            <a href="mailto:smartclinic1997@gmail.com" className="font-bold text-primary hover:underline">
+              smartclinic1997@gmail.com
+            </a>
           </div>
-          
+
           <div className="text-xs text-muted-foreground">
-            © {new Date().getFullYear()} جميع الحقوق محفوظة
+            © {new Date().getFullYear()} SmartClinicFath — جميع الحقوق محفوظة
           </div>
         </div>
       </div>
