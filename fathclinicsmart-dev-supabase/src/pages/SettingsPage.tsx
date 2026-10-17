@@ -130,7 +130,7 @@ interface Promotion {
 }
 
 // ============================================================
-// V41: EXTENDED SPECIALTY THEMES (10 new + 5 existing = 15)
+// V41: EXTENDED SPECIALTY THEMES
 // ============================================================
 const SPECIALTY_THEMES: Record<string, any> = {
   dental: {
@@ -142,7 +142,6 @@ const SPECIALTY_THEMES: Record<string, any> = {
     heroImages: [
       "https://images.unsplash.com/photo-1606811971618-4486d14f3f99?w=1200&q=85&auto=format&fit=crop",
       "https://images.unsplash.com/photo-1588776814546-1ffcf47267a5?w=1200&q=85&auto=format&fit=crop",
-      "https://images.unsplash.com/photo-1598256989800-fe5f95da9787?w=1200&q=85&auto=format&fit=crop",
     ],
   },
   dermatology: {
@@ -153,7 +152,6 @@ const SPECIALTY_THEMES: Record<string, any> = {
     icon: "✨", label: "الجلدية والتجميل", labelEn: "Dermatology",
     heroImages: [
       "https://images.unsplash.com/photo-1570172619644-dfd03ed5d881?w=1200&q=85&auto=format&fit=crop",
-      "https://images.unsplash.com/photo-1616394584738-fc6e612e71b9?w=1200&q=85&auto=format&fit=crop",
     ],
   },
   gynecology: {
@@ -164,7 +162,6 @@ const SPECIALTY_THEMES: Record<string, any> = {
     icon: "🌸", label: "النساء والولادة", labelEn: "Gynecology",
     heroImages: [
       "https://images.unsplash.com/photo-1584515933487-779824d29309?w=1200&q=85&auto=format&fit=crop",
-      "https://images.unsplash.com/photo-1519494026892-80bbd2d6fd0d?w=1200&q=85&auto=format&fit=crop",
     ],
   },
   ophthalmology: {
@@ -175,7 +172,6 @@ const SPECIALTY_THEMES: Record<string, any> = {
     icon: "👁️", label: "طب العيون", labelEn: "Ophthalmology",
     heroImages: [
       "https://images.unsplash.com/photo-1587613757226-c22d09e4bd23?w=1200&q=85&auto=format&fit=crop",
-      "https://images.unsplash.com/photo-1574258495973-f010dfbb5371?w=1200&q=85&auto=format&fit=crop",
     ],
   },
   orthopedics: {
@@ -186,7 +182,6 @@ const SPECIALTY_THEMES: Record<string, any> = {
     icon: "🦴", label: "العظام والمفاصل", labelEn: "Orthopedics",
     heroImages: [
       "https://images.unsplash.com/photo-1595003500447-88ce9a901a9c?w=1200&q=85&auto=format&fit=crop",
-      "https://images.unsplash.com/photo-1579684385127-1ef15d508118?w=1200&q=85&auto=format&fit=crop",
     ],
   },
   pediatrics: {
@@ -197,7 +192,6 @@ const SPECIALTY_THEMES: Record<string, any> = {
     icon: "🧸", label: "طب الأطفال", labelEn: "Pediatrics",
     heroImages: [
       "https://images.unsplash.com/photo-1502740479091-635887520276?w=1200&q=85&auto=format&fit=crop",
-      "https://images.unsplash.com/photo-1519689680058-324335c77eba?w=1200&q=85&auto=format&fit=crop",
     ],
   },
   internal: {
@@ -208,7 +202,6 @@ const SPECIALTY_THEMES: Record<string, any> = {
     icon: "🩺", label: "الباطنية", labelEn: "Internal Medicine",
     heroImages: [
       "https://images.unsplash.com/photo-1579684385127-1ef15d508118?w=1200&q=85&auto=format&fit=crop",
-      "https://images.unsplash.com/photo-1584982751601-97dcc096659c?w=1200&q=85&auto=format&fit=crop",
     ],
   },
   general: {
@@ -219,10 +212,8 @@ const SPECIALTY_THEMES: Record<string, any> = {
     icon: "🏥", label: "الطب العام", labelEn: "General Medicine",
     heroImages: [
       "https://images.unsplash.com/photo-1631815589968-fdb09a223b1e?w=1200&q=85&auto=format&fit=crop",
-      "https://images.unsplash.com/photo-1519494026892-80bbd2d6fd0d?w=1200&q=85&auto=format&fit=crop",
     ],
   },
-  // ✨ V41: NEW SPECIALTIES
   lab: {
     bg1: "#E0F2FE", bg2: "#38BDF8", bg3: "#0EA5E9",
     darkColor: "#0C4A6E", textColor: "#FFFFFF",
@@ -231,7 +222,6 @@ const SPECIALTY_THEMES: Record<string, any> = {
     icon: "🧪", label: "المختبر", labelEn: "Laboratory",
     heroImages: [
       "https://images.unsplash.com/photo-1579154204601-01588f351e67?w=1200&q=85&auto=format&fit=crop",
-      "https://images.unsplash.com/photo-1582719471384-894fbb16e074?w=1200&q=85&auto=format&fit=crop",
     ],
   },
   surgery: {
@@ -242,7 +232,6 @@ const SPECIALTY_THEMES: Record<string, any> = {
     icon: "🔪", label: "الجراحة العامة", labelEn: "General Surgery",
     heroImages: [
       "https://images.unsplash.com/photo-1551076805-e1869033e561?w=1200&q=85&auto=format&fit=crop",
-      "https://images.unsplash.com/photo-1579154204601-01588f351e67?w=1200&q=85&auto=format&fit=crop",
     ],
   },
   cardiology: {
@@ -253,7 +242,6 @@ const SPECIALTY_THEMES: Record<string, any> = {
     icon: "💔", label: "أمراض القلب", labelEn: "Cardiology",
     heroImages: [
       "https://images.unsplash.com/photo-1628348068343-c6a848d2b6dd?w=1200&q=85&auto=format&fit=crop",
-      "https://images.unsplash.com/photo-1576091160399-112ba8d25d1d?w=1200&q=85&auto=format&fit=crop",
     ],
   },
   neurology: {
@@ -264,7 +252,6 @@ const SPECIALTY_THEMES: Record<string, any> = {
     icon: "🧠", label: "المخ والأعصاب", labelEn: "Neurology",
     heroImages: [
       "https://images.unsplash.com/photo-1559757175-5700dde675bc?w=1200&q=85&auto=format&fit=crop",
-      "https://images.unsplash.com/photo-1576086213369-97a306d36557?w=1200&q=85&auto=format&fit=crop",
     ],
   },
   ent: {
@@ -275,7 +262,6 @@ const SPECIALTY_THEMES: Record<string, any> = {
     icon: "👂", label: "أنف وأذن وحنجرة", labelEn: "ENT",
     heroImages: [
       "https://images.unsplash.com/photo-1519494026892-80bbd2d6fd0d?w=1200&q=85&auto=format&fit=crop",
-      "https://images.unsplash.com/photo-1581594693702-fbdc51b2763b?w=1200&q=85&auto=format&fit=crop",
     ],
   },
   pharmacy: {
@@ -286,7 +272,6 @@ const SPECIALTY_THEMES: Record<string, any> = {
     icon: "💊", label: "الصيدلية", labelEn: "Pharmacy",
     heroImages: [
       "https://images.unsplash.com/photo-1587854692152-cbe660dbde88?w=1200&q=85&auto=format&fit=crop",
-      "https://images.unsplash.com/photo-1585435557343-3b092031a831?w=1200&q=85&auto=format&fit=crop",
     ],
   },
   radiology: {
@@ -297,7 +282,6 @@ const SPECIALTY_THEMES: Record<string, any> = {
     icon: "🩻", label: "الأشعة", labelEn: "Radiology",
     heroImages: [
       "https://images.unsplash.com/photo-1516069677018-378515003435?w=1200&q=85&auto=format&fit=crop",
-      "https://images.unsplash.com/photo-1530026405186-ed1f139313f8?w=1200&q=85&auto=format&fit=crop",
     ],
   },
   physiotherapy: {
@@ -308,7 +292,6 @@ const SPECIALTY_THEMES: Record<string, any> = {
     icon: "🦵", label: "العلاج الطبيعي", labelEn: "Physiotherapy",
     heroImages: [
       "https://images.unsplash.com/photo-1576091160399-112ba8d25d1d?w=1200&q=85&auto=format&fit=crop",
-      "https://images.unsplash.com/photo-1597452485669-2c7bb5fef90d?w=1200&q=85&auto=format&fit=crop",
     ],
   },
   nutrition: {
@@ -319,7 +302,6 @@ const SPECIALTY_THEMES: Record<string, any> = {
     icon: "🥗", label: "التغذية", labelEn: "Nutrition",
     heroImages: [
       "https://images.unsplash.com/photo-1512621776951-a57141f2eefd?w=1200&q=85&auto=format&fit=crop",
-      "https://images.unsplash.com/photo-1490645935967-10de6ba17061?w=1200&q=85&auto=format&fit=crop",
     ],
   },
   psychiatry: {
@@ -330,7 +312,6 @@ const SPECIALTY_THEMES: Record<string, any> = {
     icon: "🧘", label: "الطب النفسي", labelEn: "Psychiatry",
     heroImages: [
       "https://images.unsplash.com/photo-1559757148-5c350d0d3c56?w=1200&q=85&auto=format&fit=crop",
-      "https://images.unsplash.com/photo-1527137342181-19aab11a8ae3?w=1200&q=85&auto=format&fit=crop",
     ],
   },
   other: {
@@ -346,7 +327,7 @@ const SPECIALTY_THEMES: Record<string, any> = {
 };
 
 // ============================================================
-// V41: PROMO CONTENT TEMPLATES (auto-fill based on specialty)
+// V41: PROMO CONTENT TEMPLATES
 // ============================================================
 const PROMO_TEMPLATES: Record<string, { title: string; description: string; items: string }> = {
   dental: {
@@ -447,7 +428,7 @@ const PROMO_TEMPLATES: Record<string, { title: string; description: string; item
 };
 
 // ============================================================
-// V42: SERVICE THUMBNAILS & ICONS (For individual service cards)
+// V42: SERVICE THUMBNAILS & ICONS
 // ============================================================
 const SERVICE_THUMBNAILS: Record<string, string> = {
   dental: "https://images.unsplash.com/photo-1606811971618-4486d14f3f99?w=200&q=80",
@@ -483,98 +464,61 @@ function getServiceIcon(name: string): string {
   return icons[cat] || '🩺';
 }
 
-// ============================================================
-// V42: CALCULATE FINAL PRICE HELPER
-// ============================================================
 function calcFinalPrice(original: number | null, discountValue: number, discountType: string): number | null {
   if (original === null) return null;
   const out = discountType === "percentage" ? original * (1 - discountValue / 100) : original - discountValue;
   return Math.max(0, Math.round(out * 100) / 100);
 }
 
-// ============================================================
-// V42: PICK HERO IMAGE (Higher Priority for services)
-// ============================================================
 const SERVICE_KEYWORD_IMAGES: Array<{ keywords: string[]; images: string[] }> = [
   {
     keywords: ["تبييض", "بلانش", "ابتسامة", "فينير", "عدسات"],
     images: [
       "https://images.unsplash.com/photo-1609840114035-3c981b782dfe?w=1200&q=85&auto=format&fit=crop",
-      "https://images.unsplash.com/photo-1629909613654-28e377c37b09?w=1200&q=85&auto=format&fit=crop",
     ],
   },
   {
     keywords: ["زراعة", "تقويم", "حشو", "خلع", "عصب"],
     images: [
       "https://images.unsplash.com/photo-1588776814546-1ffcf47267a5?w=1200&q=85&auto=format&fit=crop",
-      "https://images.unsplash.com/photo-1606811971618-4486d14f3f99?w=1200&q=85&auto=format&fit=crop",
     ],
   },
   {
     keywords: ["ليزر", "فيلر", "بوتوكس", "بشرة", "تجاعيد"],
     images: [
       "https://images.unsplash.com/photo-1570172619644-dfd03ed5d881?w=1200&q=85&auto=format&fit=crop",
-      "https://images.unsplash.com/photo-1616394584738-fc6e612e71b9?w=1200&q=85&auto=format&fit=crop",
     ],
   },
   {
     keywords: ["سونار", "حمل", "ولادة", "نساء", "رحم"],
     images: [
       "https://images.unsplash.com/photo-1584515933487-779824d29309?w=1200&q=85&auto=format&fit=crop",
-      "https://images.unsplash.com/photo-1519494026892-80bbd2d6fd0d?w=1200&q=85&auto=format&fit=crop",
     ],
   },
   {
     keywords: ["نظر", "عيون", "ليزك", "مياه بيضاء", "قرنية"],
     images: [
       "https://images.unsplash.com/photo-1587613757226-c22d09e4bd23?w=1200&q=85&auto=format&fit=crop",
-      "https://images.unsplash.com/photo-1574258495973-f010dfbb5371?w=1200&q=85&auto=format&fit=crop",
     ],
   },
   {
     keywords: ["تحليل", "مختبر", "دم", "فحص", "سكر"],
     images: [
       "https://images.unsplash.com/photo-1579154204601-01588f351e67?w=1200&q=85&auto=format&fit=crop",
-      "https://images.unsplash.com/photo-1582719471384-894fbb16e074?w=1200&q=85&auto=format&fit=crop",
-    ],
-  },
-  {
-    keywords: ["قلب", "إيكو", "تخطيط", "ضغط"],
-    images: [
-      "https://images.unsplash.com/photo-1628348068343-c6a848d2b6dd?w=1200&q=85&auto=format&fit=crop",
-      "https://images.unsplash.com/photo-1576091160399-112ba8d25d1d?w=1200&q=85&auto=format&fit=crop",
-    ],
-  },
-  {
-    keywords: ["عظام", "مفاصل", "ركبة", "كسور"],
-    images: [
-      "https://images.unsplash.com/photo-1595003500447-88ce9a901a9c?w=1200&q=85&auto=format&fit=crop",
-      "https://images.unsplash.com/photo-1579684385127-1ef15d508118?w=1200&q=85&auto=format&fit=crop",
     ],
   },
 ];
 
 function pickHeroImage(theme: any, promo: Promotion, items: string[]): string {
   const searchText = `${promo.title} ${promo.description || ""} ${items.join(" ")}`.toLowerCase();
-  let hash = 0;
-  const seed = (promo.id || "") + ((promo as any).updated_at || Date.now().toString());
-  for (let i = 0; i < seed.length; i++) {
-    hash = ((hash << 5) - hash) + seed.charCodeAt(i);
-    hash |= 0;
-  }
-  hash = Math.abs(hash);
-  
-  // Search specific services first
   for (const entry of SERVICE_KEYWORD_IMAGES) {
     if (entry.keywords.some(kw => searchText.includes(kw.toLowerCase()))) {
-      return entry.images[hash % entry.images.length];
+      return entry.images[0];
     }
   }
-  
-  // Fallback to the specialty's hero images
   const heros = theme.heroImages || [];
   if (heros.length === 0) return "";
-  return heros[hash % heros.length];
+  return heros[0];
 }
 
 export default function SettingsPage() {
@@ -611,7 +555,6 @@ export default function SettingsPage() {
   const [workingHoursStart, setWorkingHoursStart] = useState("08:00");
   const [workingHoursEnd, setWorkingHoursEnd] = useState("16:00");
 
-  // ===== V39 States =====
   const [clinicNameEn, setClinicNameEn] = useState("");
   const [clinicNameEnEdited, setClinicNameEnEdited] = useState(false);
   const [receptionistEmail, setReceptionistEmail] = useState("");
@@ -1391,9 +1334,6 @@ export default function SettingsPage() {
     }
   };
 
-  // ============================================================
-  // V42: NEW GENERATE PROMO IMAGE — Services Grid
-  // ============================================================
   const generatePromoImage = async (promo: Promotion, forceRegenerate: boolean = false) => {
     if (!clinic) {
       toast({ title: "خطأ", description: "لم يتم تحميل بيانات العيادة", variant: "destructive" });
@@ -1427,11 +1367,10 @@ export default function SettingsPage() {
             .filter(Boolean)
         : [];
 
-      // Determine services to draw
       const selectedServices = services.filter(s => (promo.service_ids || []).includes(s.id));
 
       const W = 1200;
-      const H = 1500;
+      const H = 1600; 
       const canvas = document.createElement("canvas");
       canvas.width = W;
       canvas.height = H;
@@ -1466,94 +1405,79 @@ export default function SettingsPage() {
 
       // 1. Background
       const bgGrad = ctx.createLinearGradient(0, 0, W, H);
-      bgGrad.addColorStop(0, "#FFFFFF");
-      bgGrad.addColorStop(0.35, theme.bg1);
+      bgGrad.addColorStop(0, "#F8FAFC");
+      bgGrad.addColorStop(0.5, theme.bg1);
       bgGrad.addColorStop(1, theme.bg2);
       ctx.fillStyle = bgGrad;
       ctx.fillRect(0, 0, W, H);
 
       ctx.save();
-      ctx.fillStyle = `${theme.darkColor}08`;
-      for (let x = 0; x < W; x += 45) {
-        for (let y = 0; y < H; y += 45) {
-          ctx.beginPath();
-          ctx.arc(x, y, 1.5, 0, Math.PI * 2);
-          ctx.fill();
-        }
-      }
+      ctx.fillStyle = "rgba(255,255,255,0.4)";
+      ctx.beginPath();
+      ctx.arc(0, 0, 400, 0, Math.PI*2);
+      ctx.fill();
+      ctx.beginPath();
+      ctx.arc(W, H, 500, 0, Math.PI*2);
+      ctx.fill();
       ctx.restore();
 
-      // 2. Header (Logo + Name)
+      // 2. Header
+      const logoSize = 120;
+      const logoX = W / 2 - logoSize / 2;
+      const logoY = 50;
+      
+      // Logo Frame
+      ctx.save();
+      ctx.shadowColor = "rgba(0,0,0,0.1)";
+      ctx.shadowBlur = 15;
+      ctx.shadowOffsetY = 5;
+      ctx.fillStyle = "#FFFFFF";
+      roundRect(logoX - 10, logoY - 10, logoSize + 20, logoSize + 20, 30);
+      ctx.fill();
+      ctx.restore();
+
       let logoImg: HTMLImageElement | null = null;
       if (clinic.logo_url) {
         logoImg = await loadImage(clinic.logo_url);
       }
 
-      const logoSize = 100;
-      const logoX = W / 2 - logoSize / 2;
-      const logoY = 40;
-
-      // Logo Ring
-      ctx.save();
-      ctx.shadowColor = "rgba(245, 158, 11, 0.5)";
-      ctx.shadowBlur = 20;
-      const ringGrad = ctx.createLinearGradient(logoX, logoY, logoX + logoSize, logoY + logoSize);
-      ringGrad.addColorStop(0, "#FDE68A");
-      ringGrad.addColorStop(0.5, "#F59E0B");
-      ringGrad.addColorStop(1, "#B45309");
-      ctx.fillStyle = ringGrad;
-      roundRect(logoX - 6, logoY - 6, logoSize + 12, logoSize + 12, 24);
-      ctx.fill();
-      ctx.restore();
-
-      // Logo Background
-      ctx.save();
-      ctx.fillStyle = "white";
-      roundRect(logoX - 2, logoY - 2, logoSize + 4, logoSize + 4, 20);
-      ctx.fill();
-      ctx.restore();
-
-      // Logo Image
       if (logoImg) {
         ctx.save();
-        roundRect(logoX, logoY, logoSize, logoSize, 18);
+        roundRect(logoX, logoY, logoSize, logoSize, 20);
         ctx.clip();
         ctx.drawImage(logoImg, logoX, logoY, logoSize, logoSize);
         ctx.restore();
       } else {
         ctx.save();
-        roundRect(logoX, logoY, logoSize, logoSize, 18);
+        roundRect(logoX, logoY, logoSize, logoSize, 20);
         const iconGrad = ctx.createLinearGradient(logoX, logoY, logoX, logoY + logoSize);
         iconGrad.addColorStop(0, theme.bg2);
         iconGrad.addColorStop(1, theme.bg3);
         ctx.fillStyle = iconGrad;
         ctx.fill();
-        ctx.font = "60px 'Segoe UI Emoji', Arial";
+        ctx.font = "bold 60px 'Cairo', Arial";
         ctx.textAlign = "center";
         ctx.textBaseline = "middle";
-        ctx.fillStyle = "white";
-        ctx.fillText(theme.icon, logoX + logoSize / 2, logoY + logoSize / 2 + 5);
+        ctx.fillStyle = "#FFFFFF";
+        ctx.fillText((clinic.name || "ع").charAt(0), logoX + logoSize/2, logoY + logoSize/2 + 5);
         ctx.restore();
       }
 
       // Clinic Name
-      const clinicNameY = logoY + logoSize + 20;
+      const clinicNameY = logoY + logoSize + 30;
       ctx.save();
-      ctx.font = "900 42px 'Cairo', 'Tajawal', 'Segoe UI', Arial";
+      ctx.font = "900 48px 'Cairo', 'Tajawal', Arial";
       ctx.fillStyle = theme.darkColor;
       ctx.textAlign = "center";
       ctx.textBaseline = "top";
       ctx.direction = "rtl";
-      ctx.shadowColor = "rgba(0, 0, 0, 0.15)";
-      ctx.shadowBlur = 8;
-      ctx.shadowOffsetY = 2;
       ctx.fillText(clinic.name, W / 2, clinicNameY);
       ctx.restore();
 
-      // Specialty Label
-      const specY = clinicNameY + 60;
+      // Specialty
+      const specY = clinicNameY + 65;
       ctx.save();
-      ctx.font = "600 22px 'Cairo', Arial";
+      ctx.font = "600 24px 'Cairo', Arial";
       ctx.fillStyle = theme.chipText;
       ctx.textAlign = "center";
       ctx.textBaseline = "top";
@@ -1563,65 +1487,64 @@ export default function SettingsPage() {
       ctx.restore();
 
       // 3. Badges (Date & Location)
+      const badgeY = specY + 50;
+      const badgeH = 40;
+
       if (promo.end_date) {
         ctx.save();
-        const badgeW = 240;
-        const badgeH = 44;
+        const badgeW = 200;
         const badgeX = 60;
-        const badgeY = specY + 50;
         const badgeGrad = ctx.createLinearGradient(badgeX, badgeY, badgeX, badgeY + badgeH);
         badgeGrad.addColorStop(0, "#EF4444");
         badgeGrad.addColorStop(1, "#B91C1C");
         ctx.fillStyle = badgeGrad;
-        roundRect(badgeX, badgeY, badgeW, badgeH, 22);
+        roundRect(badgeX, badgeY, badgeW, badgeH, 20);
         ctx.fill();
-        ctx.font = "bold 20px 'Cairo', Arial";
-        ctx.fillStyle = "white";
+        ctx.font = "bold 18px 'Cairo', Arial";
+        ctx.fillStyle = "#FFFFFF";
         ctx.textAlign = "center";
         ctx.textBaseline = "middle";
         ctx.direction = "rtl";
-        ctx.fillText(`⏰ حتى ${promo.end_date}`, badgeX + badgeW / 2, badgeY + badgeH / 2);
+        ctx.fillText(`⏰ حتى ${promo.end_date}`, badgeX + badgeW/2, badgeY + badgeH/2);
         ctx.restore();
       }
 
       if (promo.location) {
         ctx.save();
         const locW = 240;
-        const locH = 44;
         const locX = W - 60 - locW;
-        const locY = specY + 50;
-        const locGrad = ctx.createLinearGradient(locX, locY, locX, locY + locH);
+        const locGrad = ctx.createLinearGradient(locX, badgeY, locX, badgeY + badgeH);
         locGrad.addColorStop(0, "#34D399");
         locGrad.addColorStop(1, "#059669");
         ctx.fillStyle = locGrad;
-        roundRect(locX, locY, locW, locH, 22);
+        roundRect(locX, badgeY, locW, badgeH, 20);
         ctx.fill();
-        ctx.font = "bold 20px 'Cairo', Arial";
-        ctx.fillStyle = "white";
+        ctx.font = "bold 18px 'Cairo', Arial";
+        ctx.fillStyle = "#FFFFFF";
         ctx.textAlign = "center";
         ctx.textBaseline = "middle";
         ctx.direction = "rtl";
-        ctx.fillText(`📍 ${promo.location}`, locX + locW / 2, locY + locH / 2);
+        ctx.fillText(`📍 ${promo.location}`, locX + locW/2, badgeY + badgeH/2);
         ctx.restore();
       }
 
-      // 4. Hero Image (Center)
-      const heroImgUrl = pickHeroImage(theme, promo, itemsList);
-      const heroImg = await loadImage(heroImgUrl);
-
-      const heroX = 60;
-      const heroY = specY + 110;
-      const heroW = W - 120; // 1080
-      const heroH = 420;
+      // 4. Hero Image (Smaller)
+      const heroW = W - 160;
+      const heroH = 380;
+      const heroX = 80;
+      const heroY = badgeY + badgeH + 30;
 
       ctx.save();
-      ctx.shadowColor = "rgba(0, 0, 0, 0.25)";
-      ctx.shadowBlur = 30;
+      ctx.shadowColor = "rgba(0,0,0,0.15)";
+      ctx.shadowBlur = 25;
       ctx.shadowOffsetY = 15;
-      ctx.fillStyle = "white";
+      ctx.fillStyle = "#FFFFFF";
       roundRect(heroX - 10, heroY - 10, heroW + 20, heroH + 20, 30);
       ctx.fill();
       ctx.restore();
+
+      const heroImgUrl = pickHeroImage(theme, promo, itemsList);
+      const heroImg = await loadImage(heroImgUrl);
 
       if (heroImg) {
         ctx.save();
@@ -1642,11 +1565,6 @@ export default function SettingsPage() {
           drawY = heroY - (drawH - heroH) / 2;
         }
         ctx.drawImage(heroImg, drawX, drawY, drawW, drawH);
-        const overlayGrad = ctx.createLinearGradient(heroX, heroY + heroH * 0.5, heroX, heroY + heroH);
-        overlayGrad.addColorStop(0, "rgba(0,0,0,0)");
-        overlayGrad.addColorStop(1, "rgba(0,0,0,0.5)");
-        ctx.fillStyle = overlayGrad;
-        ctx.fillRect(heroX, heroY, heroW, heroH);
         ctx.restore();
       } else {
         ctx.save();
@@ -1656,19 +1574,19 @@ export default function SettingsPage() {
         fallGrad.addColorStop(1, theme.bg3);
         ctx.fillStyle = fallGrad;
         ctx.fill();
-        ctx.font = "180px 'Segoe UI Emoji', Arial";
+        ctx.font = "100px 'Segoe UI Emoji', Arial";
         ctx.textAlign = "center";
         ctx.textBaseline = "middle";
-        ctx.fillStyle = "rgba(255,255,255,0.7)";
-        ctx.fillText(theme.icon, heroX + heroW / 2, heroY + heroH / 2);
+        ctx.fillStyle = "rgba(255,255,255,0.8)";
+        ctx.fillText(theme.icon, heroX + heroW/2, heroY + heroH/2);
         ctx.restore();
       }
 
-      // 5. Discount Badge (Over Hero)
-      const discountW = 280;
+      // 5. Discount Badge
+      const discountW = 300;
       const discountH = 70;
-      const discountX = W / 2 - discountW / 2;
-      const discountY = heroY + heroH - discountH / 2;
+      const discountX = W/2 - discountW/2;
+      const discountY = heroY + heroH - discountH/2;
 
       ctx.save();
       ctx.shadowColor = "rgba(180, 83, 9, 0.6)";
@@ -1683,52 +1601,75 @@ export default function SettingsPage() {
       ctx.fill();
       ctx.restore();
 
+      ctx.save();
       ctx.font = "900 38px 'Cairo', Arial";
       ctx.fillStyle = "#5C1A00";
       ctx.textAlign = "center";
       ctx.textBaseline = "middle";
       ctx.direction = "rtl";
-      const discountText = promo.discount_type === "percentage" ? `${promo.discount_value}% خصم` : `خصم ${promo.discount_value} ريال`;
-      ctx.fillText(discountText, W / 2, discountY + discountH / 2 + 2);
+      const discountText = promo.discount_type === "percentage" ? `خصم ${promo.discount_value}%` : `خصم ${promo.discount_value} ريال`;
+      ctx.fillText(discountText, W/2, discountY + discountH/2 + 2);
+      ctx.restore();
 
       // 6. Title & Description
-      const contentY = discountY + discountH + 30;
-      
+      const titleY = discountY + discountH + 30;
       ctx.save();
-      ctx.font = "900 40px 'Cairo', Arial";
+      ctx.font = "900 44px 'Cairo', Arial";
       ctx.fillStyle = theme.darkColor;
       ctx.textAlign = "center";
       ctx.textBaseline = "top";
       ctx.direction = "rtl";
       const titleLines = wrapText(ctx, promo.title, W - 160);
       titleLines.slice(0, 2).forEach((line, idx) => {
-        ctx.fillText(line, W / 2, contentY + idx * 50);
+        ctx.fillText(line, W/2, titleY + idx * 55);
       });
       ctx.restore();
 
-      let nextY = contentY + (titleLines.length * 50) + 10;
+      let currentY = titleY + (titleLines.length * 55) + 15;
 
       if (promo.description) {
         ctx.save();
-        ctx.font = "600 22px 'Cairo', Arial";
+        ctx.font = "600 24px 'Cairo', Arial";
         ctx.fillStyle = theme.chipText;
         ctx.textAlign = "center";
         ctx.textBaseline = "top";
         ctx.direction = "rtl";
-        const descLines = wrapText(ctx, promo.description, W - 200);
+        const descLines = wrapText(ctx, promo.description, W - 240);
         descLines.slice(0, 2).forEach((line, idx) => {
-          ctx.fillText(line, W / 2, nextY + idx * 32);
+          ctx.fillText(line, W/2, currentY + idx * 35);
         });
         ctx.restore();
-        nextY += (descLines.length * 32) + 20;
+        currentY += (descLines.length * 35) + 25;
       }
 
-      // 7. Services Grid (3 columns)
-      const servicesStartY = nextY;
+      // 7. Ad Items (Pills)
+      if (itemsList.length > 0) {
+        ctx.save();
+        ctx.font = "bold 22px 'Cairo', Arial";
+        ctx.fillStyle = theme.accentDark;
+        ctx.textAlign = "center";
+        ctx.textBaseline = "top";
+        ctx.direction = "rtl";
+        
+        const itemsText = itemsList.join("  •  ");
+        const textW = ctx.measureText(itemsText).width;
+        if (textW < W - 120) {
+          ctx.fillText(itemsText, W/2, currentY);
+          currentY += 40;
+        } else {
+          const itemsTextShort = itemsList.slice(0, 4).join("  •  ");
+          ctx.fillText(itemsTextShort, W/2, currentY);
+          currentY += 40;
+        }
+        ctx.restore();
+      }
+
+      // 8. Services Grid
+      const servicesStartY = currentY + 20;
       const servicesPerRow = 3;
       const gridGap = 20;
-      const cardW = (W - 120 - (servicesPerRow - 1) * gridGap) / servicesPerRow; // ~346
-      const cardH = 130;
+      const cardW = (W - 120 - (servicesPerRow - 1) * gridGap) / servicesPerRow;
+      const cardH = 120;
 
       if (selectedServices.length > 0) {
         const servicesToDraw = selectedServices.slice(0, 6);
@@ -1739,140 +1680,129 @@ export default function SettingsPage() {
           const col = i % servicesPerRow;
           const cx = 60 + col * (cardW + gridGap);
           const cy = servicesStartY + row * (cardH + gridGap);
-
+          
           // Card Background
           ctx.save();
-          ctx.shadowColor = "rgba(0,0,0,0.1)";
-          ctx.shadowBlur = 10;
+          ctx.shadowColor = "rgba(0,0,0,0.08)";
+          ctx.shadowBlur = 15;
           ctx.shadowOffsetY = 5;
           ctx.fillStyle = "#FFFFFF";
           roundRect(cx, cy, cardW, cardH, 16);
           ctx.fill();
           ctx.restore();
-
-          // Thumbnail (Circle)
-          const cat = getServiceCategory(svc.name);
-          const thumbUrl = SERVICE_THUMBNAILS[cat] || SERVICE_THUMBNAILS.general;
-          const thumbImg = await loadImage(thumbUrl);
-
-          if (thumbImg) {
-            ctx.save();
-            ctx.beginPath();
-            ctx.arc(cx + 55, cy + cardH / 2, 40, 0, Math.PI * 2);
-            ctx.clip();
-            ctx.drawImage(thumbImg, cx + 15, cy + cardH / 2 - 40, 80, 80);
-            ctx.restore();
-          } else {
-            ctx.save();
-            ctx.beginPath();
-            ctx.arc(cx + 55, cy + cardH / 2, 40, 0, Math.PI * 2);
-            ctx.fillStyle = theme.bg1;
-            ctx.fill();
-            ctx.restore();
-          }
-
-          // Icon over Thumbnail
+          
+          // Gold Border
           ctx.save();
-          ctx.font = "32px 'Segoe UI Emoji', Arial";
-          ctx.textAlign = "center";
-          ctx.textBaseline = "middle";
-          ctx.fillText(getServiceIcon(svc.name), cx + 55, cy + cardH / 2 + 4);
+          ctx.strokeStyle = theme.accent;
+          ctx.lineWidth = 2;
+          roundRect(cx, cy, cardW, cardH, 16);
+          ctx.stroke();
           ctx.restore();
-
-          // Text (Name & Price)
+          
+          // Thumbnail/Icon
+          const thumbSize = 70;
+          const thumbX = cx + 20;
+          const thumbY = cy + cardH/2 - thumbSize/2;
+          
+          ctx.save();
+          ctx.fillStyle = theme.bg1;
+          ctx.beginPath();
+          ctx.arc(thumbX + thumbSize/2, thumbY + thumbSize/2, thumbSize/2, 0, Math.PI*2);
+          ctx.fill();
+          
+          const cat = getServiceCategory(svc.name);
+          const thumbUrl = SERVICE_THUMBNAILS[cat];
+          const thumbImg = await loadImage(thumbUrl);
+          
+          if (thumbImg) {
+            ctx.beginPath();
+            ctx.arc(thumbX + thumbSize/2, thumbY + thumbSize/2, thumbSize/2, 0, Math.PI*2);
+            ctx.clip();
+            ctx.drawImage(thumbImg, thumbX, thumbY, thumbSize, thumbSize);
+          } else {
+            ctx.font = "40px 'Segoe UI Emoji', Arial";
+            ctx.textAlign = "center";
+            ctx.textBaseline = "middle";
+            ctx.fillText(getServiceIcon(svc.name), thumbX + thumbSize/2, thumbY + thumbSize/2 + 4);
+          }
+          ctx.restore();
+          
+          // Text
           ctx.save();
           ctx.textAlign = "right";
           ctx.textBaseline = "top";
           ctx.direction = "rtl";
           
-          ctx.font = "bold 20px 'Cairo', Arial";
+          ctx.font = "bold 22px 'Cairo', Arial";
           ctx.fillStyle = theme.darkColor;
           const nameText = truncateText(ctx, svc.name, cardW - 110);
-          ctx.fillText(nameText, cx + cardW - 20, cy + 30);
-
+          ctx.fillText(nameText, cx + cardW - 20, cy + 25);
+          
           if (svc.price) {
             const finalPrice = calcFinalPrice(svc.price, promo.discount_value, promo.discount_type);
             if (finalPrice !== null && finalPrice < svc.price) {
-              // Final Price
-              ctx.font = "bold 18px 'Cairo', Arial";
+              ctx.font = "bold 20px 'Cairo', Arial";
               ctx.fillStyle = theme.bg3;
-              ctx.fillText(`${finalPrice} ريال`, cx + cardW - 20, cy + 65);
+              ctx.fillText(`${finalPrice} ريال`, cx + cardW - 20, cy + 60);
               
-              // Original Price (Strikethrough)
-              ctx.font = "14px 'Cairo', Arial";
-              ctx.fillStyle = "rgba(0,0,0,0.5)";
+              ctx.font = "16px 'Cairo', Arial";
+              ctx.fillStyle = "rgba(0,0,0,0.4)";
               const origText = `${svc.price}`;
-              const origW = ctx.measureText(origText).width;
               ctx.fillText(origText, cx + cardW - 20, cy + 90);
               
-              ctx.strokeStyle = "rgba(0,0,0,0.5)";
-              ctx.lineWidth = 1;
+              const origW = ctx.measureText(origText).width;
+              ctx.strokeStyle = "rgba(0,0,0,0.4)";
+              ctx.lineWidth = 1.5;
               ctx.beginPath();
-              ctx.moveTo(cx + cardW - 20, cy + 98);
-              ctx.lineTo(cx + cardW - 20 - origW, cy + 98);
+              ctx.moveTo(cx + cardW - 20, cy + 100);
+              ctx.lineTo(cx + cardW - 20 - origW, cy + 100);
               ctx.stroke();
             } else {
-              ctx.font = "bold 18px 'Cairo', Arial";
+              ctx.font = "bold 20px 'Cairo', Arial";
               ctx.fillStyle = theme.bg3;
-              ctx.fillText(`${svc.price} ريال`, cx + cardW - 20, cy + 70);
+              ctx.fillText(`${svc.price} ريال`, cx + cardW - 20, cy + 65);
             }
           }
           ctx.restore();
         }
-      } else {
-        // Fallback to items if no services selected
-        const servicesToDraw = itemsList.slice(0, 6);
-        for (let i = 0; i < servicesToDraw.length; i++) {
-          const item = servicesToDraw[i];
-          const row = Math.floor(i / servicesPerRow);
-          const col = i % servicesPerRow;
-          const cx = 60 + col * (cardW + gridGap);
-          const cy = servicesStartY + row * (cardH + gridGap);
-
-          ctx.save();
-          ctx.shadowColor = "rgba(0,0,0,0.1)";
-          ctx.shadowBlur = 10;
-          ctx.shadowOffsetY = 5;
-          ctx.fillStyle = "#FFFFFF";
-          roundRect(cx, cy, cardW, cardH, 16);
-          ctx.fill();
-          ctx.restore();
-
-          ctx.save();
-          ctx.beginPath();
-          ctx.arc(cx + 55, cy + cardH / 2, 40, 0, Math.PI * 2);
-          ctx.fillStyle = theme.bg1;
-          ctx.fill();
-          ctx.restore();
-
-          ctx.save();
-          ctx.font = "32px 'Segoe UI Emoji', Arial";
-          ctx.textAlign = "center";
-          ctx.textBaseline = "middle";
-          ctx.fillText("🩺", cx + 55, cy + cardH / 2 + 4);
-          ctx.restore();
-
-          ctx.save();
-          ctx.textAlign = "right";
-          ctx.textBaseline = "top";
-          ctx.direction = "rtl";
-          ctx.font = "bold 20px 'Cairo', Arial";
-          ctx.fillStyle = theme.darkColor;
-          const nameText = truncateText(ctx, item, cardW - 110);
-          ctx.fillText(nameText, cx + cardW - 20, cy + 50); // Centered vertically
-          ctx.restore();
-        }
       }
 
-      // 8. Footer
-      const footerY = H - 130;
+      // 9. Footer
+      const footerY = H - 120;
       
       ctx.strokeStyle = theme.bg3;
-      ctx.lineWidth = 2;
+      ctx.lineWidth = 1;
       ctx.beginPath();
       ctx.moveTo(60, footerY - 20);
       ctx.lineTo(W - 60, footerY - 20);
       ctx.stroke();
+      
+      const phoneText = promo.phone_text || "";
+      if (phoneText) {
+        ctx.save();
+        const phoneCircleX = 110;
+        const phoneGrad = ctx.createLinearGradient(phoneCircleX - 20, footerY, phoneCircleX + 20, footerY + 40);
+        phoneGrad.addColorStop(0, "#34D399");
+        phoneGrad.addColorStop(1, "#059669");
+        ctx.fillStyle = phoneGrad;
+        ctx.beginPath();
+        ctx.arc(phoneCircleX, footerY + 20, 22, 0, Math.PI*2);
+        ctx.fill();
+        
+        ctx.font = "24px 'Segoe UI Emoji', Arial";
+        ctx.fillStyle = "white";
+        ctx.textAlign = "center";
+        ctx.textBaseline = "middle";
+        ctx.fillText("📞", phoneCircleX, footerY + 22);
+        
+        ctx.font = "900 32px 'Cairo', Arial";
+        ctx.fillStyle = theme.darkColor;
+        ctx.textAlign = "left";
+        ctx.textBaseline = "middle";
+        ctx.direction = "ltr";
+        ctx.fillText(phoneText, 150, footerY + 20);
+        ctx.restore();
+      }
 
       if (promo.location) {
         ctx.save();
@@ -1884,56 +1814,28 @@ export default function SettingsPage() {
         ctx.fillText(`📍 ${promo.location}`, W - 60, footerY + 20);
         ctx.restore();
       }
-
-      const phoneText = (promo as any).phone_text || "";
-      if (phoneText) {
-        ctx.save();
-        const phoneCircleX = 110;
-        const phoneGrad = ctx.createLinearGradient(phoneCircleX - 20, footerY, phoneCircleX + 20, footerY + 40);
-        phoneGrad.addColorStop(0, "#34D399");
-        phoneGrad.addColorStop(1, "#059669");
-        ctx.fillStyle = phoneGrad;
-        ctx.beginPath();
-        ctx.arc(phoneCircleX, footerY + 20, 22, 0, Math.PI * 2);
-        ctx.fill();
-
-        ctx.font = "24px 'Segoe UI Emoji', Arial";
-        ctx.fillStyle = "white";
-        ctx.textAlign = "center";
-        ctx.textBaseline = "middle";
-        ctx.fillText("📞", phoneCircleX, footerY + 22);
-
-        ctx.font = "900 32px 'Cairo', Arial";
-        ctx.fillStyle = theme.darkColor;
-        ctx.textAlign = "left";
-        ctx.textBaseline = "middle";
-        ctx.direction = "ltr";
-        ctx.fillText(phoneText, 150, footerY + 20);
-        ctx.restore();
-      }
-
+      
       ctx.save();
       const ctaW = 260;
       const ctaH = 55;
-      const ctaX = W / 2 - ctaW / 2;
+      const ctaX = W/2 - ctaW/2;
       const ctaY = footerY + 55;
-
+      
       const ctaGrad = ctx.createLinearGradient(0, ctaY, 0, ctaY + ctaH);
       ctaGrad.addColorStop(0, theme.bg2);
       ctaGrad.addColorStop(1, theme.bg3);
       ctx.fillStyle = ctaGrad;
       roundRect(ctaX, ctaY, ctaW, ctaH, 28);
       ctx.fill();
-
+      
       ctx.font = "900 22px 'Cairo', Arial";
       ctx.fillStyle = "white";
       ctx.textAlign = "center";
       ctx.textBaseline = "middle";
       ctx.direction = "rtl";
-      ctx.fillText("احجز الآن 🤖", W / 2, ctaY + ctaH / 2);
+      ctx.fillText("احجز الآن 🤖", W/2, ctaY + ctaH/2);
       ctx.restore();
 
-      // 9. Export
       const imageDataUrl = canvas.toDataURL("image/jpeg", 0.85); 
       const base64Data = imageDataUrl.split(",")[1];
       const binaryString = atob(base64Data);
