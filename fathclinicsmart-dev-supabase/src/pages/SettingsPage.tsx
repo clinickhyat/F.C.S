@@ -447,7 +447,53 @@ const PROMO_TEMPLATES: Record<string, { title: string; description: string; item
 };
 
 // ============================================================
-// V41: SERVICE KEYWORD → IMAGE MAPPING (Higher Priority)
+// V42: SERVICE THUMBNAILS & ICONS (For individual service cards)
+// ============================================================
+const SERVICE_THUMBNAILS: Record<string, string> = {
+  dental: "https://images.unsplash.com/photo-1606811971618-4486d14f3f99?w=200&q=80",
+  lab: "https://images.unsplash.com/photo-1579154204601-01588f351e67?w=200&q=80",
+  cardiology: "https://images.unsplash.com/photo-1628348068343-c6a848d2b6dd?w=200&q=80",
+  ophthalmology: "https://images.unsplash.com/photo-1587613757226-c22d09e4bd23?w=200&q=80",
+  orthopedics: "https://images.unsplash.com/photo-1595003500447-88ce9a901a9c?w=200&q=80",
+  dermatology: "https://images.unsplash.com/photo-1570172619644-dfd03ed5d881?w=200&q=80",
+  pediatrics: "https://images.unsplash.com/photo-1502740479091-635887520276?w=200&q=80",
+  gynecology: "https://images.unsplash.com/photo-1584515933487-779824d29309?w=200&q=80",
+  general: "https://images.unsplash.com/photo-1631815589968-fdb09a223b1e?w=200&q=80"
+};
+
+function getServiceCategory(name: string): string {
+  const n = name.toLowerCase();
+  if (n.includes('دم') || n.includes('تحليل') || n.includes('سكر') || n.includes('مختبر')) return 'lab';
+  if (n.includes('أسنان') || n.includes('حشو') || n.includes('تقويم') || n.includes('تبييض')) return 'dental';
+  if (n.includes('قلب') || n.includes('إيكو') || n.includes('تخطيط')) return 'cardiology';
+  if (n.includes('عيون') || n.includes('نظر') || n.includes('ليزك')) return 'ophthalmology';
+  if (n.includes('عظام') || n.includes('مفاصل') || n.includes('ركبة')) return 'orthopedics';
+  if (n.includes('جلد') || n.includes('بشرة') || n.includes('ليزر') || n.includes('فيلر')) return 'dermatology';
+  if (n.includes('أطفال') || n.includes('طفل')) return 'pediatrics';
+  if (n.includes('نساء') || n.includes('حمل') || n.includes('ولادة')) return 'gynecology';
+  return 'general';
+}
+
+function getServiceIcon(name: string): string {
+  const cat = getServiceCategory(name);
+  const icons: Record<string, string> = {
+    lab: '🧪', dental: '🦷', cardiology: '❤️', ophthalmology: '👁️',
+    orthopedics: '🦴', dermatology: '✨', pediatrics: '🧸', gynecology: '🤰', general: '🩺'
+  };
+  return icons[cat] || '🩺';
+}
+
+// ============================================================
+// V42: CALCULATE FINAL PRICE HELPER
+// ============================================================
+function calcFinalPrice(original: number | null, discountValue: number, discountType: string): number | null {
+  if (original === null) return null;
+  const out = discountType === "percentage" ? original * (1 - discountValue / 100) : original - discountValue;
+  return Math.max(0, Math.round(out * 100) / 100);
+}
+
+// ============================================================
+// V42: PICK HERO IMAGE (Higher Priority for services)
 // ============================================================
 const SERVICE_KEYWORD_IMAGES: Array<{ keywords: string[]; images: string[] }> = [
   {
@@ -581,7 +627,6 @@ export default function SettingsPage() {
   const [promoDialogOpen, setPromoDialogOpen] = useState(false);
   const [editingPromo, setEditingPromo] = useState<Promotion | null>(null);
   
-  // ✨ Added location to form
   const [promoForm, setPromoForm] = useState<Partial<Promotion>>({
     discount_type: "percentage",
     is_active: true,
@@ -625,7 +670,6 @@ export default function SettingsPage() {
       const dbSpecialty = (clinic as any).specialty;
       const lsSpecialty = typeof window !== "undefined" ? localStorage.getItem(`clinic_specialty_${clinic.id}`) : null;
       setClinicSpecialty(dbSpecialty || lsSpecialty || "general");
-      // ✨ Load other specialty if applicable
       if (dbSpecialty === "other" || lsSpecialty === "other") {
         setOtherSpecialty((clinic as any).specialty_label || "");
       }
@@ -778,7 +822,7 @@ export default function SettingsPage() {
       name: clinicName,
       name_en: clinicNameEn || null,
       specialty: clinicSpecialty,
-      specialty_label: otherSpecialty || null, // ✨ Save other specialty label
+      specialty_label: otherSpecialty || null,
       bot_token: botToken,
       voice_agent_enabled: voiceAgentEnabled,
       voice_tone: voiceTone,
@@ -920,7 +964,6 @@ export default function SettingsPage() {
     }
   };
 
-  // ✨ Modified to save both name_en and price
   const handleUpdateService = async (id: string) => {
     const priceNum = parseFloat(editingServicePrice);
     const { error } = await supabase.from("services").update({
@@ -949,9 +992,6 @@ export default function SettingsPage() {
     }
   };
 
-  // ============================================================
-  // V39 — QR POSTER GENERATOR (Client-side Canvas)
-  // ============================================================
   const generateQrPoster = async (force = false): Promise<string | null> => {
     if (!clinic?.id) {
       toast({ title: "خطأ", description: "لم يتم تحميل العيادة", variant: "destructive" });
@@ -1266,7 +1306,6 @@ export default function SettingsPage() {
     else toast({ title: "خطأ", description: "حدث خطأ في تهيئة رفع الصورة", variant: "destructive" });
   };
 
-  // ✨ V41: Auto-fill template based on specialty
   const handleAutoFillTemplate = () => {
     const template = PROMO_TEMPLATES[clinicSpecialty] || PROMO_TEMPLATES.general;
     setPromoForm(prev => ({
@@ -1353,7 +1392,7 @@ export default function SettingsPage() {
   };
 
   // ============================================================
-  // V41: NEW GENERATE PROMO IMAGE — Institute-Style Layout
+  // V42: NEW GENERATE PROMO IMAGE — Services Grid
   // ============================================================
   const generatePromoImage = async (promo: Promotion, forceRegenerate: boolean = false) => {
     if (!clinic) {
@@ -1388,9 +1427,8 @@ export default function SettingsPage() {
             .filter(Boolean)
         : [];
 
-      const finalItems = itemsList.length > 0
-        ? itemsList.slice(0, 6) // Limit to 6 items for the grid
-        : (PROMO_TEMPLATES[specialty] || PROMO_TEMPLATES.general).items.split('\n').slice(0, 6);
+      // Determine services to draw
+      const selectedServices = services.filter(s => (promo.service_ids || []).includes(s.id));
 
       const W = 1200;
       const H = 1500;
@@ -1426,7 +1464,7 @@ export default function SettingsPage() {
         ctx.closePath();
       };
 
-      // 1. Background Gradient
+      // 1. Background
       const bgGrad = ctx.createLinearGradient(0, 0, W, H);
       bgGrad.addColorStop(0, "#FFFFFF");
       bgGrad.addColorStop(0.35, theme.bg1);
@@ -1434,7 +1472,6 @@ export default function SettingsPage() {
       ctx.fillStyle = bgGrad;
       ctx.fillRect(0, 0, W, H);
 
-      // 2. Subtle Background Pattern
       ctx.save();
       ctx.fillStyle = `${theme.darkColor}08`;
       for (let x = 0; x < W; x += 45) {
@@ -1446,15 +1483,15 @@ export default function SettingsPage() {
       }
       ctx.restore();
 
-      // 3. Header Section (Logo + Clinic Name + Specialty)
+      // 2. Header (Logo + Name)
       let logoImg: HTMLImageElement | null = null;
       if (clinic.logo_url) {
         logoImg = await loadImage(clinic.logo_url);
       }
 
-      const logoSize = 120;
+      const logoSize = 100;
       const logoX = W / 2 - logoSize / 2;
-      const logoY = 60;
+      const logoY = 40;
 
       // Logo Ring
       ctx.save();
@@ -1476,7 +1513,7 @@ export default function SettingsPage() {
       ctx.fill();
       ctx.restore();
 
-      // Logo Image or Icon
+      // Logo Image
       if (logoImg) {
         ctx.save();
         roundRect(logoX, logoY, logoSize, logoSize, 18);
@@ -1491,7 +1528,7 @@ export default function SettingsPage() {
         iconGrad.addColorStop(1, theme.bg3);
         ctx.fillStyle = iconGrad;
         ctx.fill();
-        ctx.font = "70px 'Segoe UI Emoji', Arial";
+        ctx.font = "60px 'Segoe UI Emoji', Arial";
         ctx.textAlign = "center";
         ctx.textBaseline = "middle";
         ctx.fillStyle = "white";
@@ -1500,9 +1537,9 @@ export default function SettingsPage() {
       }
 
       // Clinic Name
-      const clinicNameY = logoY + logoSize + 30;
+      const clinicNameY = logoY + logoSize + 20;
       ctx.save();
-      ctx.font = "900 48px 'Cairo', 'Tajawal', 'Segoe UI', Arial";
+      ctx.font = "900 42px 'Cairo', 'Tajawal', 'Segoe UI', Arial";
       ctx.fillStyle = theme.darkColor;
       ctx.textAlign = "center";
       ctx.textBaseline = "top";
@@ -1514,9 +1551,9 @@ export default function SettingsPage() {
       ctx.restore();
 
       // Specialty Label
-      const specY = clinicNameY + 70;
+      const specY = clinicNameY + 60;
       ctx.save();
-      ctx.font = "600 24px 'Cairo', Arial";
+      ctx.font = "600 22px 'Cairo', Arial";
       ctx.fillStyle = theme.chipText;
       ctx.textAlign = "center";
       ctx.textBaseline = "top";
@@ -1525,16 +1562,58 @@ export default function SettingsPage() {
       ctx.fillText(specLabel, W / 2, specY);
       ctx.restore();
 
-      // 4. Main Hero Image (Center)
+      // 3. Badges (Date & Location)
+      if (promo.end_date) {
+        ctx.save();
+        const badgeW = 240;
+        const badgeH = 44;
+        const badgeX = 60;
+        const badgeY = specY + 50;
+        const badgeGrad = ctx.createLinearGradient(badgeX, badgeY, badgeX, badgeY + badgeH);
+        badgeGrad.addColorStop(0, "#EF4444");
+        badgeGrad.addColorStop(1, "#B91C1C");
+        ctx.fillStyle = badgeGrad;
+        roundRect(badgeX, badgeY, badgeW, badgeH, 22);
+        ctx.fill();
+        ctx.font = "bold 20px 'Cairo', Arial";
+        ctx.fillStyle = "white";
+        ctx.textAlign = "center";
+        ctx.textBaseline = "middle";
+        ctx.direction = "rtl";
+        ctx.fillText(`⏰ حتى ${promo.end_date}`, badgeX + badgeW / 2, badgeY + badgeH / 2);
+        ctx.restore();
+      }
+
+      if (promo.location) {
+        ctx.save();
+        const locW = 240;
+        const locH = 44;
+        const locX = W - 60 - locW;
+        const locY = specY + 50;
+        const locGrad = ctx.createLinearGradient(locX, locY, locX, locY + locH);
+        locGrad.addColorStop(0, "#34D399");
+        locGrad.addColorStop(1, "#059669");
+        ctx.fillStyle = locGrad;
+        roundRect(locX, locY, locW, locH, 22);
+        ctx.fill();
+        ctx.font = "bold 20px 'Cairo', Arial";
+        ctx.fillStyle = "white";
+        ctx.textAlign = "center";
+        ctx.textBaseline = "middle";
+        ctx.direction = "rtl";
+        ctx.fillText(`📍 ${promo.location}`, locX + locW / 2, locY + locH / 2);
+        ctx.restore();
+      }
+
+      // 4. Hero Image (Center)
       const heroImgUrl = pickHeroImage(theme, promo, itemsList);
       const heroImg = await loadImage(heroImgUrl);
 
       const heroX = 60;
-      const heroY = specY + 60;
+      const heroY = specY + 110;
       const heroW = W - 120; // 1080
-      const heroH = 520;
+      const heroH = 420;
 
-      // Hero Shadow
       ctx.save();
       ctx.shadowColor = "rgba(0, 0, 0, 0.25)";
       ctx.shadowBlur = 30;
@@ -1544,12 +1623,10 @@ export default function SettingsPage() {
       ctx.fill();
       ctx.restore();
 
-      // Hero Image Clip
       if (heroImg) {
         ctx.save();
         roundRect(heroX, heroY, heroW, heroH, 24);
         ctx.clip();
-
         const imgRatio = heroImg.width / heroImg.height;
         const boxRatio = heroW / heroH;
         let drawW, drawH, drawX, drawY;
@@ -1565,8 +1642,6 @@ export default function SettingsPage() {
           drawY = heroY - (drawH - heroH) / 2;
         }
         ctx.drawImage(heroImg, drawX, drawY, drawW, drawH);
-
-        // Overlay
         const overlayGrad = ctx.createLinearGradient(heroX, heroY + heroH * 0.5, heroX, heroY + heroH);
         overlayGrad.addColorStop(0, "rgba(0,0,0,0)");
         overlayGrad.addColorStop(1, "rgba(0,0,0,0.5)");
@@ -1581,7 +1656,7 @@ export default function SettingsPage() {
         fallGrad.addColorStop(1, theme.bg3);
         ctx.fillStyle = fallGrad;
         ctx.fill();
-        ctx.font = "200px 'Segoe UI Emoji', Arial";
+        ctx.font = "180px 'Segoe UI Emoji', Arial";
         ctx.textAlign = "center";
         ctx.textBaseline = "middle";
         ctx.fillStyle = "rgba(255,255,255,0.7)";
@@ -1589,9 +1664,9 @@ export default function SettingsPage() {
         ctx.restore();
       }
 
-      // 5. Discount Badge over Hero Image
-      const discountW = 320;
-      const discountH = 80;
+      // 5. Discount Badge (Over Hero)
+      const discountW = 280;
+      const discountH = 70;
       const discountX = W / 2 - discountW / 2;
       const discountY = heroY + heroH - discountH / 2;
 
@@ -1604,12 +1679,11 @@ export default function SettingsPage() {
       discountGrad.addColorStop(0.5, "#F59E0B");
       discountGrad.addColorStop(1, "#B45309");
       ctx.fillStyle = discountGrad;
-      roundRect(discountX, discountY, discountW, discountH, 40);
+      roundRect(discountX, discountY, discountW, discountH, 35);
       ctx.fill();
       ctx.restore();
 
-      // Discount Text
-      ctx.font = "900 44px 'Cairo', Arial";
+      ctx.font = "900 38px 'Cairo', Arial";
       ctx.fillStyle = "#5C1A00";
       ctx.textAlign = "center";
       ctx.textBaseline = "middle";
@@ -1617,81 +1691,182 @@ export default function SettingsPage() {
       const discountText = promo.discount_type === "percentage" ? `${promo.discount_value}% خصم` : `خصم ${promo.discount_value} ريال`;
       ctx.fillText(discountText, W / 2, discountY + discountH / 2 + 2);
 
-      // 6. Promo Title & Description
+      // 6. Title & Description
       const contentY = discountY + discountH + 30;
       
       ctx.save();
-      ctx.font = "900 42px 'Cairo', Arial";
+      ctx.font = "900 40px 'Cairo', Arial";
       ctx.fillStyle = theme.darkColor;
       ctx.textAlign = "center";
       ctx.textBaseline = "top";
       ctx.direction = "rtl";
-      const titleLines = wrapText(ctx, promo.title, W - 120);
+      const titleLines = wrapText(ctx, promo.title, W - 160);
       titleLines.slice(0, 2).forEach((line, idx) => {
-        ctx.fillText(line, W / 2, contentY + idx * 52);
+        ctx.fillText(line, W / 2, contentY + idx * 50);
       });
       ctx.restore();
 
-      let nextY = contentY + (titleLines.length * 52) + 10;
+      let nextY = contentY + (titleLines.length * 50) + 10;
 
       if (promo.description) {
         ctx.save();
-        ctx.font = "600 24px 'Cairo', Arial";
+        ctx.font = "600 22px 'Cairo', Arial";
         ctx.fillStyle = theme.chipText;
         ctx.textAlign = "center";
         ctx.textBaseline = "top";
         ctx.direction = "rtl";
-        const descLines = wrapText(ctx, promo.description, W - 160);
+        const descLines = wrapText(ctx, promo.description, W - 200);
         descLines.slice(0, 2).forEach((line, idx) => {
-          ctx.fillText(line, W / 2, nextY + idx * 34);
+          ctx.fillText(line, W / 2, nextY + idx * 32);
         });
         ctx.restore();
-        nextY += (descLines.length * 34) + 20;
+        nextY += (descLines.length * 32) + 20;
       }
 
       // 7. Services Grid (3 columns)
       const servicesStartY = nextY;
       const servicesPerRow = 3;
       const gridGap = 20;
-      const serviceW = (W - 120 - (servicesPerRow - 1) * gridGap) / servicesPerRow;
-      const serviceH = 90;
+      const cardW = (W - 120 - (servicesPerRow - 1) * gridGap) / servicesPerRow; // ~346
+      const cardH = 130;
 
-      finalItems.forEach((item, idx) => {
-        const row = Math.floor(idx / servicesPerRow);
-        const col = idx % servicesPerRow;
-        const itemX = 60 + col * (serviceW + gridGap);
-        const itemY = servicesStartY + row * (serviceH + gridGap);
+      if (selectedServices.length > 0) {
+        const servicesToDraw = selectedServices.slice(0, 6);
+        
+        for (let i = 0; i < servicesToDraw.length; i++) {
+          const svc = servicesToDraw[i];
+          const row = Math.floor(i / servicesPerRow);
+          const col = i % servicesPerRow;
+          const cx = 60 + col * (cardW + gridGap);
+          const cy = servicesStartY + row * (cardH + gridGap);
 
-        // Service Card Background
-        ctx.save();
-        ctx.shadowColor = "rgba(0, 0, 0, 0.1)";
-        ctx.shadowBlur = 10;
-        ctx.shadowOffsetY = 5;
-        ctx.fillStyle = "white";
-        roundRect(itemX, itemY, serviceW, serviceH, 16);
-        ctx.fill();
-        ctx.restore();
+          // Card Background
+          ctx.save();
+          ctx.shadowColor = "rgba(0,0,0,0.1)";
+          ctx.shadowBlur = 10;
+          ctx.shadowOffsetY = 5;
+          ctx.fillStyle = "#FFFFFF";
+          roundRect(cx, cy, cardW, cardH, 16);
+          ctx.fill();
+          ctx.restore();
 
-        // Service Icon (Green Dot or Emoji)
-        ctx.fillStyle = theme.bg3;
-        ctx.beginPath();
-        ctx.arc(itemX + serviceW / 2, itemY + 30, 12, 0, Math.PI * 2);
-        ctx.fill();
+          // Thumbnail (Circle)
+          const cat = getServiceCategory(svc.name);
+          const thumbUrl = SERVICE_THUMBNAILS[cat] || SERVICE_THUMBNAILS.general;
+          const thumbImg = await loadImage(thumbUrl);
 
-        // Service Text
-        ctx.font = "bold 20px 'Cairo', Arial";
-        ctx.fillStyle = theme.darkColor;
-        ctx.textAlign = "center";
-        ctx.textBaseline = "middle";
-        ctx.direction = "rtl";
-        const displayText = truncateText(ctx, item, serviceW - 30);
-        ctx.fillText(displayText, itemX + serviceW / 2, itemY + serviceH - 28);
-      });
+          if (thumbImg) {
+            ctx.save();
+            ctx.beginPath();
+            ctx.arc(cx + 55, cy + cardH / 2, 40, 0, Math.PI * 2);
+            ctx.clip();
+            ctx.drawImage(thumbImg, cx + 15, cy + cardH / 2 - 40, 80, 80);
+            ctx.restore();
+          } else {
+            ctx.save();
+            ctx.beginPath();
+            ctx.arc(cx + 55, cy + cardH / 2, 40, 0, Math.PI * 2);
+            ctx.fillStyle = theme.bg1;
+            ctx.fill();
+            ctx.restore();
+          }
 
-      // 8. Footer (Location + Phone + CTA)
+          // Icon over Thumbnail
+          ctx.save();
+          ctx.font = "32px 'Segoe UI Emoji', Arial";
+          ctx.textAlign = "center";
+          ctx.textBaseline = "middle";
+          ctx.fillText(getServiceIcon(svc.name), cx + 55, cy + cardH / 2 + 4);
+          ctx.restore();
+
+          // Text (Name & Price)
+          ctx.save();
+          ctx.textAlign = "right";
+          ctx.textBaseline = "top";
+          ctx.direction = "rtl";
+          
+          ctx.font = "bold 20px 'Cairo', Arial";
+          ctx.fillStyle = theme.darkColor;
+          const nameText = truncateText(ctx, svc.name, cardW - 110);
+          ctx.fillText(nameText, cx + cardW - 20, cy + 30);
+
+          if (svc.price) {
+            const finalPrice = calcFinalPrice(svc.price, promo.discount_value, promo.discount_type);
+            if (finalPrice !== null && finalPrice < svc.price) {
+              // Final Price
+              ctx.font = "bold 18px 'Cairo', Arial";
+              ctx.fillStyle = theme.bg3;
+              ctx.fillText(`${finalPrice} ريال`, cx + cardW - 20, cy + 65);
+              
+              // Original Price (Strikethrough)
+              ctx.font = "14px 'Cairo', Arial";
+              ctx.fillStyle = "rgba(0,0,0,0.5)";
+              const origText = `${svc.price}`;
+              const origW = ctx.measureText(origText).width;
+              ctx.fillText(origText, cx + cardW - 20, cy + 90);
+              
+              ctx.strokeStyle = "rgba(0,0,0,0.5)";
+              ctx.lineWidth = 1;
+              ctx.beginPath();
+              ctx.moveTo(cx + cardW - 20, cy + 98);
+              ctx.lineTo(cx + cardW - 20 - origW, cy + 98);
+              ctx.stroke();
+            } else {
+              ctx.font = "bold 18px 'Cairo', Arial";
+              ctx.fillStyle = theme.bg3;
+              ctx.fillText(`${svc.price} ريال`, cx + cardW - 20, cy + 70);
+            }
+          }
+          ctx.restore();
+        }
+      } else {
+        // Fallback to items if no services selected
+        const servicesToDraw = itemsList.slice(0, 6);
+        for (let i = 0; i < servicesToDraw.length; i++) {
+          const item = servicesToDraw[i];
+          const row = Math.floor(i / servicesPerRow);
+          const col = i % servicesPerRow;
+          const cx = 60 + col * (cardW + gridGap);
+          const cy = servicesStartY + row * (cardH + gridGap);
+
+          ctx.save();
+          ctx.shadowColor = "rgba(0,0,0,0.1)";
+          ctx.shadowBlur = 10;
+          ctx.shadowOffsetY = 5;
+          ctx.fillStyle = "#FFFFFF";
+          roundRect(cx, cy, cardW, cardH, 16);
+          ctx.fill();
+          ctx.restore();
+
+          ctx.save();
+          ctx.beginPath();
+          ctx.arc(cx + 55, cy + cardH / 2, 40, 0, Math.PI * 2);
+          ctx.fillStyle = theme.bg1;
+          ctx.fill();
+          ctx.restore();
+
+          ctx.save();
+          ctx.font = "32px 'Segoe UI Emoji', Arial";
+          ctx.textAlign = "center";
+          ctx.textBaseline = "middle";
+          ctx.fillText("🩺", cx + 55, cy + cardH / 2 + 4);
+          ctx.restore();
+
+          ctx.save();
+          ctx.textAlign = "right";
+          ctx.textBaseline = "top";
+          ctx.direction = "rtl";
+          ctx.font = "bold 20px 'Cairo', Arial";
+          ctx.fillStyle = theme.darkColor;
+          const nameText = truncateText(ctx, item, cardW - 110);
+          ctx.fillText(nameText, cx + cardW - 20, cy + 50); // Centered vertically
+          ctx.restore();
+        }
+      }
+
+      // 8. Footer
       const footerY = H - 130;
       
-      // Footer Background Line
       ctx.strokeStyle = theme.bg3;
       ctx.lineWidth = 2;
       ctx.beginPath();
@@ -1699,7 +1874,6 @@ export default function SettingsPage() {
       ctx.lineTo(W - 60, footerY - 20);
       ctx.stroke();
 
-      // Location
       if (promo.location) {
         ctx.save();
         ctx.font = "600 24px 'Cairo', 'Segoe UI Emoji', Arial";
@@ -1711,7 +1885,6 @@ export default function SettingsPage() {
         ctx.restore();
       }
 
-      // Phone
       const phoneText = (promo as any).phone_text || "";
       if (phoneText) {
         ctx.save();
@@ -1739,7 +1912,6 @@ export default function SettingsPage() {
         ctx.restore();
       }
 
-      // CTA Button
       ctx.save();
       const ctaW = 260;
       const ctaH = 55;
@@ -1761,8 +1933,7 @@ export default function SettingsPage() {
       ctx.fillText("احجز الآن 🤖", W / 2, ctaY + ctaH / 2);
       ctx.restore();
 
-      // 9. Export and Upload
-      // ✨ استخدام JPEG بضغط 0.85 لتقليل حجم الملف بنسبة ~80%
+      // 9. Export
       const imageDataUrl = canvas.toDataURL("image/jpeg", 0.85); 
       const base64Data = imageDataUrl.split(",")[1];
       const binaryString = atob(base64Data);
@@ -1834,7 +2005,8 @@ export default function SettingsPage() {
 
       toast({
         title: "✅ اكتمل التصميم الفاخر",
-        description: "صورة إعلانية احترافية جاهزة للنشر",
+        description: "إذا لم يناسبك هذا العرض، يرجى التواصل مع الإدارة لتوليد عرض مناسب آخر.",
+        duration: 6000,
       });
       fetchPromotions();
 
