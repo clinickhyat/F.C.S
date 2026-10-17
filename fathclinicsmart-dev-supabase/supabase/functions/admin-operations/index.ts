@@ -65,7 +65,6 @@ serve(async (req) => {
           return new Response(JSON.stringify({ error: 'فشل في جلب الإعدادات', detail: error.message }), { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
         }
 
-        // Auto-seed default row if missing (e.g. after project remix)
         if (!data) {
           await adminClient.from('system_settings').insert({ id: 1, telegram_bot_token: null, n8n_webhook_url: null });
           data = { telegram_bot_token: null, n8n_webhook_url: null } as any;
@@ -103,7 +102,6 @@ serve(async (req) => {
           return new Response(JSON.stringify({ error: validation.error }), { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
         }
 
-        // Save to system_settings too
         await adminClient.from('system_settings').update({ n8n_webhook_url: webhookUrl, updated_at: new Date().toISOString() }).eq('id', 1);
 
         const { data: clinics } = await adminClient.from('clinics').select('id, bot_token').not('bot_token', 'is', null);
@@ -146,7 +144,6 @@ serve(async (req) => {
       }
 
       case 'activate-subscription-range': {
-        // Activate subscription for an explicit date range chosen by admin (month/quarter/year/custom).
         const { clinicId, endsAt } = params;
         if (!clinicId || !endsAt) {
           return new Response(JSON.stringify({ error: 'بيانات ناقصة' }), { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
@@ -174,6 +171,9 @@ serve(async (req) => {
         return new Response(JSON.stringify({ success: true, endsAt: end.toISOString() }), { headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
       }
 
+      // ============================================================
+      // ✏️ V39.1: get-clinics — جلب البريد من auth.users مباشرة
+      // ============================================================
       case 'get-clinics': {
         const { data: clinics, error } = await adminClient
           .from('clinics')
@@ -184,12 +184,37 @@ serve(async (req) => {
           return new Response(JSON.stringify({ error: 'فشل في جلب العيادات' }), { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
         }
 
+        // ✅ V39.1: جلب البريد من auth.users (المصدر الرسمي) بدل profiles.email
+        const emailById = new Map<string, string>();
+        try {
+          let page = 1;
+          const perPage = 1000;
+          const MAX_PAGES = 20; // safety: يغطي حتى 20000 مستخدم
+          while (page <= MAX_PAGES) {
+            const { data: usersPage, error: usersErr } = await adminClient.auth.admin.listUsers({ page, perPage });
+            if (usersErr) {
+              console.error('auth.admin.listUsers error:', usersErr);
+              break;
+            }
+            const users = usersPage?.users || [];
+            for (const u of users) {
+              if (u.id && u.email) emailById.set(u.id, u.email);
+            }
+            if (users.length < perPage) break;
+            page++;
+          }
+          console.log(`[get-clinics] loaded ${emailById.size} user emails from auth`);
+        } catch (e) {
+          console.error('Failed to fetch auth users:', e);
+        }
+
         const clinicsWithCounts = await Promise.all(
-          (clinics || []).map(async (clinic) => {
+          (clinics || []).map(async (clinic: any) => {
             const { count: patientsCount } = await adminClient.from('patients').select('*', { count: 'exact', head: true }).eq('clinic_id', clinic.id);
             const { count: appointmentsCount } = await adminClient.from('appointments').select('*', { count: 'exact', head: true }).eq('clinic_id', clinic.id);
             return {
               ...clinic,
+              email: emailById.get(clinic.owner_id) || null, // ✅ من auth.users
               subscription: Array.isArray(clinic.subscriptions) ? clinic.subscriptions[0] || null : clinic.subscriptions || null,
               patients_count: patientsCount || 0,
               appointments_count: appointmentsCount || 0,
