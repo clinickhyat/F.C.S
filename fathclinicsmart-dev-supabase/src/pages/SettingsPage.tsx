@@ -18,7 +18,6 @@ import {
   Bot, Building2, CreditCard, Shield, Clock, Activity, Sparkles, Upload, Image, QrCode,
   Download, CalendarClock, Tag, Gift, BadgePercent, ImagePlus, X, Edit, Eye,
 } from "lucide-react";
-import html2canvas from "html2canvas";
 
 // ============================================================
 // MEDICAL TRANSLATION DICTIONARY (V39)
@@ -125,106 +124,113 @@ interface Promotion {
   template?: string;
   items?: string;
   phone_text?: string;
+  location?: string; // ✨ New
   created_at: string;
   service_ids?: string[];
 }
 
+// ============================================================
+// EXTENDED SPECIALTY THEMES (V40 - Added more types + refined images)
+// ============================================================
 const SPECIALTY_THEMES: Record<string, any> = {
   dental: {
     bg1: "#E0F2FE", bg2: "#7DD3FC", bg3: "#0369A1",
-    darkColor: "#0C4A6E",
-    textColor: "#FFFFFF",
+    darkColor: "#0C4A6E", textColor: "#FFFFFF",
     accent: "#F59E0B", accentDark: "#B45309",
     chipBg: "#DBEAFE", chipBorder: "#3B82F6", chipText: "#1E3A8A",
-    icon: "🦷",
-    label: "طب الأسنان",
-    labelEn: "Dental Care",
+    icon: "🦷", label: "طب الأسنان", labelEn: "Dental Care",
     heroImages: [
       "https://images.unsplash.com/photo-1606811971618-4486d14f3f99?w=1200&q=85&auto=format&fit=crop",
       "https://images.unsplash.com/photo-1588776814546-1ffcf47267a5?w=1200&q=85&auto=format&fit=crop",
       "https://images.unsplash.com/photo-1609840114035-3c981b782dfe?w=1200&q=85&auto=format&fit=crop",
-      "https://images.unsplash.com/photo-1629909613654-28e377c37b09?w=1200&q=85&auto=format&fit=crop",
-      "https://images.unsplash.com/photo-1598256989800-fe5f95da9787?w=1200&q=85&auto=format&fit=crop",
     ],
   },
   dermatology: {
     bg1: "#FCE7F3", bg2: "#F9A8D4", bg3: "#BE185D",
-    darkColor: "#831843",
-    textColor: "#FFFFFF",
+    darkColor: "#831843", textColor: "#FFFFFF",
     accent: "#FDE68A", accentDark: "#D97706",
     chipBg: "#FCE7F3", chipBorder: "#DB2777", chipText: "#831843",
-    icon: "✨",
-    label: "الجلدية والتجميل",
-    labelEn: "Dermatology",
+    icon: "✨", label: "الجلدية والتجميل", labelEn: "Dermatology",
     heroImages: [
       "https://images.unsplash.com/photo-1570172619644-dfd03ed5d881?w=1200&q=85&auto=format&fit=crop",
       "https://images.unsplash.com/photo-1616394584738-fc6e612e71b9?w=1200&q=85&auto=format&fit=crop",
-      "https://images.unsplash.com/photo-1571019613454-1cb2f99b2d8b?w=1200&q=85&auto=format&fit=crop",
-      "https://images.unsplash.com/photo-1596178060810-72c633ce5a55?w=1200&q=85&auto=format&fit=crop",
-      "https://images.unsplash.com/photo-1487412720507-e7ab37603c6f?w=1200&q=85&auto=format&fit=crop",
     ],
   },
   gynecology: {
     bg1: "#FBCFE8", bg2: "#F472B6", bg3: "#9F1239",
-    darkColor: "#500724",
-    textColor: "#FFFFFF",
+    darkColor: "#500724", textColor: "#FFFFFF",
     accent: "#FDE68A", accentDark: "#D97706",
     chipBg: "#FBCFE8", chipBorder: "#BE185D", chipText: "#500724",
-    icon: "🌸",
-    label: "النساء والولادة",
-    labelEn: "Gynecology",
+    icon: "🌸", label: "النساء والولادة", labelEn: "Gynecology",
     heroImages: [
       "https://images.unsplash.com/photo-1584515933487-779824d29309?w=1200&q=85&auto=format&fit=crop",
       "https://images.unsplash.com/photo-1519494026892-80bbd2d6fd0d?w=1200&q=85&auto=format&fit=crop",
-      "https://images.unsplash.com/photo-1544207240-6a3a819f2b8f?w=1200&q=85&auto=format&fit=crop",
-      "https://images.unsplash.com/photo-1519824145371-296894a0daa9?w=1200&q=85&auto=format&fit=crop",
-      "https://images.unsplash.com/photo-1595939590890-b1cf80f9e6d7?w=1200&q=85&auto=format&fit=crop",
     ],
   },
   ophthalmology: {
     bg1: "#CFFAFE", bg2: "#67E8F9", bg3: "#0E7490",
-    darkColor: "#164E63",
-    textColor: "#FFFFFF",
+    darkColor: "#164E63", textColor: "#FFFFFF",
     accent: "#FDE68A", accentDark: "#D97706",
     chipBg: "#CFFAFE", chipBorder: "#0891B2", chipText: "#164E63",
-    icon: "👁️",
-    label: "طب العيون",
-    labelEn: "Ophthalmology",
+    icon: "👁️", label: "طب العيون", labelEn: "Ophthalmology",
     heroImages: [
       "https://images.unsplash.com/photo-1587613757226-c22d09e4bd23?w=1200&q=85&auto=format&fit=crop",
-      "https://images.unsplash.com/photo-1616696301631-5c85a1b8b2f2?w=1200&q=85&auto=format&fit=crop",
-      "https://images.unsplash.com/photo-1517841905240-472988babdf9?w=1200&q=85&auto=format&fit=crop",
       "https://images.unsplash.com/photo-1574258495973-f010dfbb5371?w=1200&q=85&auto=format&fit=crop",
-      "https://images.unsplash.com/photo-1622277498692-c8adae60d78e?w=1200&q=85&auto=format&fit=crop",
+    ],
+  },
+  orthopedics: {
+    bg1: "#F3F4F6", bg2: "#D1D5DB", bg3: "#374151",
+    darkColor: "#111827", textColor: "#FFFFFF",
+    accent: "#F59E0B", accentDark: "#B45309",
+    chipBg: "#F3F4F6", chipBorder: "#4B5563", chipText: "#111827",
+    icon: "🦴", label: "العظام والمفاصل", labelEn: "Orthopedics",
+    heroImages: [
+      "https://images.unsplash.com/photo-1595003500447-88ce9a901a9c?w=1200&q=85&auto=format&fit=crop", // x-ray
+      "https://images.unsplash.com/photo-1579684385127-1ef15d508118?w=1200&q=85&auto=format&fit=crop",
+    ],
+  },
+  pediatrics: {
+    bg1: "#FEF3C7", bg2: "#FCD34D", bg3: "#B45309",
+    darkColor: "#78350F", textColor: "#FFFFFF",
+    accent: "#10B981", accentDark: "#047857",
+    chipBg: "#FEF3C7", chipBorder: "#F59E0B", chipText: "#78350F",
+    icon: "🧸", label: "طب الأطفال", labelEn: "Pediatrics",
+    heroImages: [
+      "https://images.unsplash.com/photo-1502740479091-635887520276?w=1200&q=85&auto=format&fit=crop", // child
+      "https://images.unsplash.com/photo-1519689680058-324335c77eba?w=1200&q=85&auto=format&fit=crop",
+    ],
+  },
+  internal: {
+    bg1: "#E0E7FF", bg2: "#A5B4FC", bg3: "#4338CA",
+    darkColor: "#312E81", textColor: "#FFFFFF",
+    accent: "#F59E0B", accentDark: "#B45309",
+    chipBg: "#E0E7FF", chipBorder: "#6366F1", chipText: "#312E81",
+    icon: "🩺", label: "الباطنية", labelEn: "Internal Medicine",
+    heroImages: [
+      "https://images.unsplash.com/photo-1579684385127-1ef15d508118?w=1200&q=85&auto=format&fit=crop", // stethoscope
+      "https://images.unsplash.com/photo-1584982751601-97dcc096659c?w=1200&q=85&auto=format&fit=crop",
     ],
   },
   general: {
     bg1: "#D1FAE5", bg2: "#6EE7B7", bg3: "#047857",
-    darkColor: "#064E3B",
-    textColor: "#FFFFFF",
+    darkColor: "#064E3B", textColor: "#FFFFFF",
     accent: "#FDE68A", accentDark: "#D97706",
     chipBg: "#D1FAE5", chipBorder: "#059669", chipText: "#064E3B",
-    icon: "🏥",
-    label: "الطب العام",
-    labelEn: "General Medicine",
+    icon: "🏥", label: "الطب العام", labelEn: "General Medicine",
     heroImages: [
       "https://images.unsplash.com/photo-1631815589968-fdb09a223b1e?w=1200&q=85&auto=format&fit=crop",
       "https://images.unsplash.com/photo-1519494026892-80bbd2d6fd0d?w=1200&q=85&auto=format&fit=crop",
-      "https://images.unsplash.com/photo-1516549655169-df83a0774514?w=1200&q=85&auto=format&fit=crop",
-      "https://images.unsplash.com/photo-1584982751601-97dcc096659c?w=1200&q=85&auto=format&fit=crop",
-      "https://images.unsplash.com/photo-1666214280391-8ff5bd3c0bf0?w=1200&q=85&auto=format&fit=crop",
     ],
   },
 };
 
+// ✨ Removed generic keywords ("استشارة", "كشف") that were causing irrelevant images
 const SERVICE_KEYWORD_IMAGES: Array<{ keywords: string[]; images: string[] }> = [
   {
     keywords: ["تحليل", "تحاليل", "دم", "مختبر", "معمل", "cbc", "vitamin", "فيتامين"],
     images: [
       "https://images.unsplash.com/photo-1579154204601-01588f351e67?w=1200&q=85&auto=format&fit=crop",
       "https://images.unsplash.com/photo-1582719471384-894fbb16e074?w=1200&q=85&auto=format&fit=crop",
-      "https://images.unsplash.com/photo-1576091160399-112ba8d25d1d?w=1200&q=85&auto=format&fit=crop",
-      "https://images.unsplash.com/photo-1611273426858-450d8e3c9fce?w=1200&q=85&auto=format&fit=crop",
     ],
   },
   {
@@ -232,7 +238,6 @@ const SERVICE_KEYWORD_IMAGES: Array<{ keywords: string[]; images: string[] }> = 
     images: [
       "https://images.unsplash.com/photo-1606811971618-4486d14f3f99?w=1200&q=85&auto=format&fit=crop",
       "https://images.unsplash.com/photo-1588776814546-1ffcf47267a5?w=1200&q=85&auto=format&fit=crop",
-      "https://images.unsplash.com/photo-1598256989800-fe5f95da9787?w=1200&q=85&auto=format&fit=crop",
     ],
   },
   {
@@ -240,7 +245,6 @@ const SERVICE_KEYWORD_IMAGES: Array<{ keywords: string[]; images: string[] }> = 
     images: [
       "https://images.unsplash.com/photo-1570172619644-dfd03ed5d881?w=1200&q=85&auto=format&fit=crop",
       "https://images.unsplash.com/photo-1616394584738-fc6e612e71b9?w=1200&q=85&auto=format&fit=crop",
-      "https://images.unsplash.com/photo-1596178060810-72c633ce5a55?w=1200&q=85&auto=format&fit=crop",
     ],
   },
   {
@@ -248,29 +252,6 @@ const SERVICE_KEYWORD_IMAGES: Array<{ keywords: string[]; images: string[] }> = 
     images: [
       "https://images.unsplash.com/photo-1584515933487-779824d29309?w=1200&q=85&auto=format&fit=crop",
       "https://images.unsplash.com/photo-1519494026892-80bbd2d6fd0d?w=1200&q=85&auto=format&fit=crop",
-      "https://images.unsplash.com/photo-1544207240-6a3a819f2b8f?w=1200&q=85&auto=format&fit=crop",
-    ],
-  },
-  {
-    keywords: ["نظر", "عيون", "فحص نظر", "عدسات", "قرنية"],
-    images: [
-      "https://images.unsplash.com/photo-1587613757226-c22d09e4bd23?w=1200&q=85&auto=format&fit=crop",
-      "https://images.unsplash.com/photo-1616696301631-5c85a1b8b2f2?w=1200&q=85&auto=format&fit=crop",
-      "https://images.unsplash.com/photo-1574258495973-f010dfbb5371?w=1200&q=85&auto=format&fit=crop",
-    ],
-  },
-  {
-    keywords: ["أشعة", "تصوير", "رنين", "مقطعية", "x-ray"],
-    images: [
-      "https://images.unsplash.com/photo-1530026405186-ed1f139313f8?w=1200&q=85&auto=format&fit=crop",
-      "https://images.unsplash.com/photo-1516069677018-378515003435?w=1200&q=85&auto=format&fit=crop",
-    ],
-  },
-  {
-    keywords: ["استشارة", "كشف", "فحص عام", "زيارة"],
-    images: [
-      "https://images.unsplash.com/photo-1516549655169-df83a0774514?w=1200&q=85&auto=format&fit=crop",
-      "https://images.unsplash.com/photo-1631815589968-fdb09a223b1e?w=1200&q=85&auto=format&fit=crop",
     ],
   },
 ];
@@ -284,14 +265,33 @@ function pickHeroImage(theme: any, promo: Promotion, items: string[]): string {
     hash |= 0;
   }
   hash = Math.abs(hash);
+  
+  // Search specific services first
   for (const entry of SERVICE_KEYWORD_IMAGES) {
     if (entry.keywords.some(kw => searchText.includes(kw.toLowerCase()))) {
       return entry.images[hash % entry.images.length];
     }
   }
+  
+  // Fallback to the specialty's hero images
   const heros = theme.heroImages || [];
   if (heros.length === 0) return "";
   return heros[hash % heros.length];
+}
+
+// ✨ Default promo items based on specialty
+function getDefaultPromoItems(specialty: string): string {
+  const defaults: Record<string, string> = {
+    dental: "تنظيف وتلميع الأسنان\nحشوات تجميلية\nتقويم أسنان\nزراعة أسنان",
+    dermatology: "ليزر إزالة الشعر\nفيلر وبوتوكس\nتنظيف بشرة عميق\nعلاج حب الشباب",
+    orthopedics: "علاج خشونة الركبة\nتأهيل ما بعد الكسور\nحقن مفاصل\nفحص هشاشة العظام",
+    pediatrics: "فحص نمو وتطور\nتطعيمات دورية\nعلاج نزلات البرد\nاستشارة تغذية",
+    internal: "فحص شامل\nمتابعة ضغط وسكر\nتحاليل مخبرية\nتخطيط قلب",
+    gynecology: "متابعة الحمل\nسونار رباعي الأبعاد\nفحص نسائي شامل\nتأخر الإنجاب",
+    ophthalmology: "فحص النظر\nقياس ضغط العين\nعمليات الليزك\nعلاج المياه البيضاء",
+    general: "استشارة طبية\nفحص شامل\nتحاليل مخبرية\nمتابعة الأمراض المزمنة",
+  };
+  return defaults[specialty] || "استشارة مجانية\nخصم فوري\nخدمة متميزة";
 }
 
 export default function SettingsPage() {
@@ -337,10 +337,13 @@ export default function SettingsPage() {
   const [newServiceNameEnEdited, setNewServiceNameEnEdited] = useState(false);
   const [editingServiceId, setEditingServiceId] = useState<string | null>(null);
   const [editingServiceNameEn, setEditingServiceNameEn] = useState("");
+  const [editingServicePrice, setEditingServicePrice] = useState("");
 
   const [promotions, setPromotions] = useState<Promotion[]>([]);
   const [promoDialogOpen, setPromoDialogOpen] = useState(false);
   const [editingPromo, setEditingPromo] = useState<Promotion | null>(null);
+  
+  // ✨ Added location to form
   const [promoForm, setPromoForm] = useState<Partial<Promotion>>({
     discount_type: "percentage",
     is_active: true,
@@ -348,8 +351,10 @@ export default function SettingsPage() {
     template: "auto",
     items: "",
     phone_text: "",
+    location: "",
     service_ids: [],
   });
+  
   const [promoImageFile, setPromoImageFile] = useState<File | null>(null);
   const [promoImagePreview, setPromoImagePreview] = useState<string | null>(null);
   const [generatingPromoImage, setGeneratingPromoImage] = useState(false);
@@ -672,17 +677,21 @@ export default function SettingsPage() {
     }
   };
 
-  const handleUpdateServiceNameEn = async (id: string) => {
+  // ✨ Modified to save both name_en and price
+  const handleUpdateService = async (id: string) => {
+    const priceNum = parseFloat(editingServicePrice);
     const { error } = await supabase.from("services").update({
       name_en: editingServiceNameEn.trim() || null,
       name_en_edited_by_user: true,
+      price: isNaN(priceNum) ? null : priceNum,
     }).eq("id", id).eq("clinic_id", clinic?.id || "");
     if (error) {
-      toast({ title: "خطأ", description: "فشل تحديث الاسم الإنجليزي", variant: "destructive" });
+      toast({ title: "خطأ", description: "فشل تحديث بيانات الخدمة", variant: "destructive" });
     } else {
       toast({ title: "تم التحديث ✓" });
       setEditingServiceId(null);
       setEditingServiceNameEn("");
+      setEditingServicePrice("");
       fetchServices();
     }
   };
@@ -957,8 +966,9 @@ export default function SettingsPage() {
       is_active: true,
       per_user_limit: 1,
       template: "auto",
-      items: "",
+      items: getDefaultPromoItems(clinicSpecialty), // ✨ Auto-fill items
       phone_text: "",
+      location: "", // ✨
       service_ids: [],
     });
     setPromoImageFile(null);
@@ -984,6 +994,7 @@ export default function SettingsPage() {
         template: promo.template || "auto",
         items: promo.items || "",
         phone_text: promo.phone_text || "",
+        location: promo.location || "", // ✨
         service_ids: promo.service_ids || [],
       });
       if (promo.image_url) setPromoImagePreview(promo.image_url);
@@ -1061,6 +1072,7 @@ export default function SettingsPage() {
       template: promoForm.template || "auto",
       items: promoForm.items || null,
       phone_text: promoForm.phone_text || null,
+      location: promoForm.location || null, // ✨ Save location
       service_ids: promoForm.service_ids || [],
     };
     let error;
@@ -1117,7 +1129,7 @@ export default function SettingsPage() {
 
       const finalItems = itemsList.length > 0
         ? itemsList.slice(0, 9)
-        : ["استشارة مجانية", "خصم فوري", "خدمة متميزة"];
+        : getDefaultPromoItems(specialty).split('\n').slice(0, 9);
 
       const W = 1200;
       const H = 1500;
@@ -1315,6 +1327,8 @@ export default function SettingsPage() {
         ctx.restore();
       }
 
+      // ✨ Adjusted spacing for clinic name to avoid overlap
+      const clinicNameY = logoY + logoSize + 50;
       ctx.save();
       ctx.font = "900 50px 'Cairo', 'Tajawal', 'Segoe UI', Arial";
       ctx.fillStyle = theme.darkColor;
@@ -1324,16 +1338,17 @@ export default function SettingsPage() {
       ctx.shadowColor = "rgba(0, 0, 0, 0.15)";
       ctx.shadowBlur = 8;
       ctx.shadowOffsetY = 2;
-      ctx.fillText(clinic.name, W / 2, logoY + logoSize + 24);
+      ctx.fillText(clinic.name, W / 2, clinicNameY);
       ctx.restore();
 
+      const specY = clinicNameY + 80;
       ctx.save();
       ctx.font = "600 22px 'Cairo', Arial";
       ctx.fillStyle = theme.chipText;
       ctx.textAlign = "center";
       ctx.textBaseline = "top";
       ctx.direction = "rtl";
-      ctx.fillText(`${theme.label}  •  ${theme.labelEn}`, W / 2, logoY + logoSize + 88);
+      ctx.fillText(`${theme.label}  •  ${theme.labelEn}`, W / 2, specY);
       ctx.restore();
 
       ctx.save();
@@ -1341,11 +1356,12 @@ export default function SettingsPage() {
       ctx.lineWidth = 4;
       ctx.lineCap = "round";
       ctx.beginPath();
-      ctx.moveTo(W / 2 - 60, logoY + logoSize + 128);
-      ctx.lineTo(W / 2 + 60, logoY + logoSize + 128);
+      ctx.moveTo(W / 2 - 60, specY + 45);
+      ctx.lineTo(W / 2 + 60, specY + 45);
       ctx.stroke();
       ctx.restore();
 
+      // ✨ Added location pill and fixed date badge position
       if (promo.end_date) {
         ctx.save();
         const badgeW = 280;
@@ -1373,10 +1389,39 @@ export default function SettingsPage() {
         ctx.restore();
       }
 
+      if (promo.location) {
+        ctx.save();
+        const locW = 280;
+        const locH = 52;
+        const locX = 40;
+        const locY = promo.end_date ? 130 : 60;
+
+        ctx.shadowColor = "rgba(16, 185, 129, 0.4)";
+        ctx.shadowBlur = 15;
+        ctx.shadowOffsetY = 4;
+        const locGrad = ctx.createLinearGradient(locX, locY, locX, locY + locH);
+        locGrad.addColorStop(0, "#34D399");
+        locGrad.addColorStop(1, "#059669");
+        ctx.fillStyle = locGrad;
+        roundRect(locX, locY, locW, locH, 26);
+        ctx.fill();
+        ctx.shadowColor = "transparent";
+
+        ctx.font = "bold 22px 'Cairo', Arial";
+        ctx.fillStyle = "white";
+        ctx.textAlign = "center";
+        ctx.textBaseline = "middle";
+        ctx.direction = "rtl";
+        ctx.fillText(`📍 ${promo.location}`, locX + locW / 2, locY + locH / 2);
+        ctx.restore();
+      }
+
       const rightX = W - 60;
       const rightColW = W - heroX - heroW - 120;
       const rightColCenter = heroX + heroW + 60 + rightColW / 2;
 
+      const titleY = promo.description ? 330 : 380; // Adjust based on if there's description
+      
       ctx.save();
       ctx.font = "900 58px 'Cairo', Arial";
       ctx.fillStyle = theme.darkColor;
@@ -1385,7 +1430,7 @@ export default function SettingsPage() {
       ctx.direction = "rtl";
       const titleLines = wrapText(ctx, promo.title, rightColW);
       titleLines.slice(0, 2).forEach((line, idx) => {
-        ctx.fillText(line, rightX, 350 + idx * 68);
+        ctx.fillText(line, rightX, titleY + idx * 68);
       });
       ctx.restore();
 
@@ -1398,13 +1443,13 @@ export default function SettingsPage() {
         ctx.direction = "rtl";
         const descLines = wrapText(ctx, promo.description, rightColW);
         descLines.slice(0, 3).forEach((line, idx) => {
-          ctx.fillText(line, rightX, 510 + idx * 32);
+          ctx.fillText(line, rightX, titleY + 150 + idx * 32);
         });
         ctx.restore();
       }
 
       const discountCenterX = rightColCenter;
-      const discountY = 660;
+      const discountY = promo.description ? 560 : 480; // Adjust for description
       const numStr = String(promo.discount_value);
       const unitStr = promo.discount_type === "percentage" ? "%" : "ريال";
 
@@ -1504,7 +1549,7 @@ export default function SettingsPage() {
       ctx.fillText(unitStr, discountCenterX, unitY + unitH / 2 + 2);
       ctx.restore();
 
-      const chipsStartY = 1180;
+      const chipsStartY = 1200; // shifted down slightly
       const chipsPerRow = 2;
       const chipsRightAreaX = heroX + heroW + 60;
       const chipsRightAreaW = W - chipsRightAreaX - 40;
@@ -1944,10 +1989,13 @@ export default function SettingsPage() {
                   </SelectTrigger>
                   <SelectContent>
                     <SelectItem value="dental">🦷 أسنان</SelectItem>
-                    <SelectItem value="dermatology">✨ جلدية</SelectItem>
+                    <SelectItem value="dermatology">✨ جلدية وتجميل</SelectItem>
                     <SelectItem value="gynecology">👩‍⚕️ نساء وولادة</SelectItem>
                     <SelectItem value="ophthalmology">👁️ عيون</SelectItem>
-                    <SelectItem value="general">🏥 عام</SelectItem>
+                    <SelectItem value="orthopedics">🦴 عظام ومفاصل</SelectItem>
+                    <SelectItem value="pediatrics">🧸 أطفال</SelectItem>
+                    <SelectItem value="internal">🩺 باطنية</SelectItem>
+                    <SelectItem value="general">🏥 طب عام</SelectItem>
                   </SelectContent>
                 </Select>
                 <p className="text-xs text-muted-foreground">يستخدم هذا التخصص في تصميم صور العروض وملصق QR</p>
@@ -2653,16 +2701,23 @@ export default function SettingsPage() {
                       <div className="flex-1 min-w-0">
                         <p className="font-semibold text-foreground">{service.name}</p>
                         {editingServiceId === service.id ? (
-                          <div className="flex gap-2 mt-2">
+                          <div className="flex flex-wrap gap-2 mt-2">
                             <Input
                               value={editingServiceNameEn}
                               onChange={(e) => setEditingServiceNameEn(e.target.value)}
                               dir="ltr"
-                              className="h-8 text-sm"
+                              className="h-8 text-sm flex-1"
                               placeholder="English name"
                               autoFocus
                             />
-                            <Button size="sm" onClick={() => handleUpdateServiceNameEn(service.id)}>
+                            <Input
+                              type="number"
+                              value={editingServicePrice}
+                              onChange={(e) => setEditingServicePrice(e.target.value)}
+                              className="h-8 text-sm w-24"
+                              placeholder="السعر"
+                            />
+                            <Button size="sm" onClick={() => handleUpdateService(service.id)}>
                               <Check className="w-4 h-4" />
                             </Button>
                             <Button size="sm" variant="ghost" onClick={() => setEditingServiceId(null)}>
@@ -2670,19 +2725,21 @@ export default function SettingsPage() {
                             </Button>
                           </div>
                         ) : (
-                          <p className="text-xs text-muted-foreground mt-0.5 flex items-center gap-2" dir="ltr">
-                            <span className="font-mono">{service.name_en || "—"}</span>
+                          <div className="flex items-center gap-3 mt-1">
+                            <p className="text-xs text-muted-foreground font-mono" dir="ltr">
+                              {service.name_en || "—"}
+                            </p>
+                            <p className="text-sm text-primary font-bold">
+                              {service.price === null ? "حسب الفحص" : Number(service.price).toLocaleString()}
+                            </p>
                             <button
-                              onClick={() => { setEditingServiceId(service.id); setEditingServiceNameEn(service.name_en || ""); }}
+                              onClick={() => { setEditingServiceId(service.id); setEditingServiceNameEn(service.name_en || ""); setEditingServicePrice(service.price !== null ? String(service.price) : ""); }}
                               className="text-primary hover:underline text-[10px]"
                             >
                               ✏️ تعديل
                             </button>
-                          </p>
+                          </div>
                         )}
-                        <p className="text-sm text-primary font-bold mt-1">
-                          {service.price === null ? "حسب الفحص" : Number(service.price).toLocaleString()}
-                        </p>
                       </div>
                       <Button
                         variant="ghost"
@@ -2886,6 +2943,14 @@ export default function SettingsPage() {
             </div>
 
             <div className="space-y-4">
+              <div>
+                <Label className="text-sm font-medium">موقع العيادة (يظهر في التصميم)</Label>
+                <Input
+                  value={promoForm.location || ""}
+                  onChange={(e) => setPromoForm({ ...promoForm, location: e.target.value })}
+                  placeholder="مثال: مكة المكرمة - بطحاء قريش"
+                />
+              </div>
               <div>
                 <Label className="text-sm font-medium">تاريخ البداية</Label>
                 <Input
