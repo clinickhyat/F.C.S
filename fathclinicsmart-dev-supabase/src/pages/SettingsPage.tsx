@@ -327,112 +327,118 @@ const SPECIALTY_THEMES: Record<string, any> = {
 };
 
 // ============================================================
-// V41: PROMO CONTENT TEMPLATES
+// V41: PROMO CONTENT TEMPLATES (Now with marketing text for 'items')
 // ============================================================
 const PROMO_TEMPLATES: Record<string, { title: string; description: string; items: string }> = {
   dental: {
     title: "ابتسم بثقة.. عرض حصري لصحة أسنانك",
     description: "احصل على أسنان أكثر بياضاً وإشراقاً، وعلاج آمن لأسنانك بأحدث التقنيات.",
-    items: "تبييض بالليزر\nتنظيف وتلميع\nحشوات تجميلية\nتقويم شفاف\nزراعة أسنان",
+    items: "خصم يصل إلى 30% • كشف مجاني • عروض لفترة محدودة",
   },
   dermatology: {
     title: "جمال بلا شوائب.. عرض تجميل متكامل",
     description: "نضارة وحيوية لبشرتك وشعرك مع أحدث أجهزة الليزر والفيلر والبوتوكس.",
-    items: "ليزر إزالة الشعر\nفيلر وبوتوكس\nتنظيف بشرة عميق\nعلاج حب الشباب\nبلازما للشعر",
+    items: "خصم يصل إلى 25% • استشارة مجانية • نتائج مضمونة",
   },
   gynecology: {
     title: "رعاية شاملة لصحة المرأة والولادة",
     description: "متابعة الحمل، السونار، والفحوصات النسائية الدقيقة بأيدي طبيبات متميزات.",
-    items: "متابعة الحمل\nسونار رباعي الأبعاد\nفحص نسائي شامل\nتأخر الإنجاب\nتركيب لولب",
+    items: "خصم يصل إلى 20% • متابعة مستمرة • أحدث الأجهزة",
   },
   ophthalmology: {
     title: "أبصر الحياة بوضوح.. عروض العيون",
     description: "فحص دقيق للنظر، وعلاج قصر النظر، والمياه البيضاء بأحدث أجهزة الليزر.",
-    items: "فحص النظر\nقياس ضغط العين\nعمليات الليزك\nعلاج المياه البيضاء\nعدسات لاصقة",
+    items: "خصم يصل إلى 35% • فحص مجاني • تقنيات متطورة",
   },
   orthopedics: {
     title: "رجوع للحركة بلا ألم.. عروض العظام",
     description: "علاج خشونة المفاصل، تثبيت الكسور، وحقن المفاصل مع برامج تأهيل متكاملة.",
-    items: "علاج خشونة الركبة\nتأهيل ما بعد الكسور\nحقن مفاصل\nفحص هشاشة العظام\nعمليات المناظير",
+    items: "خصم يصل إلى 20% • استشارة مجانية • تأهيل شامل",
   },
   pediatrics: {
     title: "صحة طفلك أولويتنا.. عروض الأطفال",
     description: "متابعة نمو وتطور طفلك، التطعيمات، وعلاج نزلات البرد والحساسية.",
-    items: "فحص نمو وتطور\nتطعيمات دورية\nعلاج نزلات البرد\nاستشارة تغذية\nفحص حديثي الولادة",
+    items: "خصم يصل إلى 25% • كشف مجاني • عناية متكاملة",
   },
   internal: {
     title: "صحتك الداخلية بأيدٍ أمينة",
     description: "فحوصات شاملة، ومتابعة الضغط والسكر والكوليسترول بأحدث التحاليل.",
-    items: "فحص شامل\nمتابعة ضغط وسكر\nتحاليل مخبرية\nتخطيط قلب\nعلاج السمنة",
+    items: "خصم يصل إلى 20% • فحص شامل • متابعة دورية",
   },
   general: {
     title: "رعاية طبية شاملة لكل أفراد العائلة",
     description: "استشارات عامة، فحوصات دورية، ومتابعة الأمراض المزمنة بأسعار مناسبة.",
-    items: "استشارة طبية\nفحص شامل\nتحاليل مخبرية\nمتابعة الأمراض المزمنة\nتطعيمات",
+    items: "خصم يصل إلى 20% • كشف مجاني • خدمات متميزة",
   },
   lab: {
     title: "دقة في التحاليل.. نتائج مضمونة",
     description: "نقدم جميع التحاليل الطبية بأحدث الأجهزة وبأسعار تنافسية ونتائج سريعة.",
-    items: "تحليل دم شامل\nفحص سكر\nوظائف كبد وكلى\nفحص فيتامين د\nتحليل هرمونات",
+    items: "خصم يصل إلى 40% • نتائج سريعة • عروض لفترة محدودة",
   },
   surgery: {
     title: "جراحة آمنة.. وأيدٍ خبيرة",
     description: "إجراء العمليات الجراحية الدقيقة بأحدث تقنيات المناظير وضمان أفضل النتائج.",
-    items: "استشارة جراحية\nجراحة مناظير\nجراحة عامة\nخياطة جرح\nإزالة أكياس",
+    items: "خصم يصل إلى 20% • استشارة مجانية • رعاية متكاملة",
   },
   cardiology: {
     title: "قلبك بأمان.. رعاية متخصصة",
     description: "تخطيط القلب، الإيكو، ومتابعة الضغط وعلاج أمراض القلب بأحدث الأجهزة.",
-    items: "تخطيط قلب\nإيكو\nهولتر\nمتابعة ضغط\nاستشارة قلب",
+    items: "خصم يصل إلى 25% • فحص مجاني • أجهزة حديثة",
   },
   neurology: {
     title: "صحة أعصابك تبدأ بالعناية",
     description: "علاج الصداع النصفي، التشنجات، وآلام الأعصاب، والتقييم العصبي الشامل.",
-    items: "استشارة أعصاب\nعلاج الصداع\nرسم مخ\nعلاج التشنجات\nتأهيل عصبي",
+    items: "خصم يصل إلى 20% • استشارة مجانية • تقييم شامل",
   },
   ent: {
     title: "تنفس بسهولة واسمع بوضوح",
     description: "علاج مشاكل الأنف والأذن والحنجرة، الجيوب الأنفية، وضعف السمع.",
-    items: "فحص أنف وأذن\nعلاج الجيوب\nتجميل الأنف\nقياس السمع\nإزالة اللحمية",
+    items: "خصم يصل إلى 25% • كشف مجاني • تقنيات متطورة",
   },
   pharmacy: {
     title: "دواءك.. بأسعار موفرة",
     description: "نقدم جميع الأدوية والمستلزمات الطبية مع خصومات وعروض حصرية.",
-    items: "أدوية بوصفة\nمستلزمات طبية\nفيتامينات\nمستحضرات تجميل\nعناية بالبشرة",
+    items: "خصم يصل إلى 15% • عروض حصرية • خدمة سريعة",
   },
   radiology: {
     title: "تشخيص دقيق.. بجودة عالية",
     description: "أحدث أجهزة الأشعة السينية، المقطعية، والرنين المغناطيسي مع قراءة دقيقة.",
-    items: "أشعة سينية\nأشعة مقطعية\nرنين مغناطيسي\nسونار\nفحص كثافة العظام",
+    items: "خصم يصل إلى 20% • دقة عالية • نتائج سريعة",
   },
   physiotherapy: {
     title: "استعد لياقتك وحركتك",
     description: "علاج طبيعي متكامل لإصابات الملاعب، آلام الظهر، وتأهيل ما بعد الجراحة.",
-    items: "تأهيل إصابات\nعلاج آلام الظهر\nتأهيل عصبي\nعلاج طبيعي\nاستشارة تأهيل",
+    items: "خصم يصل إلى 25% • جلسات مخصصة • تأهيل شامل",
   },
   nutrition: {
     title: "نحو حياة صحية.. بوزن مثالي",
     description: "برامج غذائية مخصصة، وعلاج السمنة والنحافة بأيدي أخصائيي تغذية.",
-    items: "استشارة تغذية\nبرنامج تخسيس\nعلاج سمنة\nاستشارة رياضية\nتحليل مكونات الجسم",
+    items: "خصم يصل إلى 30% • استشارة مجانية • برامج مخصصة",
   },
   psychiatry: {
     title: "لنكن بخير نفسياً",
     description: "استشارات نفسية، علاج القلق والاكتئاب، والتأهيل النفسي بأحدث المناهج.",
-    items: "استشارة نفسية\nعلاج قلق\nعلاج اكتئاب\nتأهيل نفسي\nجلسات توعية",
+    items: "خصم يصل إلى 20% • استشارة مجانية • خصوصية تامة",
   },
   other: {
     title: "عيادتنا.. جودة ورعاية",
     description: "خدمات طبية متكاملة بأحدث الأجهزة وأيدي أطباء متخصصين.",
-    items: "استشارة طبية\nفحص شامل\nمتابعة دورية\nخدمة متميزة",
+    items: "خصم يصل إلى 20% • خدمة متميزة • متابعة دورية",
   },
 };
 
 // ============================================================
-// V42: SERVICE THUMBNAILS & ICONS
+// V42: SERVICE THUMBNAILS & ICONS (Detailed medical images)
 // ============================================================
 const SERVICE_THUMBNAILS: Record<string, string> = {
+  sugar: "https://images.unsplash.com/photo-1579684385127-1ef15d508118?w=200&q=80",
+  kidney: "https://images.unsplash.com/photo-1582719471384-894fbb16e074?w=200&q=80",
+  liver: "https://images.unsplash.com/photo-1579154204601-01588f351e67?w=200&q=80",
+  vitamin: "https://images.unsplash.com/photo-1576091160399-112ba8d25d1d?w=200&q=80",
+  hormone: "https://images.unsplash.com/photo-1579684385127-1ef15d508118?w=200&q=80",
+  stool: "https://images.unsplash.com/photo-1579154204601-01588f351e67?w=200&q=80",
+  urine: "https://images.unsplash.com/photo-1579154204601-01588f351e67?w=200&q=80",
   dental: "https://images.unsplash.com/photo-1606811971618-4486d14f3f99?w=200&q=80",
-  lab: "https://images.unsplash.com/photo-1579154204601-01588f351e67?w=200&q=80",
   cardiology: "https://images.unsplash.com/photo-1628348068343-c6a848d2b6dd?w=200&q=80",
   ophthalmology: "https://images.unsplash.com/photo-1587613757226-c22d09e4bd23?w=200&q=80",
   orthopedics: "https://images.unsplash.com/photo-1595003500447-88ce9a901a9c?w=200&q=80",
@@ -444,7 +450,12 @@ const SERVICE_THUMBNAILS: Record<string, string> = {
 
 function getServiceCategory(name: string): string {
   const n = name.toLowerCase();
-  if (n.includes('دم') || n.includes('تحليل') || n.includes('سكر') || n.includes('مختبر')) return 'lab';
+  if (n.includes('سكر') || n.includes('انسولين') || n.includes('تراكمي')) return 'sugar';
+  if (n.includes('كلى') || n.includes('بول') || n.includes('بروتين')) return 'kidney';
+  if (n.includes('كبد') || n.includes('انزيمات')) return 'liver';
+  if (n.includes('فيتامين') || n.includes('كالسيوم') || n.includes('حديد')) return 'vitamin';
+  if (n.includes('هرمون') || n.includes('غدة') || n.includes('درقية')) return 'hormone';
+  if (n.includes('براز') || n.includes('دم خفي')) return 'stool';
   if (n.includes('أسنان') || n.includes('حشو') || n.includes('تقويم') || n.includes('تبييض')) return 'dental';
   if (n.includes('قلب') || n.includes('إيكو') || n.includes('تخطيط')) return 'cardiology';
   if (n.includes('عيون') || n.includes('نظر') || n.includes('ليزك')) return 'ophthalmology';
@@ -458,10 +469,33 @@ function getServiceCategory(name: string): string {
 function getServiceIcon(name: string): string {
   const cat = getServiceCategory(name);
   const icons: Record<string, string> = {
-    lab: '🧪', dental: '🦷', cardiology: '❤️', ophthalmology: '👁️',
+    sugar: '🩸', kidney: '🧪', liver: '🫀', vitamin: '💊', hormone: '⚗️', stool: '🧫', urine: '🧪',
+    dental: '🦷', cardiology: '❤️', ophthalmology: '👁️',
     orthopedics: '🦴', dermatology: '✨', pediatrics: '🧸', gynecology: '🤰', general: '🩺'
   };
   return icons[cat] || '🩺';
+}
+
+function getServiceDescription(name: string): string {
+  const cat = getServiceCategory(name);
+  const descs: Record<string, string> = {
+    sugar: "نتائج دقيقة لمتابعة السكري",
+    kidney: "تقييم شامل لوظائف الكلى",
+    liver: "فحص دقيق لوظائف الكبد",
+    vitamin: "متابعة مستويات الفيتامينات",
+    hormone: "تحليل شامل للهرمونات",
+    stool: "فحص مخبري دقيق",
+    urine: "تحليل شامل للبول",
+    dental: "عناية متكاملة بالأسنان",
+    cardiology: "رعاية متخصصة للقلب",
+    ophthalmology: "فحص دقيق للنظر",
+    orthopedics: "علاج فعال للعظام والمفاصل",
+    dermatology: "عناية فائقة بالبشرة",
+    pediatrics: "رعاية شاملة لصحة طفلك",
+    gynecology: "متابعة دقيقة لصحة المرأة",
+    general: "خدمة طبية متميزة"
+  };
+  return descs[cat] || "خدمة طبية متميزة";
 }
 
 function calcFinalPrice(original: number | null, discountValue: number, discountType: string): number | null {
@@ -1664,12 +1698,12 @@ export default function SettingsPage() {
         ctx.restore();
       }
 
-      // 8. Services Grid
+      // 8. Services Grid (2 columns for wider cards)
       const servicesStartY = currentY + 20;
-      const servicesPerRow = 3;
+      const servicesPerRow = 2;
       const gridGap = 20;
-      const cardW = (W - 120 - (servicesPerRow - 1) * gridGap) / servicesPerRow;
-      const cardH = 120;
+      const cardW = (W - 120 - gridGap) / 2; // ~530
+      const cardH = 140;
 
       if (selectedServices.length > 0) {
         const servicesToDraw = selectedServices.slice(0, 6);
@@ -1699,10 +1733,10 @@ export default function SettingsPage() {
           ctx.stroke();
           ctx.restore();
           
-          // Thumbnail/Icon
-          const thumbSize = 70;
+          // Thumbnail
+          const thumbSize = 90;
           const thumbX = cx + 20;
-          const thumbY = cy + cardH/2 - thumbSize/2;
+          const thumbY = cy + (cardH - thumbSize)/2;
           
           ctx.save();
           ctx.fillStyle = theme.bg1;
@@ -1720,10 +1754,10 @@ export default function SettingsPage() {
             ctx.clip();
             ctx.drawImage(thumbImg, thumbX, thumbY, thumbSize, thumbSize);
           } else {
-            ctx.font = "40px 'Segoe UI Emoji', Arial";
+            ctx.font = "50px 'Segoe UI Emoji', Arial";
             ctx.textAlign = "center";
             ctx.textBaseline = "middle";
-            ctx.fillText(getServiceIcon(svc.name), thumbX + thumbSize/2, thumbY + thumbSize/2 + 4);
+            ctx.fillText(getServiceIcon(svc.name), thumbX + thumbSize/2, thumbY + thumbSize/2 + 5);
           }
           ctx.restore();
           
@@ -1733,34 +1767,39 @@ export default function SettingsPage() {
           ctx.textBaseline = "top";
           ctx.direction = "rtl";
           
-          ctx.font = "bold 22px 'Cairo', Arial";
+          ctx.font = "bold 24px 'Cairo', Arial";
           ctx.fillStyle = theme.darkColor;
-          const nameText = truncateText(ctx, svc.name, cardW - 110);
+          const nameText = truncateText(ctx, svc.name, cardW - 140);
           ctx.fillText(nameText, cx + cardW - 20, cy + 25);
+          
+          ctx.font = "16px 'Cairo', Arial";
+          ctx.fillStyle = theme.chipText;
+          const desc = getServiceDescription(svc.name);
+          ctx.fillText(desc, cx + cardW - 20, cy + 60);
           
           if (svc.price) {
             const finalPrice = calcFinalPrice(svc.price, promo.discount_value, promo.discount_type);
             if (finalPrice !== null && finalPrice < svc.price) {
-              ctx.font = "bold 20px 'Cairo', Arial";
+              ctx.font = "bold 22px 'Cairo', Arial";
               ctx.fillStyle = theme.bg3;
-              ctx.fillText(`${finalPrice} ريال`, cx + cardW - 20, cy + 60);
+              ctx.fillText(`${finalPrice} ريال`, cx + cardW - 20, cy + 95);
               
               ctx.font = "16px 'Cairo', Arial";
               ctx.fillStyle = "rgba(0,0,0,0.4)";
               const origText = `${svc.price}`;
-              ctx.fillText(origText, cx + cardW - 20, cy + 90);
+              ctx.fillText(origText, cx + cardW - 20 - ctx.measureText(`${finalPrice} ريال`).width - 10, cy + 100);
               
               const origW = ctx.measureText(origText).width;
               ctx.strokeStyle = "rgba(0,0,0,0.4)";
               ctx.lineWidth = 1.5;
               ctx.beginPath();
-              ctx.moveTo(cx + cardW - 20, cy + 100);
-              ctx.lineTo(cx + cardW - 20 - origW, cy + 100);
+              ctx.moveTo(cx + cardW - 20 - ctx.measureText(`${finalPrice} ريال`).width - 10, cy + 110);
+              ctx.lineTo(cx + cardW - 20 - ctx.measureText(`${finalPrice} ريال`).width - 10 - origW, cy + 110);
               ctx.stroke();
             } else {
-              ctx.font = "bold 20px 'Cairo', Arial";
+              ctx.font = "bold 22px 'Cairo', Arial";
               ctx.fillStyle = theme.bg3;
-              ctx.fillText(`${svc.price} ريال`, cx + cardW - 20, cy + 65);
+              ctx.fillText(`${svc.price} ريال`, cx + cardW - 20, cy + 95);
             }
           }
           ctx.restore();
@@ -3096,15 +3135,15 @@ export default function SettingsPage() {
               </div>
 
               <div>
-                <Label className="text-sm font-medium">عناصر الإعلان (نصوص زخرفية للصورة فقط)</Label>
+                <Label className="text-sm font-medium">عناصر الإعلان (نصوص ترويجية)</Label>
                 <textarea
                   value={promoForm.items || ""}
                   onChange={(e) => setPromoForm({ ...promoForm, items: e.target.value })}
-                  placeholder={"مثال:\nتحاليل دقيقة\nاستشارة مجانية\nخصم للعائلات"}
+                  placeholder={"مثال:\nخصم يصل إلى 30%\nكشف مجاني\nعروض لفترة محدودة"}
                   className="w-full h-20 rounded-md border border-input bg-background px-3 py-2 text-sm"
                 />
                 <p className="text-[10px] text-muted-foreground mt-1">
-                  نصوص اختيارية تظهر في الصورة الإعلانية المولدة.
+                  نصوص ترويجية تظهر في الصورة الإعلانية المولدة (مفصولة بـ • أو سطر جديد).
                 </p>
               </div>
             </div>
