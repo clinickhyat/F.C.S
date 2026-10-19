@@ -130,216 +130,154 @@ interface Promotion {
 }
 
 // ============================================================
-// EXTENDED SPECIALTY THEMES (18 Specialties + Other)
+// EXTENDED SPECIALTY THEMES
 // ============================================================
 const SPECIALTY_THEMES: Record<string, any> = {
   dental: {
-    bg1: "#E0F2FE", bg2: "#7DD3FC", bg3: "#0369A1",
+    bg1: "#E0F2FE", bg2: "#BAE6FD", bg3: "#0369A1",
     darkColor: "#0C4A6E", textColor: "#FFFFFF",
     accent: "#F59E0B", accentDark: "#B45309",
-    chipBg: "#DBEAFE", chipBorder: "#3B82F6", chipText: "#1E3A8A",
+    chipBg: "#FFFFFF", chipBorder: "#3B82F6", chipText: "#1E3A8A",
     icon: "🦷", label: "طب الأسنان", labelEn: "Dental Care",
     heroImages: [
       "https://images.unsplash.com/photo-1606811971618-4486d14f3f99?w=1200&q=85&auto=format&fit=crop",
       "https://images.unsplash.com/photo-1588776814546-1ffcf47267a5?w=1200&q=85&auto=format&fit=crop",
     ],
   },
-  dermatology: {
-    bg1: "#FCE7F3", bg2: "#F9A8D4", bg3: "#BE185D",
-    darkColor: "#831843", textColor: "#FFFFFF",
-    accent: "#FDE68A", accentDark: "#D97706",
-    chipBg: "#FCE7F3", chipBorder: "#DB2777", chipText: "#831843",
-    icon: "✨", label: "الجلدية والتجميل", labelEn: "Dermatology",
-    heroImages: [
-      "https://images.unsplash.com/photo-1570172619644-dfd03ed5d881?w=1200&q=85&auto=format&fit=crop",
-      "https://images.unsplash.com/photo-1616394584738-fc6e612e71b9?w=1200&q=85&auto=format&fit=crop",
-    ],
-  },
-  gynecology: {
-    bg1: "#FBCFE8", bg2: "#F472B6", bg3: "#9F1239",
-    darkColor: "#500724", textColor: "#FFFFFF",
-    accent: "#FDE68A", accentDark: "#D97706",
-    chipBg: "#FBCFE8", chipBorder: "#BE185D", chipText: "#500724",
-    icon: "🌸", label: "النساء والولادة", labelEn: "Gynecology",
-    heroImages: [
-      "https://images.unsplash.com/photo-1584515933487-779824d29309?w=1200&q=85&auto=format&fit=crop",
-      "https://images.unsplash.com/photo-1519494026892-80bbd2d6fd0d?w=1200&q=85&auto=format&fit=crop",
-    ],
-  },
-  ophthalmology: {
-    bg1: "#CFFAFE", bg2: "#67E8F9", bg3: "#0E7490",
-    darkColor: "#164E63", textColor: "#FFFFFF",
-    accent: "#FDE68A", accentDark: "#D97706",
-    chipBg: "#CFFAFE", chipBorder: "#0891B2", chipText: "#164E63",
-    icon: "👁️", label: "طب العيون", labelEn: "Ophthalmology",
-    heroImages: [
-      "https://images.unsplash.com/photo-1587613757226-c22d09e4bd23?w=1200&q=85&auto=format&fit=crop",
-      "https://images.unsplash.com/photo-1574258495973-f010dfbb5371?w=1200&q=85&auto=format&fit=crop",
-    ],
-  },
-  orthopedics: {
-    bg1: "#F3F4F6", bg2: "#D1D5DB", bg3: "#374151",
-    darkColor: "#111827", textColor: "#FFFFFF",
-    accent: "#F59E0B", accentDark: "#B45309",
-    chipBg: "#F3F4F6", chipBorder: "#4B5563", chipText: "#111827",
-    icon: "🦴", label: "العظام والمفاصل", labelEn: "Orthopedics",
-    heroImages: [
-      "https://images.unsplash.com/photo-1595003500447-88ce9a901a9c?w=1200&q=85&auto=format&fit=crop",
-      "https://images.unsplash.com/photo-1579684385127-1ef15d508118?w=1200&q=85&auto=format&fit=crop",
-    ],
-  },
-  pediatrics: {
-    bg1: "#FEF3C7", bg2: "#FCD34D", bg3: "#B45309",
-    darkColor: "#78350F", textColor: "#FFFFFF",
-    accent: "#10B981", accentDark: "#047857",
-    chipBg: "#FEF3C7", chipBorder: "#F59E0B", chipText: "#78350F",
-    icon: "🧸", label: "طب الأطفال", labelEn: "Pediatrics",
-    heroImages: [
-      "https://images.unsplash.com/photo-1502740479091-635887520276?w=1200&q=85&auto=format&fit=crop",
-      "https://images.unsplash.com/photo-1519689680058-324335c77eba?w=1200&q=85&auto=format&fit=crop",
-    ],
-  },
-  internal: {
-    bg1: "#E0E7FF", bg2: "#A5B4FC", bg3: "#4338CA",
-    darkColor: "#312E81", textColor: "#FFFFFF",
-    accent: "#F59E0B", accentDark: "#B45309",
-    chipBg: "#E0E7FF", chipBorder: "#6366F1", chipText: "#312E81",
-    icon: "🩺", label: "الباطنية", labelEn: "Internal Medicine",
-    heroImages: [
-      "https://images.unsplash.com/photo-1579684385127-1ef15d508118?w=1200&q=85&auto=format&fit=crop",
-      "https://images.unsplash.com/photo-1584982751601-97dcc096659c?w=1200&q=85&auto=format&fit=crop",
-    ],
-  },
-  general: {
-    bg1: "#D1FAE5", bg2: "#6EE7B7", bg3: "#047857",
-    darkColor: "#064E3B", textColor: "#FFFFFF",
-    accent: "#FDE68A", accentDark: "#D97706",
-    chipBg: "#D1FAE5", chipBorder: "#059669", chipText: "#064E3B",
-    icon: "🏥", label: "الطب العام", labelEn: "General Medicine",
-    heroImages: [
-      "https://images.unsplash.com/photo-1631815589968-fdb09a223b1e?w=1200&q=85&auto=format&fit=crop",
-      "https://images.unsplash.com/photo-1519494026892-80bbd2d6fd0d?w=1200&q=85&auto=format&fit=crop",
-    ],
-  },
   lab: {
-    bg1: "#E0F2FE", bg2: "#38BDF8", bg3: "#0EA5E9",
+    bg1: "#F0F9FF", bg2: "#E0F2FE", bg3: "#38BDF8",
     darkColor: "#0C4A6E", textColor: "#FFFFFF",
     accent: "#10B981", accentDark: "#047857",
-    chipBg: "#E0F2FE", chipBorder: "#0284C7", chipText: "#0C4A6E",
+    chipBg: "#FFFFFF", chipBorder: "#0284C7", chipText: "#0C4A6E",
     icon: "🧪", label: "المختبر", labelEn: "Laboratory",
     heroImages: [
       "https://images.unsplash.com/photo-1579154204601-01588f351e67?w=1200&q=85&auto=format&fit=crop",
       "https://images.unsplash.com/photo-1582719471384-894fbb16e074?w=1200&q=85&auto=format&fit=crop",
     ],
   },
-  surgery: {
-    bg1: "#FEF2F2", bg2: "#FECACA", bg3: "#DC2626",
-    darkColor: "#7F1D1D", textColor: "#FFFFFF",
-    accent: "#F59E0B", accentDark: "#B45309",
-    chipBg: "#FEF2F2", chipBorder: "#EF4444", chipText: "#7F1D1D",
-    icon: "🔪", label: "الجراحة العامة", labelEn: "General Surgery",
+  general: {
+    bg1: "#ECFDF5", bg2: "#D1FAE5", bg3: "#047857",
+    darkColor: "#064E3B", textColor: "#FFFFFF",
+    accent: "#FDE68A", accentDark: "#D97706",
+    chipBg: "#FFFFFF", chipBorder: "#059669", chipText: "#064E3B",
+    icon: "🏥", label: "الطب العام", labelEn: "General Medicine",
     heroImages: [
-      "https://images.unsplash.com/photo-1551076805-e1869033e561?w=1200&q=85&auto=format&fit=crop",
-      "https://images.unsplash.com/photo-1579154204601-01588f351e67?w=1200&q=85&auto=format&fit=crop",
+      "https://images.unsplash.com/photo-1631815589968-fdb09a223b1e?w=1200&q=85&auto=format&fit=crop",
+      "https://images.unsplash.com/photo-1519494026892-80bbd2d6fd0d?w=1200&q=85&auto=format&fit=crop",
     ],
+  },
+  // Fallbacks for other specialties (can be expanded as needed)
+  dermatology: {
+    bg1: "#FDF2F8", bg2: "#FCE7F3", bg3: "#BE185D",
+    darkColor: "#831843", textColor: "#FFFFFF", accent: "#FDE68A", accentDark: "#D97706",
+    chipBg: "#FFFFFF", chipBorder: "#DB2777", chipText: "#831843",
+    icon: "✨", label: "الجلدية والتجميل", labelEn: "Dermatology",
+    heroImages: ["https://images.unsplash.com/photo-1570172619644-dfd03ed5d881?w=1200&q=85&auto=format&fit=crop"],
+  },
+  gynecology: {
+    bg1: "#FDF2F8", bg2: "#FBCFE8", bg3: "#9F1239",
+    darkColor: "#500724", textColor: "#FFFFFF", accent: "#FDE68A", accentDark: "#D97706",
+    chipBg: "#FFFFFF", chipBorder: "#BE185D", chipText: "#500724",
+    icon: "🌸", label: "النساء والولادة", labelEn: "Gynecology",
+    heroImages: ["https://images.unsplash.com/photo-1584515933487-779824d29309?w=1200&q=85&auto=format&fit=crop"],
+  },
+  ophthalmology: {
+    bg1: "#ECFEFF", bg2: "#CFFAFE", bg3: "#0E7490",
+    darkColor: "#164E63", textColor: "#FFFFFF", accent: "#FDE68A", accentDark: "#D97706",
+    chipBg: "#FFFFFF", chipBorder: "#0891B2", chipText: "#164E63",
+    icon: "👁️", label: "طب العيون", labelEn: "Ophthalmology",
+    heroImages: ["https://images.unsplash.com/photo-1587613757226-c22d09e4bd23?w=1200&q=85&auto=format&fit=crop"],
+  },
+  orthopedics: {
+    bg1: "#F8FAFC", bg2: "#F1F5F9", bg3: "#475569",
+    darkColor: "#0F172A", textColor: "#FFFFFF", accent: "#F59E0B", accentDark: "#B45309",
+    chipBg: "#FFFFFF", chipBorder: "#64748B", chipText: "#0F172A",
+    icon: "🦴", label: "العظام والمفاصل", labelEn: "Orthopedics",
+    heroImages: ["https://images.unsplash.com/photo-1595003500447-88ce9a901a9c?w=1200&q=85&auto=format&fit=crop"],
+  },
+  pediatrics: {
+    bg1: "#FFFBEB", bg2: "#FEF3C7", bg3: "#D97706",
+    darkColor: "#78350F", textColor: "#FFFFFF", accent: "#10B981", accentDark: "#047857",
+    chipBg: "#FFFFFF", chipBorder: "#F59E0B", chipText: "#78350F",
+    icon: "🧸", label: "طب الأطفال", labelEn: "Pediatrics",
+    heroImages: ["https://images.unsplash.com/photo-1502740479091-635887520276?w=1200&q=85&auto=format&fit=crop"],
+  },
+  internal: {
+    bg1: "#EEF2FF", bg2: "#E0E7FF", bg3: "#4338CA",
+    darkColor: "#312E81", textColor: "#FFFFFF", accent: "#F59E0B", accentDark: "#B45309",
+    chipBg: "#FFFFFF", chipBorder: "#6366F1", chipText: "#312E81",
+    icon: "🩺", label: "الباطنية", labelEn: "Internal Medicine",
+    heroImages: ["https://images.unsplash.com/photo-1579684385127-1ef15d508118?w=1200&q=85&auto=format&fit=crop"],
+  },
+  surgery: {
+    bg1: "#FEF2F2", bg2: "#FEE2E2", bg3: "#DC2626",
+    darkColor: "#7F1D1D", textColor: "#FFFFFF", accent: "#F59E0B", accentDark: "#B45309",
+    chipBg: "#FFFFFF", chipBorder: "#EF4444", chipText: "#7F1D1D",
+    icon: "🔪", label: "الجراحة العامة", labelEn: "General Surgery",
+    heroImages: ["https://images.unsplash.com/photo-1551076805-e1869033e561?w=1200&q=85&auto=format&fit=crop"],
   },
   cardiology: {
-    bg1: "#FEE2E2", bg2: "#FCA5A5", bg3: "#B91C1C",
-    darkColor: "#7F1D1D", textColor: "#FFFFFF",
-    accent: "#FDE68A", accentDark: "#D97706",
-    chipBg: "#FEE2E2", chipBorder: "#DC2626", chipText: "#7F1D1D",
+    bg1: "#FEF2F2", bg2: "#FEE2E2", bg3: "#B91C1C",
+    darkColor: "#7F1D1D", textColor: "#FFFFFF", accent: "#FDE68A", accentDark: "#D97706",
+    chipBg: "#FFFFFF", chipBorder: "#DC2626", chipText: "#7F1D1D",
     icon: "💔", label: "أمراض القلب", labelEn: "Cardiology",
-    heroImages: [
-      "https://images.unsplash.com/photo-1628348068343-c6a848d2b6dd?w=1200&q=85&auto=format&fit=crop",
-      "https://images.unsplash.com/photo-1576091160399-112ba8d25d1d?w=1200&q=85&auto=format&fit=crop",
-    ],
+    heroImages: ["https://images.unsplash.com/photo-1628348068343-c6a848d2b6dd?w=1200&q=85&auto=format&fit=crop"],
   },
   neurology: {
-    bg1: "#F3E8FF", bg2: "#D8B4FE", bg3: "#7E22CE",
-    darkColor: "#4C1D95", textColor: "#FFFFFF",
-    accent: "#F59E0B", accentDark: "#B45309",
-    chipBg: "#F3E8FF", chipBorder: "#9333EA", chipText: "#4C1D95",
+    bg1: "#FAF5FF", bg2: "#F3E8FF", bg3: "#7E22CE",
+    darkColor: "#4C1D95", textColor: "#FFFFFF", accent: "#F59E0B", accentDark: "#B45309",
+    chipBg: "#FFFFFF", chipBorder: "#9333EA", chipText: "#4C1D95",
     icon: "🧠", label: "المخ والأعصاب", labelEn: "Neurology",
-    heroImages: [
-      "https://images.unsplash.com/photo-1559757175-5700dde675bc?w=1200&q=85&auto=format&fit=crop",
-      "https://images.unsplash.com/photo-1576086213369-97a306d36557?w=1200&q=85&auto=format&fit=crop",
-    ],
+    heroImages: ["https://images.unsplash.com/photo-1559757175-5700dde675bc?w=1200&q=85&auto=format&fit=crop"],
   },
   ent: {
-    bg1: "#FEF3C7", bg2: "#FDE68A", bg3: "#D97706",
-    darkColor: "#78350F", textColor: "#FFFFFF",
-    accent: "#10B981", accentDark: "#047857",
-    chipBg: "#FEF3C7", chipBorder: "#F59E0B", chipText: "#78350F",
+    bg1: "#FFFBEB", bg2: "#FEF3C7", bg3: "#D97706",
+    darkColor: "#78350F", textColor: "#FFFFFF", accent: "#10B981", accentDark: "#047857",
+    chipBg: "#FFFFFF", chipBorder: "#F59E0B", chipText: "#78350F",
     icon: "👂", label: "أنف وأذن وحنجرة", labelEn: "ENT",
-    heroImages: [
-      "https://images.unsplash.com/photo-1519494026892-80bbd2d6fd0d?w=1200&q=85&auto=format&fit=crop",
-      "https://images.unsplash.com/photo-1581594693702-fbdc51b2763b?w=1200&q=85&auto=format&fit=crop",
-    ],
+    heroImages: ["https://images.unsplash.com/photo-1519494026892-80bbd2d6fd0d?w=1200&q=85&auto=format&fit=crop"],
   },
   pharmacy: {
-    bg1: "#DCFCE7", bg2: "#86EFAC", bg3: "#16A34A",
-    darkColor: "#14532D", textColor: "#FFFFFF",
-    accent: "#F59E0B", accentDark: "#B45309",
-    chipBg: "#DCFCE7", chipBorder: "#22C55E", chipText: "#14532D",
+    bg1: "#F0FDF4", bg2: "#DCFCE7", bg3: "#16A34A",
+    darkColor: "#14532D", textColor: "#FFFFFF", accent: "#F59E0B", accentDark: "#B45309",
+    chipBg: "#FFFFFF", chipBorder: "#22C55E", chipText: "#14532D",
     icon: "💊", label: "الصيدلية", labelEn: "Pharmacy",
-    heroImages: [
-      "https://images.unsplash.com/photo-1587854692152-cbe660dbde88?w=1200&q=85&auto=format&fit=crop",
-      "https://images.unsplash.com/photo-1585435557343-3b092031a831?w=1200&q=85&auto=format&fit=crop",
-    ],
+    heroImages: ["https://images.unsplash.com/photo-1587854692152-cbe660dbde88?w=1200&q=85&auto=format&fit=crop"],
   },
   radiology: {
-    bg1: "#E5E7EB", bg2: "#9CA3AF", bg3: "#4B5563",
-    darkColor: "#1F2937", textColor: "#FFFFFF",
-    accent: "#F59E0B", accentDark: "#B45309",
-    chipBg: "#E5E7EB", chipBorder: "#6B7280", chipText: "#1F2937",
+    bg1: "#F9FAFB", bg2: "#F3F4F6", bg3: "#4B5563",
+    darkColor: "#1F2937", textColor: "#FFFFFF", accent: "#F59E0B", accentDark: "#B45309",
+    chipBg: "#FFFFFF", chipBorder: "#6B7280", chipText: "#1F2937",
     icon: "🩻", label: "الأشعة", labelEn: "Radiology",
-    heroImages: [
-      "https://images.unsplash.com/photo-1516069677018-378515003435?w=1200&q=85&auto=format&fit=crop",
-      "https://images.unsplash.com/photo-1530026405186-ed1f139313f8?w=1200&q=85&auto=format&fit=crop",
-    ],
+    heroImages: ["https://images.unsplash.com/photo-1516069677018-378515003435?w=1200&q=85&auto=format&fit=crop"],
   },
   physiotherapy: {
-    bg1: "#E0F2FE", bg2: "#7DD3FC", bg3: "#0284C7",
-    darkColor: "#0C4A6E", textColor: "#FFFFFF",
-    accent: "#F59E0B", accentDark: "#B45309",
-    chipBg: "#E0F2FE", chipBorder: "#38BDF8", chipText: "#0C4A6E",
+    bg1: "#F0F9FF", bg2: "#E0F2FE", bg3: "#0284C7",
+    darkColor: "#0C4A6E", textColor: "#FFFFFF", accent: "#F59E0B", accentDark: "#B45309",
+    chipBg: "#FFFFFF", chipBorder: "#38BDF8", chipText: "#0C4A6E",
     icon: "🦵", label: "العلاج الطبيعي", labelEn: "Physiotherapy",
-    heroImages: [
-      "https://images.unsplash.com/photo-1576091160399-112ba8d25d1d?w=1200&q=85&auto=format&fit=crop",
-      "https://images.unsplash.com/photo-1597452485669-2c7bb5fef90d?w=1200&q=85&auto=format&fit=crop",
-    ],
+    heroImages: ["https://images.unsplash.com/photo-1576091160399-112ba8d25d1d?w=1200&q=85&auto=format&fit=crop"],
   },
   nutrition: {
-    bg1: "#FEF3C7", bg2: "#FCD34D", bg3: "#D97706",
-    darkColor: "#78350F", textColor: "#FFFFFF",
-    accent: "#10B981", accentDark: "#047857",
-    chipBg: "#FEF3C7", chipBorder: "#F59E0B", chipText: "#78350F",
+    bg1: "#FFFBEB", bg2: "#FEF3C7", bg3: "#D97706",
+    darkColor: "#78350F", textColor: "#FFFFFF", accent: "#10B981", accentDark: "#047857",
+    chipBg: "#FFFFFF", chipBorder: "#F59E0B", chipText: "#78350F",
     icon: "🥗", label: "التغذية", labelEn: "Nutrition",
-    heroImages: [
-      "https://images.unsplash.com/photo-1512621776951-a57141f2eefd?w=1200&q=85&auto=format&fit=crop",
-      "https://images.unsplash.com/photo-1490645935967-10de6ba17061?w=1200&q=85&auto=format&fit=crop",
-    ],
+    heroImages: ["https://images.unsplash.com/photo-1512621776951-a57141f2eefd?w=1200&q=85&auto=format&fit=crop"],
   },
   psychiatry: {
-    bg1: "#F3E8FF", bg2: "#D8B4FE", bg3: "#9333EA",
-    darkColor: "#4C1D95", textColor: "#FFFFFF",
-    accent: "#F59E0B", accentDark: "#B45309",
-    chipBg: "#F3E8FF", chipBorder: "#A855F7", chipText: "#4C1D95",
+    bg1: "#FAF5FF", bg2: "#F3E8FF", bg3: "#9333EA",
+    darkColor: "#4C1D95", textColor: "#FFFFFF", accent: "#F59E0B", accentDark: "#B45309",
+    chipBg: "#FFFFFF", chipBorder: "#A855F7", chipText: "#4C1D95",
     icon: "🧘", label: "الطب النفسي", labelEn: "Psychiatry",
-    heroImages: [
-      "https://images.unsplash.com/photo-1559757148-5c350d0d3c56?w=1200&q=85&auto=format&fit=crop",
-      "https://images.unsplash.com/photo-1527137342181-19aab11a8ae3?w=1200&q=85&auto=format&fit=crop",
-    ],
+    heroImages: ["https://images.unsplash.com/photo-1559757148-5c350d0d3c56?w=1200&q=85&auto=format&fit=crop"],
   },
   other: {
-    bg1: "#F3F4F6", bg2: "#E5E7EB", bg3: "#6B7280",
-    darkColor: "#1F2937", textColor: "#FFFFFF",
-    accent: "#F59E0B", accentDark: "#B45309",
-    chipBg: "#F3F4F6", chipBorder: "#9CA3AF", chipText: "#1F2937",
+    bg1: "#F9FAFB", bg2: "#F3F4F6", bg3: "#6B7280",
+    darkColor: "#1F2937", textColor: "#FFFFFF", accent: "#F59E0B", accentDark: "#B45309",
+    chipBg: "#FFFFFF", chipBorder: "#9CA3AF", chipText: "#1F2937",
     icon: "🏥", label: "عيادة", labelEn: "Clinic",
-    heroImages: [
-      "https://images.unsplash.com/photo-1519494026892-80bbd2d6fd0d?w=1200&q=85&auto=format&fit=crop",
-    ],
+    heroImages: ["https://images.unsplash.com/photo-1519494026892-80bbd2d6fd0d?w=1200&q=85&auto=format&fit=crop"],
   },
 };
 
@@ -347,123 +285,48 @@ const SPECIALTY_THEMES: Record<string, any> = {
 // PROMO CONTENT TEMPLATES
 // ============================================================
 const PROMO_TEMPLATES: Record<string, { title: string; description: string; items: string }> = {
-  dental: {
-    title: "ابتسم بثقة.. عرض حصري لصحة أسنانك",
-    description: "احصل على أسنان أكثر بياضاً وإشراقاً، وعلاج آمن لأسنانك بأحدث التقنيات.",
-    items: "خصم يصل إلى 30%\nكشف مجاني\nعروض لفترة محدودة",
-  },
-  dermatology: {
-    title: "جمال بلا شوائب.. عرض تجميل متكامل",
-    description: "نضارة وحيوية لبشرتك وشعرك مع أحدث أجهزة الليزر والفيلر والبوتوكس.",
-    items: "خصم يصل إلى 25%\nاستشارة مجانية\nنتائج مضمونة",
-  },
-  gynecology: {
-    title: "رعاية شاملة لصحة المرأة والولادة",
-    description: "متابعة الحمل، السونار، والفحوصات النسائية الدقيقة بأيدي طبيبات متميزات.",
-    items: "خصم يصل إلى 20%\nمتابعة مستمرة\nأحدث الأجهزة",
-  },
-  ophthalmology: {
-    title: "أبصر الحياة بوضوح.. عروض العيون",
-    description: "فحص دقيق للنظر، وعلاج قصر النظر، والمياه البيضاء بأحدث أجهزة الليزر.",
-    items: "خصم يصل إلى 35%\nفحص مجاني\nتقنيات متطورة",
-  },
-  orthopedics: {
-    title: "رجوع للحركة بلا ألم.. عروض العظام",
-    description: "علاج خشونة المفاصل، تثبيت الكسور، وحقن المفاصل مع برامج تأهيل متكاملة.",
-    items: "خصم يصل إلى 20%\nاستشارة مجانية\nتأهيل شامل",
-  },
-  pediatrics: {
-    title: "صحة طفلك أولويتنا.. عروض الأطفال",
-    description: "متابعة نمو وتطور طفلك، التطعيمات، وعلاج نزلات البرد والحساسية.",
-    items: "خصم يصل إلى 25%\nكشف مجاني\nعناية متكاملة",
-  },
-  internal: {
-    title: "صحتك الداخلية بأيدٍ أمينة",
-    description: "فحوصات شاملة، ومتابعة الضغط والسكر والكوليسترول بأحدث التحاليل.",
-    items: "خصم يصل إلى 20%\nفحص شامل\nمتابعة دورية",
-  },
-  general: {
-    title: "رعاية طبية شاملة لكل أفراد العائلة",
-    description: "استشارات عامة، فحوصات دورية، ومتابعة الأمراض المزمنة بأسعار مناسبة.",
-    items: "خصم يصل إلى 20%\nكشف مجاني\nخدمات متميزة",
-  },
-  lab: {
-    title: "دقة في التحاليل.. نتائج مضمونة",
-    description: "نقدم جميع التحاليل الطبية بأحدث الأجهزة وبأسعار تنافسية ونتائج سريعة.",
-    items: "خصم يصل إلى 40%\nنتائج سريعة\nعروض لفترة محدودة",
-  },
-  surgery: {
-    title: "جراحة آمنة.. وأيدٍ خبيرة",
-    description: "إجراء العمليات الجراحية الدقيقة بأحدث تقنيات المناظير وضمان أفضل النتائج.",
-    items: "خصم يصل إلى 20%\nاستشارة مجانية\nرعاية متكاملة",
-  },
-  cardiology: {
-    title: "قلبك بأمان.. رعاية متخصصة",
-    description: "تخطيط القلب، الإيكو، ومتابعة الضغط وعلاج أمراض القلب بأحدث الأجهزة.",
-    items: "خصم يصل إلى 25%\nفحص مجاني\nأجهزة حديثة",
-  },
-  neurology: {
-    title: "صحة أعصابك تبدأ بالعناية",
-    description: "علاج الصداع النصفي، التشنجات، وآلام الأعصاب، والتقييم العصبي الشامل.",
-    items: "خصم يصل إلى 20%\nاستشارة مجانية\nتقييم شامل",
-  },
-  ent: {
-    title: "تنفس بسهولة واسمع بوضوح",
-    description: "علاج مشاكل الأنف والأذن والحنجرة، الجيوب الأنفية، وضعف السمع.",
-    items: "خصم يصل إلى 25%\nكشف مجاني\nتقنيات متطورة",
-  },
-  pharmacy: {
-    title: "دواءك.. بأسعار موفرة",
-    description: "نقدم جميع الأدوية والمستلزمات الطبية مع خصومات وعروض حصرية.",
-    items: "خصم يصل إلى 15%\nعروض حصرية\nخدمة سريعة",
-  },
-  radiology: {
-    title: "تشخيص دقيق.. بجودة عالية",
-    description: "أحدث أجهزة الأشعة السينية، المقطعية، والرنين المغناطيسي مع قراءة دقيقة.",
-    items: "خصم يصل إلى 20%\nدقة عالية\nنتائج سريعة",
-  },
-  physiotherapy: {
-    title: "استعد لياقتك وحركتك",
-    description: "علاج طبيعي متكامل لإصابات الملاعب، آلام الظهر، وتأهيل ما بعد الجراحة.",
-    items: "خصم يصل إلى 25%\nجلسات مخصصة\nتأهيل شامل",
-  },
-  nutrition: {
-    title: "نحو حياة صحية.. بوزن مثالي",
-    description: "برامج غذائية مخصصة، وعلاج السمنة والنحافة بأيدي أخصائيي تغذية.",
-    items: "خصم يصل إلى 30%\nاستشارة مجانية\nبرامج مخصصة",
-  },
-  psychiatry: {
-    title: "لنكن بخير نفسياً",
-    description: "استشارات نفسية، علاج القلق والاكتئاب، والتأهيل النفسي بأحدث المناهج.",
-    items: "خصم يصل إلى 20%\nاستشارة مجانية\nخصوصية تامة",
-  },
-  other: {
-    title: "عيادتنا.. جودة ورعاية",
-    description: "خدمات طبية متكاملة بأحدث الأجهزة وأيدي أطباء متخصصين.",
-    items: "خصم يصل إلى 20%\nخدمة متميزة\nمتابعة دورية",
-  },
+  dental: { title: "ابتسم بثقة.. عرض حصري لصحة أسنانك", description: "احصل على أسنان أكثر بياضاً وإشراقاً، وعلاج آمن لأسنانك بأحدث التقنيات.", items: "خصم يصل إلى 30%\nكشف مجاني\nعروض لفترة محدودة" },
+  dermatology: { title: "جمال بلا شوائب.. عرض تجميل متكامل", description: "نضارة وحيوية لبشرتك وشعرك مع أحدث أجهزة الليزر والفيلر والبوتوكس.", items: "خصم يصل إلى 25%\nاستشارة مجانية\nنتائج مضمونة" },
+  gynecology: { title: "رعاية شاملة لصحة المرأة والولادة", description: "متابعة الحمل، السونار، والفحوصات النسائية الدقيقة بأيدي طبيبات متميزات.", items: "خصم يصل إلى 20%\nمتابعة مستمرة\nأحدث الأجهزة" },
+  ophthalmology: { title: "أبصر الحياة بوضوح.. عروض العيون", description: "فحص دقيق للنظر، وعلاج قصر النظر، والمياه البيضاء بأحدث أجهزة الليزر.", items: "خصم يصل إلى 35%\nفحص مجاني\nتقنيات متطورة" },
+  orthopedics: { title: "رجوع للحركة بلا ألم.. عروض العظام", description: "علاج خشونة المفاصل، تثبيت الكسور، وحقن المفاصل مع برامج تأهيل متكاملة.", items: "خصم يصل إلى 20%\nاستشارة مجانية\nتأهيل شامل" },
+  pediatrics: { title: "صحة طفلك أولويتنا.. عروض الأطفال", description: "متابعة نمو وتطور طفلك، التطعيمات، وعلاج نزلات البرد والحساسية.", items: "خصم يصل إلى 25%\nكشف مجاني\nعناية متكاملة" },
+  internal: { title: "صحتك الداخلية بأيدٍ أمينة", description: "فحوصات شاملة، ومتابعة الضغط والسكر والكوليسترول بأحدث التحاليل.", items: "خصم يصل إلى 20%\nفحص شامل\nمتابعة دورية" },
+  general: { title: "رعاية طبية شاملة لكل أفراد العائلة", description: "استشارات عامة، فحوصات دورية، ومتابعة الأمراض المزمنة بأسعار مناسبة.", items: "خصم يصل إلى 20%\nكشف مجاني\nخدمات متميزة" },
+  lab: { title: "دقة في التحاليل.. نتائج مضمونة", description: "نقدم جميع التحاليل الطبية بأحدث الأجهزة وبأسعار تنافسية ونتائج سريعة.", items: "خصم يصل إلى 40%\nنتائج سريعة\nعروض لفترة محدودة" },
+  surgery: { title: "جراحة آمنة.. وأيدٍ خبيرة", description: "إجراء العمليات الجراحية الدقيقة بأحدث تقنيات المناظير وضمان أفضل النتائج.", items: "خصم يصل إلى 20%\nاستشارة مجانية\nرعاية متكاملة" },
+  cardiology: { title: "قلبك بأمان.. رعاية متخصصة", description: "تخطيط القلب، الإيكو، ومتابعة الضغط وعلاج أمراض القلب بأحدث الأجهزة.", items: "خصم يصل إلى 25%\nفحص مجاني\nأجهزة حديثة" },
+  neurology: { title: "صحة أعصابك تبدأ بالعناية", description: "علاج الصداع النصفي، التشنجات، وآلام الأعصاب، والتقييم العصبي الشامل.", items: "خصم يصل إلى 20%\nاستشارة مجانية\nتقييم شامل" },
+  ent: { title: "تنفس بسهولة واسمع بوضوح", description: "علاج مشاكل الأنف والأذن والحنجرة، الجيوب الأنفية، وضعف السمع.", items: "خصم يصل إلى 25%\nكشف مجاني\nتقنيات متطورة" },
+  pharmacy: { title: "دواءك.. بأسعار موفرة", description: "نقدم جميع الأدوية والمستلزمات الطبية مع خصومات وعروض حصرية.", items: "خصم يصل إلى 15%\nعروض حصرية\nخدمة سريعة" },
+  radiology: { title: "تشخيص دقيق.. بجودة عالية", description: "أحدث أجهزة الأشعة السينية، المقطعية، والرنين المغناطيسي مع قراءة دقيقة.", items: "خصم يصل إلى 20%\nدقة عالية\nنتائج سريعة" },
+  physiotherapy: { title: "استعد لياقتك وحركتك", description: "علاج طبيعي متكامل لإصابات الملاعب، آلام الظهر، وتأهيل ما بعد الجراحة.", items: "خصم يصل إلى 25%\nجلسات مخصصة\nتأهيل شامل" },
+  nutrition: { title: "نحو حياة صحية.. بوزن مثالي", description: "برامج غذائية مخصصة، وعلاج السمنة والنحافة بأيدي أخصائيي تغذية.", items: "خصم يصل إلى 30%\nاستشارة مجانية\nبرامج مخصصة" },
+  psychiatry: { title: "لنكن بخير نفسياً", description: "استشارات نفسية، علاج القلق والاكتئاب، والتأهيل النفسي بأحدث المناهج.", items: "خصم يصل إلى 20%\nاستشارة مجانية\nخصوصية تامة" },
+  other: { title: "عيادتنا.. جودة ورعاية", description: "خدمات طبية متكاملة بأحدث الأجهزة وأيدي أطباء متخصصين.", items: "خصم يصل إلى 20%\nخدمة متميزة\nمتابعة دورية" },
 };
 
 // ============================================================
-// SERVICE THUMBNAILS & ICONS
+// V44: PREMIUM 3D MEDICAL ICONS
 // ============================================================
+// تم استخدام أيقونات طبية 3D عالية الدقة لتبدو احترافية جداً
 const SERVICE_THUMBNAILS: Record<string, string> = {
-  sugar: "https://images.unsplash.com/photo-1579684385127-1ef15d508118?w=200&q=80",
-  blood: "https://images.unsplash.com/photo-1615461066841-6116e61058f4?w=200&q=80",
-  kidney: "https://images.unsplash.com/photo-1579154204601-01588f351e67?w=200&q=80",
-  liver: "https://images.unsplash.com/photo-1559757175-5700dde675bc?w=200&q=80",
-  vitamin: "https://images.unsplash.com/photo-1584308666744-24d5c474f2ae?w=200&q=80",
-  hormone: "https://images.unsplash.com/photo-1576091160399-112ba8d25d1d?w=200&q=80",
-  stool: "https://images.unsplash.com/photo-1582719471384-894fbb16e074?w=200&q=80",
-  urine: "https://images.unsplash.com/photo-1579154204601-01588f351e67?w=200&q=80",
-  dental: "https://images.unsplash.com/photo-1606811971618-4486d14f3f99?w=200&q=80",
-  cardiology: "https://images.unsplash.com/photo-1628348068343-c6a848d2b6dd?w=200&q=80",
-  ophthalmology: "https://images.unsplash.com/photo-1587613757226-c22d09e4bd23?w=200&q=80",
-  orthopedics: "https://images.unsplash.com/photo-1595003500447-88ce9a901a9c?w=200&q=80",
-  dermatology: "https://images.unsplash.com/photo-1570172619644-dfd03ed5d881?w=200&q=80",
-  pediatrics: "https://images.unsplash.com/photo-1502740479091-635887520276?w=200&q=80",
-  gynecology: "https://images.unsplash.com/photo-1584515933487-779824d29309?w=200&q=80",
-  general: "https://images.unsplash.com/photo-1631815589968-fdb09a223b1e?w=200&q=80"
+  sugar: "https://cdn-icons-png.flaticon.com/512/3063/3063822.png", // Glucometer
+  blood: "https://cdn-icons-png.flaticon.com/512/2965/2965450.png", // Blood test
+  kidney: "https://cdn-icons-png.flaticon.com/512/3063/3063818.png", // Kidney
+  liver: "https://cdn-icons-png.flaticon.com/512/3063/3063820.png", // Liver
+  vitamin: "https://cdn-icons-png.flaticon.com/512/2929/2929909.png", // Pills
+  hormone: "https://cdn-icons-png.flaticon.com/512/3468/3468377.png", // Hormones/DNA
+  stool: "https://cdn-icons-png.flaticon.com/512/3063/3063826.png", // Microscope
+  urine: "https://cdn-icons-png.flaticon.com/512/3063/3063815.png", // Urine test
+  dental: "https://cdn-icons-png.flaticon.com/512/3063/3063832.png", // Tooth
+  cardiology: "https://cdn-icons-png.flaticon.com/512/3063/3063824.png", // Heart
+  ophthalmology: "https://cdn-icons-png.flaticon.com/512/3063/3063828.png", // Eye
+  orthopedics: "https://cdn-icons-png.flaticon.com/512/2966/2966326.png", // Bone
+  dermatology: "https://cdn-icons-png.flaticon.com/512/2966/2966339.png", // Skin/Spa
+  pediatrics: "https://cdn-icons-png.flaticon.com/512/3063/3063835.png", // Baby
+  gynecology: "https://cdn-icons-png.flaticon.com/512/3063/3063830.png", // Pregnancy
+  general: "https://cdn-icons-png.flaticon.com/512/3063/3063834.png" // Stethoscope
 };
 
 function getServiceCategory(name: string): string {
@@ -566,7 +429,6 @@ const SERVICE_KEYWORD_IMAGES: Array<{ keywords: string[]; images: string[] }> = 
     images: [
       "https://images.unsplash.com/photo-1579154204601-01588f351e67?w=1200&q=85&auto=format&fit=crop",
       "https://images.unsplash.com/photo-1582719471384-894fbb16e074?w=1200&q=85&auto=format&fit=crop",
-      "https://images.unsplash.com/photo-1576091160399-112ba8d25d1d?w=1200&q=85&auto=format&fit=crop",
     ],
   },
 ];
@@ -1450,7 +1312,7 @@ export default function SettingsPage() {
   };
 
   // ============================================================
-  // V43: NEW GENERATE PROMO IMAGE (Dense Layout with Service Cards)
+  // V44: NEW GENERATE PROMO IMAGE (Premium Glassmorphism Layout)
   // ============================================================
   const generatePromoImage = async (promo: Promotion, forceRegenerate: boolean = false) => {
     if (!clinic) {
@@ -1486,10 +1348,10 @@ export default function SettingsPage() {
         : [];
 
       const selectedServices = services.filter(s => (promo.service_ids || []).includes(s.id));
-      const servicesToDraw = selectedServices.slice(0, 6); // Max 6 services to fit
+      const servicesToDraw = selectedServices.slice(0, 6);
 
       const W = 1200;
-      const H = 1700; 
+      const H = 1600; 
       const canvas = document.createElement("canvas");
       canvas.width = W;
       canvas.height = H;
@@ -1522,96 +1384,32 @@ export default function SettingsPage() {
         ctx.closePath();
       };
 
-      // 1. Background (Dense, gradient)
-      const bgGrad = ctx.createLinearGradient(0, 0, W, H);
-      bgGrad.addColorStop(0, "#F8FAFC");
-      bgGrad.addColorStop(0.5, theme.bg1);
-      bgGrad.addColorStop(1, theme.bg2);
+      // 1. Premium Background
+      const bgGrad = ctx.createLinearGradient(0, 0, 0, H);
+      bgGrad.addColorStop(0, theme.bg1);
+      bgGrad.addColorStop(0.4, theme.bg2);
+      bgGrad.addColorStop(1, "#FFFFFF");
       ctx.fillStyle = bgGrad;
       ctx.fillRect(0, 0, W, H);
 
+      // Waves at the bottom
       ctx.save();
       ctx.fillStyle = "rgba(255,255,255,0.4)";
       ctx.beginPath();
-      ctx.arc(0, 0, 400, 0, Math.PI*2);
-      ctx.fill();
-      ctx.beginPath();
-      ctx.arc(W, H, 500, 0, Math.PI*2);
-      ctx.fill();
-      ctx.restore();
-
-      // 2. Header (Logo + Names)
-      const logoSize = 110;
-      const logoX = W / 2 - logoSize / 2;
-      const logoY = 50;
-      
-      // Logo Frame
-      ctx.save();
-      ctx.shadowColor = "rgba(0,0,0,0.1)";
-      ctx.shadowBlur = 15;
-      ctx.shadowOffsetY = 5;
-      ctx.fillStyle = "#FFFFFF";
-      roundRect(logoX - 10, logoY - 10, logoSize + 20, logoSize + 20, 30);
+      ctx.moveTo(0, H - 200);
+      ctx.bezierCurveTo(W * 0.3, H - 300, W * 0.7, H - 100, W, H - 250);
+      ctx.lineTo(W, H);
+      ctx.lineTo(0, H);
       ctx.fill();
       ctx.restore();
 
-      let logoImg: HTMLImageElement | null = null;
-      if (clinic.logo_url) {
-        logoImg = await loadImage(clinic.logo_url);
-      }
-
-      if (logoImg) {
-        ctx.save();
-        roundRect(logoX, logoY, logoSize, logoSize, 20);
-        ctx.clip();
-        ctx.drawImage(logoImg, logoX, logoY, logoSize, logoSize);
-        ctx.restore();
-      } else {
-        ctx.save();
-        roundRect(logoX, logoY, logoSize, logoSize, 20);
-        const iconGrad = ctx.createLinearGradient(logoX, logoY, logoX, logoY + logoSize);
-        iconGrad.addColorStop(0, theme.bg2);
-        iconGrad.addColorStop(1, theme.bg3);
-        ctx.fillStyle = iconGrad;
-        ctx.fill();
-        ctx.font = "bold 60px 'Cairo', Arial";
-        ctx.textAlign = "center";
-        ctx.textBaseline = "middle";
-        ctx.fillStyle = "#FFFFFF";
-        ctx.fillText((clinic.name || "ع").charAt(0), logoX + logoSize/2, logoY + logoSize/2 + 5);
-        ctx.restore();
-      }
-
-      // Clinic Name
-      const clinicNameY = logoY + logoSize + 25;
-      ctx.save();
-      ctx.font = "900 46px 'Cairo', 'Tajawal', Arial";
-      ctx.fillStyle = theme.darkColor;
-      ctx.textAlign = "center";
-      ctx.textBaseline = "top";
-      ctx.direction = "rtl";
-      ctx.fillText(clinic.name, W / 2, clinicNameY);
-      ctx.restore();
-
-      // Specialty
-      const specY = clinicNameY + 60;
-      ctx.save();
-      ctx.font = "600 22px 'Cairo', Arial";
-      ctx.fillStyle = theme.chipText;
-      ctx.textAlign = "center";
-      ctx.textBaseline = "top";
-      ctx.direction = "rtl";
-      const specLabel = specialty === "other" && otherSpecialty ? otherSpecialty : `${theme.label} • ${theme.labelEn}`;
-      ctx.fillText(specLabel, W / 2, specY);
-      ctx.restore();
-
-      // 3. Top Badges (Date & Location) - Moved to top as requested
+      // 2. Top Badges (Date & Location)
       const badgeY = 50;
       const badgeH = 40;
 
       if (promo.end_date) {
         ctx.save();
-        const badgeW = 200;
+        const badgeW = 220;
         const badgeX = 40;
         const badgeGrad = ctx.createLinearGradient(badgeX, badgeY, badgeX, badgeY + badgeH);
         badgeGrad.addColorStop(0, "#EF4444");
@@ -1647,15 +1445,83 @@ export default function SettingsPage() {
         ctx.restore();
       }
 
-      // 4. Hero Image (Smaller to fit services)
+      // 3. Header (Logo + Names)
+      const logoSize = 100;
+      const logoX = W / 2 - logoSize / 2;
+      const logoY = 110;
+      
+      // Logo Frame (Glassmorphism)
+      ctx.save();
+      ctx.shadowColor = "rgba(0,0,0,0.1)";
+      ctx.shadowBlur = 20;
+      ctx.fillStyle = "rgba(255, 255, 255, 0.9)";
+      roundRect(logoX - 15, logoY - 15, logoSize + 30, logoSize + 30, 25);
+      ctx.fill();
+      ctx.strokeStyle = theme.accent;
+      ctx.lineWidth = 2;
+      roundRect(logoX - 15, logoY - 15, logoSize + 30, logoSize + 30, 25);
+      ctx.stroke();
+      ctx.restore();
+
+      let logoImg: HTMLImageElement | null = null;
+      if (clinic.logo_url) {
+        logoImg = await loadImage(clinic.logo_url);
+      }
+
+      if (logoImg) {
+        ctx.save();
+        roundRect(logoX, logoY, logoSize, logoSize, 15);
+        ctx.clip();
+        ctx.drawImage(logoImg, logoX, logoY, logoSize, logoSize);
+        ctx.restore();
+      } else {
+        ctx.save();
+        roundRect(logoX, logoY, logoSize, logoSize, 15);
+        const iconGrad = ctx.createLinearGradient(logoX, logoY, logoX, logoY + logoSize);
+        iconGrad.addColorStop(0, theme.bg2);
+        iconGrad.addColorStop(1, theme.bg3);
+        ctx.fillStyle = iconGrad;
+        ctx.fill();
+        ctx.font = "bold 50px 'Cairo', Arial";
+        ctx.textAlign = "center";
+        ctx.textBaseline = "middle";
+        ctx.fillStyle = "#FFFFFF";
+        ctx.fillText((clinic.name || "ع").charAt(0), logoX + logoSize/2, logoY + logoSize/2 + 5);
+        ctx.restore();
+      }
+
+      // Clinic Name
+      const clinicNameY = logoY + logoSize + 40;
+      ctx.save();
+      ctx.font = "900 48px 'Cairo', 'Tajawal', Arial";
+      ctx.fillStyle = theme.darkColor;
+      ctx.textAlign = "center";
+      ctx.textBaseline = "top";
+      ctx.direction = "rtl";
+      ctx.fillText(clinic.name, W / 2, clinicNameY);
+      ctx.restore();
+
+      // Specialty
+      const specY = clinicNameY + 65;
+      ctx.save();
+      ctx.font = "600 22px 'Cairo', Arial";
+      ctx.fillStyle = theme.chipText;
+      ctx.textAlign = "center";
+      ctx.textBaseline = "top";
+      ctx.direction = "rtl";
+      const specLabel = specialty === "other" && otherSpecialty ? otherSpecialty : `${theme.label} • ${theme.labelEn}`;
+      ctx.fillText(specLabel, W / 2, specY);
+      ctx.restore();
+
+      // 4. Hero Image (Glass Frame)
       const heroW = W - 160;
-      const heroH = 320;
+      const heroH = 340;
       const heroX = 80;
-      const heroY = specY + 50;
+      const heroY = specY + 60;
 
       ctx.save();
       ctx.shadowColor = "rgba(0,0,0,0.15)";
-      ctx.shadowBlur = 25;
+      ctx.shadowBlur = 30;
       ctx.shadowOffsetY = 15;
       ctx.fillStyle = "#FFFFFF";
       roundRect(heroX - 10, heroY - 10, heroW + 20, heroH + 20, 30);
@@ -1701,27 +1567,33 @@ export default function SettingsPage() {
         ctx.restore();
       }
 
-      // 5. Discount Badge
-      const discountW = 300;
-      const discountH = 70;
+      // 5. Premium Discount Badge
+      const discountW = 280;
+      const discountH = 80;
       const discountX = W/2 - discountW/2;
       const discountY = heroY + heroH - discountH/2;
 
       ctx.save();
-      ctx.shadowColor = "rgba(180, 83, 9, 0.6)";
-      ctx.shadowBlur = 20;
-      ctx.shadowOffsetY = 8;
+      ctx.shadowColor = "rgba(180, 83, 9, 0.5)";
+      ctx.shadowBlur = 25;
+      ctx.shadowOffsetY = 10;
       const discountGrad = ctx.createLinearGradient(discountX, discountY, discountX, discountY + discountH);
-      discountGrad.addColorStop(0, "#FDE68A");
+      discountGrad.addColorStop(0, "#FEF3C7");
       discountGrad.addColorStop(0.5, "#F59E0B");
       discountGrad.addColorStop(1, "#B45309");
       ctx.fillStyle = discountGrad;
-      roundRect(discountX, discountY, discountW, discountH, 35);
+      roundRect(discountX, discountY, discountW, discountH, 40);
       ctx.fill();
+      
+      // Inner border for 3D effect
+      ctx.strokeStyle = "rgba(255,255,255,0.6)";
+      ctx.lineWidth = 3;
+      roundRect(discountX + 5, discountY + 5, discountW - 10, discountH - 10, 35);
+      ctx.stroke();
       ctx.restore();
 
       ctx.save();
-      ctx.font = "900 38px 'Cairo', Arial";
+      ctx.font = "900 42px 'Cairo', Arial";
       ctx.fillStyle = "#5C1A00";
       ctx.textAlign = "center";
       ctx.textBaseline = "middle";
@@ -1731,20 +1603,20 @@ export default function SettingsPage() {
       ctx.restore();
 
       // 6. Title & Description
-      const titleY = discountY + discountH + 25;
+      const titleY = discountY + discountH + 30;
       ctx.save();
-      ctx.font = "900 42px 'Cairo', Arial";
+      ctx.font = "900 44px 'Cairo', Arial";
       ctx.fillStyle = theme.darkColor;
       ctx.textAlign = "center";
       ctx.textBaseline = "top";
       ctx.direction = "rtl";
       const titleLines = wrapText(ctx, promo.title, W - 160);
       titleLines.slice(0, 2).forEach((line, idx) => {
-        ctx.fillText(line, W/2, titleY + idx * 52);
+        ctx.fillText(line, W/2, titleY + idx * 55);
       });
       ctx.restore();
 
-      let currentY = titleY + (titleLines.length * 52) + 10;
+      let currentY = titleY + (titleLines.length * 55) + 15;
 
       if (promo.description) {
         ctx.save();
@@ -1758,7 +1630,7 @@ export default function SettingsPage() {
           ctx.fillText(line, W/2, currentY + idx * 32);
         });
         ctx.restore();
-        currentY += (descLines.length * 32) + 15;
+        currentY += (descLines.length * 32) + 20;
       }
 
       // 7. Ad Items (Pills)
@@ -1774,21 +1646,21 @@ export default function SettingsPage() {
         const textW = ctx.measureText(itemsText).width;
         if (textW < W - 120) {
           ctx.fillText(itemsText, W/2, currentY);
-          currentY += 35;
+          currentY += 40;
         } else {
           const itemsTextShort = itemsList.slice(0, 4).join("  •  ");
           ctx.fillText(itemsTextShort, W/2, currentY);
-          currentY += 35;
+          currentY += 40;
         }
         ctx.restore();
       }
 
-      // 8. Services Grid (DENSE CARDS)
+      // 8. Services Grid (Premium 3D Cards)
       const servicesStartY = currentY + 15;
       const servicesPerRow = 2;
       const gridGap = 20;
       const cardW = (W - 120 - gridGap) / 2; // ~530
-      const cardH = 130;
+      const cardH = 140;
 
       if (servicesToDraw.length > 0) {
         for (let i = 0; i < servicesToDraw.length; i++) {
@@ -1796,7 +1668,6 @@ export default function SettingsPage() {
           const row = Math.floor(i / servicesPerRow);
           const col = i % servicesPerRow;
           
-          // Center single cards
           let cx;
           if (servicesToDraw.length === 1) {
              cx = (W - cardW) / 2; 
@@ -1808,51 +1679,54 @@ export default function SettingsPage() {
           
           const cy = servicesStartY + row * (cardH + gridGap);
           
-          // Card Background
+          // Card Background (Glass)
           ctx.save();
           ctx.shadowColor = "rgba(0,0,0,0.08)";
           ctx.shadowBlur = 15;
-          ctx.shadowOffsetY = 5;
-          ctx.fillStyle = "#FFFFFF";
-          roundRect(cx, cy, cardW, cardH, 16);
+          ctx.shadowOffsetY = 8;
+          ctx.fillStyle = "rgba(255, 255, 255, 0.95)";
+          roundRect(cx, cy, cardW, cardH, 24);
           ctx.fill();
-          ctx.restore();
           
           // Gold Border
-          ctx.save();
           ctx.strokeStyle = theme.accent;
           ctx.lineWidth = 2;
-          roundRect(cx, cy, cardW, cardH, 16);
+          roundRect(cx, cy, cardW, cardH, 24);
           ctx.stroke();
           ctx.restore();
           
-          // Thumbnail
-          const thumbSize = 85;
+          // 3D Icon (Image)
+          const thumbSize = 100;
           const thumbX = cx + 20;
           const thumbY = cy + (cardH - thumbSize)/2;
-          
-          ctx.save();
-          ctx.fillStyle = theme.bg1;
-          ctx.beginPath();
-          ctx.arc(thumbX + thumbSize/2, thumbY + thumbSize/2, thumbSize/2, 0, Math.PI*2);
-          ctx.fill();
           
           const cat = getServiceCategory(svc.name);
           const thumbUrl = SERVICE_THUMBNAILS[cat];
           const thumbImg = await loadImage(thumbUrl);
           
           if (thumbImg) {
+            ctx.save();
             ctx.beginPath();
             ctx.arc(thumbX + thumbSize/2, thumbY + thumbSize/2, thumbSize/2, 0, Math.PI*2);
             ctx.clip();
-            ctx.drawImage(thumbImg, thumbX, thumbY, thumbSize, thumbSize);
+            // Draw white background for icon
+            ctx.fillStyle = "#FFFFFF";
+            ctx.fill();
+            // Draw icon (with padding)
+            ctx.drawImage(thumbImg, thumbX + 10, thumbY + 10, thumbSize - 20, thumbSize - 20);
+            ctx.restore();
           } else {
-            ctx.font = "45px 'Segoe UI Emoji', Arial";
+            ctx.save();
+            ctx.fillStyle = theme.bg1;
+            ctx.beginPath();
+            ctx.arc(thumbX + thumbSize/2, thumbY + thumbSize/2, thumbSize/2, 0, Math.PI*2);
+            ctx.fill();
+            ctx.font = "50px 'Segoe UI Emoji', Arial";
             ctx.textAlign = "center";
             ctx.textBaseline = "middle";
             ctx.fillText(getServiceIcon(svc.name), thumbX + thumbSize/2, thumbY + thumbSize/2 + 5);
+            ctx.restore();
           }
-          ctx.restore();
           
           // Text
           ctx.save();
@@ -1860,43 +1734,43 @@ export default function SettingsPage() {
           ctx.textBaseline = "top";
           ctx.direction = "rtl";
           
-          ctx.font = "bold 22px 'Cairo', Arial";
+          ctx.font = "900 24px 'Cairo', Arial";
           ctx.fillStyle = theme.darkColor;
-          const nameText = truncateText(ctx, svc.name, cardW - 130);
+          const nameText = truncateText(ctx, svc.name, cardW - 140);
           ctx.fillText(nameText, cx + cardW - 20, cy + 25);
           
-          ctx.font = "16px 'Cairo', Arial";
+          ctx.font = "600 16px 'Cairo', Arial";
           ctx.fillStyle = theme.chipText;
           const desc = getServiceDescription(svc.name);
-          const descLines = wrapText(ctx, desc, cardW - 130);
+          const descLines = wrapText(ctx, desc, cardW - 140);
           descLines.slice(0, 1).forEach((line, idx) => {
-            ctx.fillText(line, cx + cardW - 20, cy + 55);
+            ctx.fillText(line, cx + cardW - 20, cy + 60);
           });
           
           if (svc.price) {
             const finalPrice = calcFinalPrice(svc.price, promo.discount_value, promo.discount_type);
             if (finalPrice !== null && finalPrice < svc.price) {
-              ctx.font = "bold 20px 'Cairo', Arial";
+              ctx.font = "900 22px 'Cairo', Arial";
               ctx.fillStyle = theme.bg3;
-              ctx.fillText(`${finalPrice} ريال`, cx + cardW - 20, cy + 85);
+              ctx.fillText(`${finalPrice} ريال`, cx + cardW - 20, cy + 95);
               
               ctx.font = "14px 'Cairo', Arial";
               ctx.fillStyle = "rgba(0,0,0,0.4)";
               const origText = `${svc.price}`;
               const origX = cx + cardW - 20 - ctx.measureText(`${finalPrice} ريال`).width - 10;
-              ctx.fillText(origText, origX, cy + 90);
+              ctx.fillText(origText, origX, cy + 100);
               
               const origW = ctx.measureText(origText).width;
               ctx.strokeStyle = "rgba(0,0,0,0.4)";
               ctx.lineWidth = 1.5;
               ctx.beginPath();
-              ctx.moveTo(origX, cy + 98);
-              ctx.lineTo(origX - origW, cy + 98);
+              ctx.moveTo(origX, cy + 108);
+              ctx.lineTo(origX - origW, cy + 108);
               ctx.stroke();
             } else {
-              ctx.font = "bold 20px 'Cairo', Arial";
+              ctx.font = "900 22px 'Cairo', Arial";
               ctx.fillStyle = theme.bg3;
-              ctx.fillText(`${svc.price} ريال`, cx + cardW - 20, cy + 85);
+              ctx.fillText(`${svc.price} ريال`, cx + cardW - 20, cy + 95);
             }
           }
           ctx.restore();
@@ -1906,27 +1780,24 @@ export default function SettingsPage() {
       // 9. Footer (QR + Phone + CTA)
       const footerY = H - 130;
       
-      ctx.strokeStyle = theme.bg3;
-      ctx.lineWidth = 1;
-      ctx.beginPath();
-      ctx.moveTo(60, footerY - 20);
-      ctx.lineTo(W - 60, footerY - 20);
-      ctx.stroke();
-      
-      // QR Code in Footer
+      // QR Code in Footer (Glass Box)
       const tgLink = `https://t.me/${botUsername || "SmartClinc_bot"}?start=clinic_${clinic.id}`;
-      const qrApi = `https://api.qrserver.com/v1/create-qr-code/?size=100x100&data=${encodeURIComponent(tgLink)}&color=0B1F3A&bgcolor=FFFFFF&margin=0&qzone=1`;
+      const qrApi = `https://api.qrserver.com/v1/create-qr-code/?size=120x120&data=${encodeURIComponent(tgLink)}&color=0B1F3A&bgcolor=FFFFFF&margin=0&qzone=1`;
       const qrImg = await loadImage(qrApi);
       
       if (qrImg) {
         ctx.save();
-        const qrSize = 90;
+        const qrBoxSize = 100;
         const qrX = 60;
         const qrY = footerY + 5;
+        
+        ctx.shadowColor = "rgba(0,0,0,0.1)";
+        ctx.shadowBlur = 10;
         ctx.fillStyle = "#FFFFFF";
-        roundRect(qrX, qrY, qrSize, qrSize, 10);
+        roundRect(qrX, qrY, qrBoxSize, qrBoxSize, 16);
         ctx.fill();
-        ctx.drawImage(qrImg, qrX + 5, qrY + 5, qrSize - 10, qrSize - 10);
+        
+        ctx.drawImage(qrImg, qrX + 10, qrY + 10, qrBoxSize - 20, qrBoxSize - 20);
         ctx.restore();
       }
 
@@ -1939,38 +1810,47 @@ export default function SettingsPage() {
         phoneGrad.addColorStop(1, "#059669");
         ctx.fillStyle = phoneGrad;
         ctx.beginPath();
-        ctx.arc(phoneCircleX, footerY + 20, 22, 0, Math.PI*2);
+        ctx.arc(phoneCircleX, footerY + 25, 25, 0, Math.PI*2);
         ctx.fill();
         
-        ctx.font = "24px 'Segoe UI Emoji', Arial";
+        ctx.font = "28px 'Segoe UI Emoji', Arial";
         ctx.fillStyle = "white";
         ctx.textAlign = "center";
         ctx.textBaseline = "middle";
-        ctx.fillText("📞", phoneCircleX, footerY + 22);
+        ctx.fillText("📞", phoneCircleX, footerY + 27);
         
-        ctx.font = "900 30px 'Cairo', Arial";
+        ctx.font = "900 32px 'Cairo', Arial";
         ctx.fillStyle = theme.darkColor;
         ctx.textAlign = "left";
         ctx.textBaseline = "middle";
         ctx.direction = "ltr";
-        ctx.fillText(phoneText, 180, footerY + 20);
+        ctx.fillText(phoneText, 180, footerY + 25);
         ctx.restore();
       }
       
+      // CTA Button
       ctx.save();
-      const ctaW = 260;
-      const ctaH = 55;
+      const ctaW = 300;
+      const ctaH = 60;
       const ctaX = W/2 - ctaW/2;
-      const ctaY = footerY + 55;
+      const ctaY = H - 60;
       
+      ctx.shadowColor = "rgba(0,0,0,0.2)";
+      ctx.shadowBlur = 15;
+      ctx.shadowOffsetY = 5;
       const ctaGrad = ctx.createLinearGradient(0, ctaY, 0, ctaY + ctaH);
-      ctaGrad.addColorStop(0, theme.bg2);
-      ctaGrad.addColorStop(1, theme.bg3);
+      ctaGrad.addColorStop(0, theme.bg3);
+      ctaGrad.addColorStop(1, theme.darkColor);
       ctx.fillStyle = ctaGrad;
-      roundRect(ctaX, ctaY, ctaW, ctaH, 28);
+      roundRect(ctaX, ctaY, ctaW, ctaH, 30);
       ctx.fill();
       
-      ctx.font = "900 22px 'Cairo', Arial";
+      ctx.strokeStyle = "rgba(255,255,255,0.4)";
+      ctx.lineWidth = 2;
+      roundRect(ctaX + 3, ctaY + 3, ctaW - 6, ctaH - 6, 27);
+      ctx.stroke();
+      
+      ctx.font = "900 24px 'Cairo', Arial";
       ctx.fillStyle = "white";
       ctx.textAlign = "center";
       ctx.textBaseline = "middle";
