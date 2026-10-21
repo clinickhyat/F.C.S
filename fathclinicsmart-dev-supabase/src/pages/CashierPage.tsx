@@ -178,7 +178,6 @@ const computeNetCollected = (a: Appointment): number => {
   return 0;
 };
 
-// 🛠️ توليد مرجع فريد لا يتكرر أبداً
 const generatePaymentReference = (phone: string): string => {
   const clean = phone.replace(/\D/g, "").slice(-4) || "0000";
   const d = new Date();
@@ -226,7 +225,10 @@ export default function CashierPage() {
   const [selectedAppointment, setSelectedAppointment] = useState<Appointment | null>(null);
   const [editPatientName, setEditPatientName] = useState<string>("");
   const [editPatientPhone, setEditPatientPhone] = useState<string>("");
+  
+  const [totalCostInput, setTotalCostInput] = useState<string>(""); 
   const [paidAmountInput, setPaidAmountInput] = useState<string>("");
+  
   const [discountInput, setDiscountInput] = useState<string>("0");
   const [paymentMethodInput, setPaymentMethodInput] = useState<string>("نقدي");
   const [showReceipt, setShowReceipt] = useState(false);
@@ -234,7 +236,6 @@ export default function CashierPage() {
   const [sendingReceipt, setSendingReceipt] = useState(false);
   const [sendingTelegram, setSendingTelegram] = useState(false);
 
-  // ✨ States الجديدة للدفع والزيارات
   const [visitType, setVisitType] = useState<"normal" | "followup" | "link">("normal");
   const [linkedVisitCode, setLinkedVisitCode] = useState<string>("");
   const [patientPreviousVisits, setPatientPreviousVisits] = useState<any[]>([]);
@@ -279,7 +280,6 @@ export default function CashierPage() {
   const [ledgerNotes, setLedgerNotes] = useState("");
 
   useEffect(() => { appointmentsRef.current = appointments; }, [appointments]);
-
   useEffect(() => { if (!authLoading && !user) navigate("/auth"); }, [authLoading, user, navigate]);
   useEffect(() => { if (clinicLoading) return; if (role === "reception") navigate("/reception", { replace: true }); }, [role, clinicLoading, navigate]);
 
@@ -314,7 +314,7 @@ export default function CashierPage() {
           .from("appointments")
           .select("id,patient_id,date,time,status,reservation_code,arrived_at,payment_status,paid_amount,discount_amount,discount_applied,discount_type,is_walk_in,notes,customer_telegram_id,is_promo,promo_code,promotion_id,original_price,final_price,payment_method,payment_time,created_at,patients(id,name,phone,telegram_user_id),services(name,price)")
           .eq("clinic_id", clinic.id)
-          .in("payment_status", ["paid", "partial"]) // ✨ جلب المدفوع والجزئي للدفتر
+          .in("payment_status", ["paid", "partial"])
           .gte("date", invoicesFrom)
           .lte("date", invoicesTo)
           .order("date", { ascending: false })
@@ -356,7 +356,6 @@ export default function CashierPage() {
   }, [clinic, today, fetchAppointments, fetchExpenses]);
 
   useEffect(() => { if ((activeTab === "invoices" || activeTab === "receipts") && clinic) fetchInvoices(); }, [activeTab, clinic, fetchInvoices]);
-
   useEffect(() => { return () => { destroyScanner(); }; }, []);
 
   const destroyScanner = async () => {
@@ -409,10 +408,7 @@ export default function CashierPage() {
       const inv = invoicesList.find(i => i.invoice_number === targetCode);
       if (inv) {
         const isPayment = isPaymentRecord(inv);
-        setVerifyResult({ 
-          status: "valid", 
-          message: `✅ ${isPayment ? "سند دفعة صحيح" : "فاتورة صحيحة"}\nرقم: ${inv.invoice_number}\nالمريض: ${inv.patient_name}\nالمبلغ: ${inv.total_amount}` 
-        });
+        setVerifyResult({ status: "valid", message: `✅ ${isPayment ? "سند دفعة صحيح" : "فاتورة صحيحة"}\nرقم: ${inv.invoice_number}\nالمريض: ${inv.patient_name}\nالمبلغ: ${inv.total_amount}` });
         setScannerOpen(false); stopScanner(); return;
       }
 
@@ -450,7 +446,6 @@ export default function CashierPage() {
       };
       if (!enriched.arrived_at) { await markArrived(enriched.id); enriched.arrived_at = new Date().toISOString(); }
       
-      // فتح المودال مع تمرير الداتا
       openPaymentModal(enriched);
       
       setScannerMessage(`✅ تم العثور على الحجز: ${cleanName}`);
@@ -555,11 +550,11 @@ export default function CashierPage() {
     setEditPatientName(cleanName !== "مريض غير محدد" ? cleanName : "");
     setEditPatientPhone(cleanPhone === "بدون رقم" ? "" : cleanPhone);
 
-    const defaultPrice = appointment.original_price ?? appointment.services?.price ?? 0;
+    const defaultTotal = appointment.original_price ?? appointment.final_price ?? appointment.services?.price ?? 0;
     const defaultDiscount = appointment.discount_amount ?? 0;
-    const dueAmount = Math.max(0, defaultPrice - (appointment.paid_amount || 0));
-
-    setPaidAmountInput(appointment.payment_status === "paid" ? String(appointment.paid_amount) : String(dueAmount));
+    
+    setTotalCostInput(String(defaultTotal || ""));
+    setPaidAmountInput(String(defaultTotal || "")); // الافتراضي يدفع الكل
     setDiscountInput(String(defaultDiscount));
     setPaymentMethodInput(appointment.payment_method || "نقدي");
     setShowReceipt(appointment.payment_status === "paid");
@@ -601,17 +596,57 @@ export default function CashierPage() {
     } finally { setSendingTelegram(false); }
   };
 
+  // ✨ دالة جديدة لإرسال صورة دفتر الحساب للتليجرام
+  const sendTelegramLedger = async (patientName: string, phone: string) => {
+    const el = document.getElementById("ledger-export-container");
+    if (!el) return;
+    setSendingTelegram(true);
+    try {
+      const canvas = await html2canvas(el, { scale: 2, useCORS: true, backgroundColor: "#ffffff" });
+      const imgData = canvas.toDataURL("image/png");
+      
+      // محاولة جلب معرف التليجرام للمريض
+      let tgId = "";
+      const pVisits = invoiceAppointments.find(a => extractCleanInfo(a).cleanPhone === phone || extractCleanInfo(a).cleanName === patientName);
+      if (pVisits) {
+        tgId = pVisits.customer_telegram_id || pVisits.patients?.telegram_user_id || "";
+      }
+
+      if (!tgId) { console.warn("لا يوجد معرف تليجرام للمريض"); setSendingTelegram(false); return; }
+
+      const { data, error } = await supabase.functions.invoke("telegram-bot", {
+        body: {
+          action: "send_receipt",
+          clinic_id: clinic?.id,
+          chat_id: tgId,
+          receipt_image: imgData,
+          reservation_code: "LEDGER",
+          patient_name: patientName,
+          service_name: "كشف حساب - دفتر الإيصالات",
+          amount: 0,
+          clinic_name: clinic?.name || "العيادة",
+        }
+      });
+      if (error) throw error;
+      if (data?.ok) toast({ title: "✈️ تم إرسال كشف الحساب للتليجرام" });
+    } catch (err: any) {
+      console.warn("[AUTO-LEDGER] خطأ:", err?.message);
+    } finally {
+      setSendingTelegram(false);
+    }
+  };
+
   const handlePayNow = async () => {
     if (!selectedAppointment || !clinic) return;
     setProcessingPayment(true);
 
-    const rawAmount = parseFloat(paidAmountInput) || 0;
-    const rawDiscount = parseFloat(discountInput) || 0;
-    const discType = selectedAppointment.discount_type || (selectedAppointment.is_promo ? "percentage" : "fixed");
-    const discountAmountCash = calcDiscountAmount(rawAmount, rawDiscount, discType);
-    const netCollected = Math.max(0, rawAmount - discountAmountCash);
-
+    const totalCost = parseFloat(totalCostInput) || 0;
+    const paidNow = parseFloat(paidAmountInput) || 0;
+    const discountCash = parseFloat(discountInput) || 0;
+    
+    const netCollected = Math.max(0, paidNow - discountCash);
     const patientId = selectedAppointment.patients?.id || selectedAppointment.patient_id;
+
     if (patientId && (editPatientName.trim() || editPatientPhone.trim())) {
       const updateData: any = {};
       if (editPatientName.trim()) updateData.name = editPatientName.trim();
@@ -619,81 +654,61 @@ export default function CashierPage() {
       await supabase.from("patients").update(updateData).eq("id", patientId);
     }
 
-    // ✨ 1. حالة الربط بزيارة سابقة (دفع جزئي سابق أو مراجعة لزيارة سابقة)
+    // ✨ 1. حالة الربط بزيارة سابقة (دفع جزئي لزيارة سابقة)
     if (visitType === "link" && linkedVisitCode) {
       const paymentRef = generatePaymentReference(editPatientPhone || "0000");
       const notes = `تسديد دفعة للزيارة ${linkedVisitCode} [LINKED_VISIT:${linkedVisitCode}]`;
 
-      // إنشاء سند الدفع
       const { error: invError } = await supabase.from("invoices").insert({
         clinic_id: clinic.id,
         patient_name: editPatientName.trim() || "غير محدد",
         patient_phone: editPatientPhone.trim() || "بدون رقم",
         invoice_number: paymentRef,
         items: [{ name: `تسديد دفعة (${linkedVisitCode})`, qty: 1, price: netCollected, linkedVisit: linkedVisitCode }],
-        subtotal: netCollected,
-        discount_type: "fixed",
-        discount_value: 0,
-        discount_amount: 0,
-        total_amount: netCollected,
-        paid_status: "paid",
-        paid_amount: netCollected,
-        payment_method: paymentMethodInput,
-        notes,
-        paid_at: new Date(paymentDate).toISOString(),
+        subtotal: netCollected, discount_type: "fixed", discount_value: 0, discount_amount: 0, total_amount: netCollected, paid_status: "paid", paid_amount: netCollected, payment_method: paymentMethodInput, notes, paid_at: new Date(paymentDate).toISOString(),
       });
 
       if (invError) { toast({ title: "خطأ", description: invError.message, variant: "destructive" }); setProcessingPayment(false); return; }
 
-      // تحديث الزيارة السابقة (لزيادة المبلغ الواصل)
       const targetVisit = patientPreviousVisits.find(v => v.code === linkedVisitCode);
       if (targetVisit) {
-        // جلب الزيارة الأصلية لتحديث مبلغ الواصل
         const { data: oldAppt } = await supabase.from("appointments").select("paid_amount, final_price").eq("reservation_code", linkedVisitCode).single();
         if (oldAppt) {
           const newPaid = (oldAppt.paid_amount || 0) + netCollected;
           const isFullyPaid = newPaid >= (oldAppt.final_price || 0);
-          await supabase.from("appointments").update({
-            paid_amount: newPaid,
-            payment_status: isFullyPaid ? "paid" : "partial"
-          }).eq("reservation_code", linkedVisitCode);
+          await supabase.from("appointments").update({ paid_amount: newPaid, payment_status: isFullyPaid ? "paid" : "partial" }).eq("reservation_code", linkedVisitCode);
         }
       }
 
       toast({ title: "✅ تم تسجيل الدفعة للسابق", description: `المرجع: ${paymentRef}` });
       setSelectedInvoice({
-        id: "temp",
-        clinic_id: clinic.id,
-        patient_name: editPatientName.trim(),
-        patient_phone: editPatientPhone.trim(),
-        invoice_number: paymentRef,
-        items: [{ name: "تسديد دفعة سابقة", qty: 1, price: netCollected }],
-        subtotal: netCollected, discount_type: "fixed", discount_value: 0, discount_amount: 0, total_amount: netCollected, paid_status: "paid", paid_amount: netCollected, payment_method: paymentMethodInput, notes, created_at: new Date().toISOString(), linked_visit_code: linkedVisitCode
+        id: "temp", clinic_id: clinic.id, patient_name: editPatientName.trim(), patient_phone: editPatientPhone.trim(), invoice_number: paymentRef,
+        items: [{ name: "تسديد دفعة سابقة", qty: 1, price: netCollected }], subtotal: netCollected, discount_type: "fixed", discount_value: 0, discount_amount: 0, total_amount: netCollected, paid_status: "paid", paid_amount: netCollected, payment_method: paymentMethodInput, notes, created_at: new Date().toISOString(), linked_visit_code: linkedVisitCode
       });
       setSelectedAppointment(null);
 
     } 
-    // ✨ 2. حالة الدفع العادي (سواء كامل أو جزئي لهذه الزيارة الحالية)
+    // ✨ 2. حالة الدفع لهذه الزيارة الحالية (عادية أو مراجعة)
     else {
-      const currentTotal = selectedAppointment.final_price ?? selectedAppointment.services?.price ?? rawAmount;
       const totalPaidNow = (selectedAppointment.paid_amount || 0) + netCollected;
-      const isFullyPaid = totalPaidNow >= currentTotal || visitType === "followup";
+      const isFullyPaid = totalPaidNow >= totalCost || visitType === "followup";
 
       const updatePayload: any = {
         payment_status: isFullyPaid ? "paid" : "partial",
         status: "confirmed",
         department: "صندوق",
         paid_amount: totalPaidNow,
-        discount_amount: rawDiscount,
-        discount_applied: (selectedAppointment.discount_applied || 0) + discountAmountCash,
-        discount_type: discType,
+        discount_amount: parseFloat(discountInput) || 0,
+        discount_applied: discountCash,
         payment_method: paymentMethodInput,
         payment_time: new Date(paymentDate).toISOString(),
+        final_price: totalCost,
+        original_price: totalCost
       };
 
       if (selectedAppointment.is_promo) {
-        updatePayload.original_price = selectedAppointment.original_price ?? currentTotal;
-        updatePayload.final_price = currentTotal;
+        updatePayload.is_promo = true;
+        updatePayload.promo_code = selectedAppointment.promo_code;
       }
 
       const { error } = await supabase.from("appointments").update(updatePayload).eq("id", selectedAppointment.id).eq("clinic_id", clinic.id);
@@ -709,6 +724,7 @@ export default function CashierPage() {
         ...selectedAppointment,
         payment_status: isFullyPaid ? "paid" : "partial",
         paid_amount: totalPaidNow,
+        final_price: totalCost,
         payment_method: paymentMethodInput,
       });
       setShowReceipt(true);
@@ -731,42 +747,20 @@ export default function CashierPage() {
 
   const addWalkIn = async () => {
     if (!clinic || !patientNameInput.trim()) return;
-    const { data: patient, error: patientError } = await supabase.from("patients")
-      .insert({ clinic_id: clinic.id, name: patientNameInput.trim(), phone: patientPhoneInput.trim() || "بدون هاتف" })
-      .select("id").single();
+    const { data: patient, error: patientError } = await supabase.from("patients").insert({ clinic_id: clinic.id, name: patientNameInput.trim(), phone: patientPhoneInput.trim() || "بدون هاتف" }).select("id").single();
     if (patientError || !patient) { toast({ title: "خطأ", variant: "destructive" }); return; }
     const code = `WI-${Math.floor(1000 + Math.random() * 9000)}`;
-    const { error } = await supabase.from("appointments").insert({
-      clinic_id: clinic.id, patient_id: patient.id, date: today,
-      time: format(new Date(), "HH:mm"), status: "confirmed", reservation_code: code,
-      arrived_at: new Date().toISOString(), payment_status: "paid", is_walk_in: true, department: "صندوق",
-    });
+    const { error } = await supabase.from("appointments").insert({ clinic_id: clinic.id, patient_id: patient.id, date: today, time: format(new Date(), "HH:mm"), status: "confirmed", reservation_code: code, arrived_at: new Date().toISOString(), payment_status: "paid", is_walk_in: true, department: "صندوق" });
     if (error) toast({ title: "خطأ", variant: "destructive" });
-    else {
-      toast({ title: "تمت الإضافة", description: code });
-      setWalkInOpen(false); setPatientNameInput(""); setPatientPhoneInput(""); fetchAppointments();
-    }
+    else { toast({ title: "تمت الإضافة", description: code }); setWalkInOpen(false); setPatientNameInput(""); setPatientPhoneInput(""); fetchAppointments(); }
   };
 
   const handleAddExpense = async () => {
     if (!clinic) return;
-    if (!expenseTitle.trim() || !expenseAmount || parseFloat(expenseAmount) <= 0) {
-      toast({ title: "بيانات غير مكتملة", variant: "destructive" });
-      return;
-    }
-    const { error } = await supabase.from("expenses").insert({
-      clinic_id: clinic.id,
-      title: expenseTitle.trim(),
-      amount: parseFloat(expenseAmount),
-      category: expenseCategory,
-      expense_date: expenseDate,
-      expense_time: expenseTime + ":00",
-    });
+    if (!expenseTitle.trim() || !expenseAmount || parseFloat(expenseAmount) <= 0) { toast({ title: "بيانات غير مكتملة", variant: "destructive" }); return; }
+    const { error } = await supabase.from("expenses").insert({ clinic_id: clinic.id, title: expenseTitle.trim(), amount: parseFloat(expenseAmount), category: expenseCategory, expense_date: expenseDate, expense_time: expenseTime + ":00" });
     if (error) { toast({ title: "خطأ", description: "فشل حفظ المصروف", variant: "destructive" }); return; }
-    toast({ title: "✅ تم تسجيل المصروف" });
-    setExpenseTitle(""); setExpenseAmount("");
-    setExpenseModalOpen(false);
-    fetchExpenses();
+    toast({ title: "✅ تم تسجيل المصروف" }); setExpenseTitle(""); setExpenseAmount(""); setExpenseModalOpen(false); fetchExpenses();
   };
 
   const generateReceiptCanvas = async (): Promise<HTMLCanvasElement> => {
@@ -790,10 +784,7 @@ export default function CashierPage() {
       const canvas = await generateReceiptCanvas();
       const imgData = canvas.toDataURL("image/png");
       const win = window.open("", "_blank");
-      if (win) {
-        win.document.write(`<html><head><title>طباعة</title></head><body style="margin:0;display:flex;align-items:center;justify-content:center;min-height:100vh;background:#f4f4f5;"><img src="${imgData}" style="max-width:100%;height:auto;" onload="window.print();window.close();" /></body></html>`);
-        win.document.close();
-      }
+      if (win) { win.document.write(`<html><head><title>طباعة</title></head><body style="margin:0;display:flex;align-items:center;justify-content:center;min-height:100vh;background:#f4f4f5;"><img src="${imgData}" style="max-width:100%;height:auto;" onload="window.print();window.close();" /></body></html>`); win.document.close(); }
     } catch (_) { toast({ title: "خطأ", variant: "destructive" }); }
   };
 
@@ -806,15 +797,10 @@ export default function CashierPage() {
     try {
       const canvas = await generateReceiptCanvas();
       const imgData = canvas.toDataURL("image/png");
-      const link = document.createElement("a");
-      link.href = imgData;
-      link.download = `سند_${selectedAppointment.reservation_code}.png`;
-      link.click();
+      const link = document.createElement("a"); link.href = imgData; link.download = `سند_${selectedAppointment.reservation_code}.png`; link.click();
       const patientName = editPatientName || selectedAppointment.extracted_patient_name || "المريض";
       const netAmt = selectedAppointment.paid_amount || 0;
-      const msg = encodeURIComponent(
-        `🧾 سند دفع - ${clinic?.name || "العيادة"}\n━━━━━━━━━━━━━━━\n👤 ${patientName}\n🔖 ${selectedAppointment.reservation_code}\n💊 ${selectedAppointment.services?.name || "فحص طبي"}\n💰 ${netAmt.toLocaleString()}\n📅 ${format(new Date(), "yyyy/MM/dd - hh:mm a")}`
-      );
+      const msg = encodeURIComponent(`🧾 سند دفع - ${clinic?.name || "العيادة"}\n━━━━━━━━━━━━━━━\n👤 ${patientName}\n🔖 ${selectedAppointment.reservation_code}\n💊 ${selectedAppointment.services?.name || "فحص طبي"}\n💰 ${netAmt.toLocaleString()}\n📅 ${format(new Date(), "yyyy/MM/dd - hh:mm a")}`);
       setTimeout(() => { window.open(`https://wa.me/${waPhone}?text=${msg}`, "_blank"); }, 800);
       toast({ title: "✅ تم حفظ السند وفتح الواتساب" });
     } catch { toast({ title: "خطأ", variant: "destructive" }); }
@@ -840,11 +826,7 @@ export default function CashierPage() {
   };
 
   const openCreateInvoice = () => {
-    setInvPatientName(""); setInvPatientPhone("");
-    setInvItems([{ name: "", qty: 1, price: 0 }]);
-    setInvDiscountType("fixed"); setInvDiscountValue("0");
-    setInvPaymentMethod("نقدي"); setInvNotes("");
-    setCreateInvoiceOpen(true);
+    setInvPatientName(""); setInvPatientPhone(""); setInvItems([{ name: "", qty: 1, price: 0 }]); setInvDiscountType("fixed"); setInvDiscountValue("0"); setInvPaymentMethod("نقدي"); setInvNotes(""); setCreateInvoiceOpen(true);
   };
 
   const addInvoiceItem = () => setInvItems(prev => [...prev, { name: "", qty: 1, price: 0 }]);
@@ -863,49 +845,22 @@ export default function CashierPage() {
       const totalAmount = Math.max(0, subtotal - discountAmount);
       const invoiceNumber = `INV-${Date.now().toString().slice(-8)}`;
       
-      const newInvoiceData = {
-        clinic_id: clinic.id,
-        patient_name: invPatientName.trim() || null,
-        patient_phone: invPatientPhone.trim() || null,
-        invoice_number: invoiceNumber,
-        items: invItems.filter(it => it.name.trim() && Number(it.price) > 0),
-        subtotal,
-        discount_type: invDiscountType,
-        discount_value: parseFloat(invDiscountValue) || 0,
-        discount_amount: discountAmount,
-        total_amount: totalAmount,
-        paid_status: "paid",
-        paid_amount: totalAmount,
-        payment_method: invPaymentMethod,
-        notes: invNotes.trim() || null,
-        paid_at: new Date().toISOString(),
-      };
+      const newInvoiceData = { clinic_id: clinic.id, patient_name: invPatientName.trim() || null, patient_phone: invPatientPhone.trim() || null, invoice_number: invoiceNumber, items: invItems.filter(it => it.name.trim() && Number(it.price) > 0), subtotal, discount_type: invDiscountType, discount_value: parseFloat(invDiscountValue) || 0, discount_amount: discountAmount, total_amount: totalAmount, paid_status: "paid", paid_amount: totalAmount, payment_method: invPaymentMethod, notes: invNotes.trim() || null, paid_at: new Date().toISOString() };
 
       const { data: inserted, error } = await supabase.from("invoices").insert(newInvoiceData).select().single();
       if (error) throw error;
       
       try {
         const tgMsg = `🧾 *فاتورة جديدة* - ${clinic?.name || "العيادة"}\n━━━━━━━━━━━━━━━\n👤 المريض: ${invPatientName || "غير محدد"}\n🔖 رقم الفاتورة: ${invoiceNumber}\n💰 الإجمالي: ${totalAmount.toLocaleString()}\n💳 طريقة الدفع: ${invPaymentMethod}`;
-        await supabase.functions.invoke("telegram-bot", {
-          body: { action: "send_text", clinic_id: clinic.id, chat_id: invPatientPhone || "0", text: tgMsg }
-        });
+        await supabase.functions.invoke("telegram-bot", { body: { action: "send_text", clinic_id: clinic.id, chat_id: invPatientPhone || "0", text: tgMsg } });
       } catch(e) { console.warn("Telegram invoice auto-send failed", e); }
 
       toast({ title: "✅ تم إنشاء الفاتورة", description: invoiceNumber });
       setCreateInvoiceOpen(false);
       
-      if (inserted) {
-        setSelectedInvoice({
-          ...inserted,
-          payment_reference: undefined,
-          linked_visit_code: null
-        } as Invoice);
-      }
-      
+      if (inserted) { setSelectedInvoice({ ...inserted, payment_reference: undefined, linked_visit_code: null } as Invoice); }
       fetchInvoices();
-    } catch (e: any) {
-      toast({ title: "خطأ", description: e.message, variant: "destructive" });
-    } finally { setInvSaving(false); }
+    } catch (e: any) { toast({ title: "خطأ", description: e.message, variant: "destructive" }); } finally { setInvSaving(false); }
   };
 
   const filtered = useMemo(() => appointments.filter((a) => {
@@ -939,11 +894,7 @@ export default function CashierPage() {
   const invoicesStats = useMemo(() => {
     const apptTotal = filteredInvoices.reduce((s, a) => s + computeNetCollected(a), 0);
     const invTotal = filteredInvoicesList.reduce((s, i) => s + (i.total_amount || 0), 0);
-    return {
-      totalPaid: apptTotal + invTotal,
-      count: filteredInvoices.length + filteredInvoicesList.length,
-      promoCount: filteredInvoices.filter(a => a.is_promo).length,
-    };
+    return { totalPaid: apptTotal + invTotal, count: filteredInvoices.length + filteredInvoicesList.length, promoCount: filteredInvoices.filter(a => a.is_promo).length };
   }, [filteredInvoices, filteredInvoicesList]);
 
   const modalRawAmount = parseFloat(paidAmountInput) || 0;
@@ -953,20 +904,12 @@ export default function CashierPage() {
   const modalNetCollected = Math.max(0, modalRawAmount - modalDiscountCash);
 
   // ============================================================
-  // LEDGER — حساب الزيارات والدفعات (يدعم أكثر من 20 زيارة)
+  // LEDGER — حساب الزيارات والدفعات
   // ============================================================
   const ledgerPatients = useMemo(() => {
     type Visit = { code: string; date: string; service: string; amount: number; paid: number; method?: string; discount?: number };
     type Payment = { ref: string; date: string; amount: number; method: string; linkedVisit?: string; notes?: string };
-    type Patient = {
-      name: string;
-      phone: string;
-      visits: Visit[];
-      payments: Payment[];
-      total: number;
-      paid: number;
-      remaining: number;
-    };
+    type Patient = { name: string; phone: string; visits: Visit[]; payments: Payment[]; total: number; paid: number; remaining: number; };
 
     const map = new Map<string, Patient>();
     
@@ -980,20 +923,14 @@ export default function CashierPage() {
       const originalAmount = a.original_price ?? a.services?.price ?? 0;
       const discount = a.discount_applied ?? (originalAmount - finalAmount);
       
-      let paidNow = a.paid_amount || 0;
-      
       p.visits.push({
-        code: a.reservation_code,
-        date: a.date,
-        service: a.services?.name || "فحص",
-        amount: finalAmount, 
-        paid: paidNow,
-        method: a.payment_method || "نقدي",
+        code: a.reservation_code, date: a.date, service: a.services?.name || "فحص",
+        amount: finalAmount, paid: a.paid_amount || 0, method: a.payment_method || "نقدي",
         discount: discount > 0 ? discount : undefined
       });
       
       p.total += finalAmount; 
-      p.paid += paidNow;
+      p.paid += (a.paid_amount || 0);
     });
 
     invoicesList.forEach(inv => {
@@ -1007,44 +944,20 @@ export default function CashierPage() {
       const linkedVisit = extractLinkedVisit(inv) || undefined;
 
       if (isPayment) {
-        p.payments.push({
-          ref: inv.invoice_number,
-          date: inv.created_at.split('T')[0],
-          amount: inv.total_amount,
-          method: inv.payment_method || "نقدي",
-          linkedVisit,
-          notes: inv.notes || undefined,
-        });
-        // إضافة مبلغ الدفعة إلى إجمالي الواصل
+        p.payments.push({ ref: inv.invoice_number, date: inv.created_at.split('T')[0], amount: inv.total_amount, method: inv.payment_method || "نقدي", linkedVisit, notes: inv.notes || undefined });
         p.paid += inv.total_amount;
-        
-        // إذا كانت الدفعة مرتبطة بزيارة سابقة، نضيفها للزيارة
         if (linkedVisit) {
           const visitIndex = p.visits.findIndex(v => v.code === linkedVisit);
-          if (visitIndex !== -1) {
-            p.visits[visitIndex].paid += inv.total_amount;
-          }
+          if (visitIndex !== -1) p.visits[visitIndex].paid += inv.total_amount;
         }
       } else {
-        p.visits.push({
-          code: inv.invoice_number,
-          date: inv.created_at.split('T')[0],
-          service: 'فاتورة يدوية',
-          amount: inv.total_amount,
-          paid: inv.total_amount,
-          method: inv.payment_method || "نقدي",
-        });
+        p.visits.push({ code: inv.invoice_number, date: inv.created_at.split('T')[0], service: 'فاتورة يدوية', amount: inv.total_amount, paid: inv.total_amount, method: inv.payment_method || "نقدي" });
         p.total += inv.total_amount;
         p.paid += inv.total_amount;
       }
     });
 
-    // إعادة حساب المتبقي لكل مريض
-    return Array.from(map.values()).map(p => ({
-      ...p,
-      remaining: Math.max(0, p.total - p.paid)
-    })).filter(p => p.total > 0);
-
+    return Array.from(map.values()).map(p => ({ ...p, remaining: Math.max(0, p.total - p.paid) })).filter(p => p.total > 0);
   }, [invoiceAppointments, invoicesList]);
 
   const handleAddLedgerPayment = async () => {
@@ -1053,60 +966,36 @@ export default function CashierPage() {
     if (amount <= 0) { toast({ title: "❌ المبلغ غير صحيح", variant: "destructive" }); return; }
 
     const paymentRef = generatePaymentReference(selectedLedgerPatient.phone || selectedLedgerPatient.name);
-
     let notes = "دفعة من دفتر الإيصالات";
     if (ledgerLinkedVisit) notes += ` [LINKED_VISIT:${ledgerLinkedVisit}]`;
     if (ledgerNotes.trim()) notes += ` - ${ledgerNotes.trim()}`;
 
     const { error } = await supabase.from("invoices").insert({
-      clinic_id: clinic.id,
-      patient_name: selectedLedgerPatient.name,
-      patient_phone: selectedLedgerPatient.phone,
+      clinic_id: clinic.id, patient_name: selectedLedgerPatient.name, patient_phone: selectedLedgerPatient.phone,
       invoice_number: paymentRef,
-      items: [{ 
-        name: `دفعة${ledgerLinkedVisit ? ` للزيارة ${ledgerLinkedVisit}` : ''}`, 
-        qty: 1, 
-        price: amount,
-        reference: paymentRef,
-        linkedVisit: ledgerLinkedVisit || undefined,
-      }],
-      subtotal: amount,
-      discount_type: "fixed",
-      discount_value: 0,
-      discount_amount: 0,
-      total_amount: amount,
-      paid_status: "paid",
-      paid_amount: amount,
-      payment_method: ledgerMethod,
-      notes,
-      paid_at: new Date().toISOString(),
+      items: [{ name: `دفعة${ledgerLinkedVisit ? ` للزيارة ${ledgerLinkedVisit}` : ''}`, qty: 1, price: amount, reference: paymentRef, linkedVisit: ledgerLinkedVisit || undefined }],
+      subtotal: amount, discount_type: "fixed", discount_value: 0, discount_amount: 0, total_amount: amount, paid_status: "paid", paid_amount: amount, payment_method: ledgerMethod, notes, paid_at: new Date().toISOString(),
     });
 
-    if (error) { 
-      toast({ title: "خطأ", description: error.message, variant: "destructive" }); 
-      return; 
-    }
+    if (error) { toast({ title: "خطأ", description: error.message, variant: "destructive" }); return; }
 
-    // تحديث الزيارة المرتبطة إذا وجدت
     if (ledgerLinkedVisit) {
       const { data: oldAppt } = await supabase.from("appointments").select("paid_amount, final_price").eq("reservation_code", ledgerLinkedVisit).single();
       if (oldAppt) {
         const newPaid = (oldAppt.paid_amount || 0) + amount;
         const isFullyPaid = newPaid >= (oldAppt.final_price || 0);
-        await supabase.from("appointments").update({
-          paid_amount: newPaid,
-          payment_status: isFullyPaid ? "paid" : "partial"
-        }).eq("reservation_code", ledgerLinkedVisit);
+        await supabase.from("appointments").update({ paid_amount: newPaid, payment_status: isFullyPaid ? "paid" : "partial" }).eq("reservation_code", ledgerLinkedVisit);
       }
     }
     
     toast({ title: "✅ تم تسجيل الدفعة", description: `المرجع: ${paymentRef}` });
-    setLedgerAmount("");
-    setLedgerLinkedVisit("");
-    setLedgerNotes("");
-    setLedgerModalOpen(false);
-    fetchInvoices();
-    fetchAppointments();
+    setLedgerAmount(""); setLedgerLinkedVisit(""); setLedgerNotes(""); setLedgerModalOpen(false);
+    fetchInvoices(); fetchAppointments();
+
+    // ✨ إرسال دفتر الحساب المحدث إلى التليجرام
+    setTimeout(() => {
+      sendTelegramLedger(selectedLedgerPatient.name, selectedLedgerPatient.phone);
+    }, 1000);
   };
 
   if (authLoading || clinicLoading) return <div className="min-h-screen bg-mesh flex items-center justify-center text-muted-foreground">جاري التحميل...</div>;
@@ -1115,11 +1004,7 @@ export default function CashierPage() {
   if (isTrialExpired && role !== "owner") {
     return (
       <div className="min-h-screen bg-mesh flex items-center justify-center p-4">
-        <div className="card-modern p-8 max-w-md text-center space-y-4">
-          <div className="text-3xl">⛔</div>
-          <h1 className="text-xl font-black">لا يمكن الدخول</h1>
-          <Button onClick={signOut} className="w-full">تسجيل الخروج</Button>
-        </div>
+        <div className="card-modern p-8 max-w-md text-center space-y-4"><div className="text-3xl">⛔</div><h1 className="text-xl font-black">لا يمكن الدخول</h1><Button onClick={signOut} className="w-full">تسجيل الخروج</Button></div>
       </div>
     );
   }
@@ -1134,63 +1019,20 @@ export default function CashierPage() {
           <div className="bg-white dark:bg-gray-900 rounded-3xl max-w-lg w-full shadow-2xl overflow-hidden border border-border">
             <div className="flex justify-between items-center px-6 pt-6 pb-4 border-b border-border/40">
               <div className="flex items-center gap-3">
-                <div className="w-10 h-10 rounded-xl bg-primary/10 flex items-center justify-center">
-                  {verifyScannerOpen ? <ShieldCheck className="w-5 h-5 text-primary" /> : <Camera className="w-5 h-5 text-primary" />}
-                </div>
-                <div>
-                  <h3 className="text-lg font-bold text-foreground">{verifyScannerOpen ? "التحقق من السندات" : "مسح QR للصندوق"}</h3>
-                  <p className="text-xs text-muted-foreground">{verifyScannerOpen ? "امسح الكود للتأكد من صحة السند" : "وجّه الكاميرا نحو كود الحجز"}</p>
-                </div>
+                <div className="w-10 h-10 rounded-xl bg-primary/10 flex items-center justify-center">{verifyScannerOpen ? <ShieldCheck className="w-5 h-5 text-primary" /> : <Camera className="w-5 h-5 text-primary" />}</div>
+                <div><h3 className="text-lg font-bold text-foreground">{verifyScannerOpen ? "التحقق من السندات" : "مسح QR للصندوق"}</h3><p className="text-xs text-muted-foreground">{verifyScannerOpen ? "امسح الكود للتأكد من صحة السند" : "وجّه الكاميرا نحو كود الحجز"}</p></div>
               </div>
-              <button onClick={stopScanner} className="p-2 rounded-full bg-muted hover:bg-muted/80 text-foreground transition">
-                <X className="w-5 h-5" />
-              </button>
+              <button onClick={stopScanner} className="p-2 rounded-full bg-muted hover:bg-muted/80 text-foreground transition"><X className="w-5 h-5" /></button>
             </div>
-
-            {scannerMessage && (
-              <div className={`mx-6 mt-3 px-4 py-3 rounded-xl text-sm font-bold text-center ${scannerMessage.startsWith("✅") ? "bg-emerald-500/15 text-emerald-700 border border-emerald-500/30" : "bg-red-500/15 text-red-700 border border-red-500/30"}`}>
-                {scannerMessage}
-              </div>
-            )}
-
+            {scannerMessage && (<div className={`mx-6 mt-3 px-4 py-3 rounded-xl text-sm font-bold text-center ${scannerMessage.startsWith("✅") ? "bg-emerald-500/15 text-emerald-700 border border-emerald-500/30" : "bg-red-500/15 text-red-700 border border-red-500/30"}`}>{scannerMessage}</div>)}
             <div className="relative mx-6 my-4 rounded-2xl overflow-hidden bg-black" style={{ aspectRatio: "1/1" }}>
               <div id={QR_CAMERA_ELEMENT_ID} className="w-full h-full" />
-              {(scannerStatus === "loading" || uploadingImage) && (
-                <div className="absolute inset-0 flex flex-col items-center justify-center bg-black/80 z-20">
-                  <Loader2 className="w-12 h-12 animate-spin text-primary mb-3" />
-                  <p className="text-white text-sm">{uploadingImage ? "جاري قراءة الصورة..." : "جاري تشغيل الكاميرا..."}</p>
-                </div>
-              )}
-              {scannerStatus === "active" && !uploadingImage && (
-                <div className="absolute inset-0 pointer-events-none flex items-center justify-center">
-                  <div className="relative w-64 h-64">
-                    <div className="absolute top-0 left-0 w-12 h-12 border-t-4 border-l-4 border-primary rounded-tl-lg" />
-                    <div className="absolute top-0 right-0 w-12 h-12 border-t-4 border-r-4 border-primary rounded-tr-lg" />
-                    <div className="absolute bottom-0 left-0 w-12 h-12 border-b-4 border-l-4 border-primary rounded-bl-lg" />
-                    <div className="absolute bottom-0 right-0 w-12 h-12 border-b-4 border-r-4 border-primary rounded-br-lg" />
-                    <div className="absolute top-0 left-0 right-0 h-0.5 bg-primary animate-bounce" style={{ animationDuration: "1.5s" }} />
-                  </div>
-                </div>
-              )}
-              {scannerStatus === "error" && !uploadingImage && (
-                <div className="absolute inset-0 flex flex-col items-center justify-center bg-black/90 p-5 text-center z-20">
-                  <AlertCircle className="w-12 h-12 text-red-400 mb-3" />
-                  <p className="text-white text-sm mb-4">{cameraError}</p>
-                  <Button onClick={() => startScanner(verifyScannerOpen)} className="bg-primary text-white" size="sm">
-                    <RefreshCw className="w-4 h-4 ml-1" />إعادة المحاولة
-                  </Button>
-                </div>
-              )}
+              {(scannerStatus === "loading" || uploadingImage) && (<div className="absolute inset-0 flex flex-col items-center justify-center bg-black/80 z-20"><Loader2 className="w-12 h-12 animate-spin text-primary mb-3" /><p className="text-white text-sm">{uploadingImage ? "جاري قراءة الصورة..." : "جاري تشغيل الكاميرا..."}</p></div>)}
+              {scannerStatus === "active" && !uploadingImage && (<div className="absolute inset-0 pointer-events-none flex items-center justify-center"><div className="relative w-64 h-64"><div className="absolute top-0 left-0 w-12 h-12 border-t-4 border-l-4 border-primary rounded-tl-lg" /><div className="absolute top-0 right-0 w-12 h-12 border-t-4 border-r-4 border-primary rounded-tr-lg" /><div className="absolute bottom-0 left-0 w-12 h-12 border-b-4 border-l-4 border-primary rounded-bl-lg" /><div className="absolute bottom-0 right-0 w-12 h-12 border-b-4 border-r-4 border-primary rounded-br-lg" /><div className="absolute top-0 left-0 right-0 h-0.5 bg-primary animate-bounce" style={{ animationDuration: "1.5s" }} /></div></div>)}
+              {scannerStatus === "error" && !uploadingImage && (<div className="absolute inset-0 flex flex-col items-center justify-center bg-black/90 p-5 text-center z-20"><AlertCircle className="w-12 h-12 text-red-400 mb-3" /><p className="text-white text-sm mb-4">{cameraError}</p><Button onClick={() => startScanner(verifyScannerOpen)} className="bg-primary text-white" size="sm"><RefreshCw className="w-4 h-4 ml-1" />إعادة المحاولة</Button></div>)}
             </div>
-
-            <div className="px-6 pb-3">
-              <Button variant="outline" className="w-full gap-2 border-dashed border-primary/50 text-primary h-12 font-bold" onClick={() => fileInputRef.current?.click()} disabled={uploadingImage}>
-                <ImageIcon className="w-5 h-5" />رفع صورة QR من المعرض
-              </Button>
-            </div>
-            <div className="flex gap-2 px-6 pb-6">
-              <Button variant="ghost" className="w-full" onClick={stopScanner}>إغلاق</Button>
-            </div>
+            <div className="px-6 pb-3"><Button variant="outline" className="w-full gap-2 border-dashed border-primary/50 text-primary h-12 font-bold" onClick={() => fileInputRef.current?.click()} disabled={uploadingImage}><ImageIcon className="w-5 h-5" />رفع صورة QR من المعرض</Button></div>
+            <div className="flex gap-2 px-6 pb-6"><Button variant="ghost" className="w-full" onClick={stopScanner}>إغلاق</Button></div>
           </div>
         </div>
       )}
@@ -1200,14 +1042,8 @@ export default function CashierPage() {
           <DialogContent className="max-w-sm text-center" dir="rtl" onInteractOutside={(e) => e.preventDefault()}>
             <DialogHeader><DialogTitle>نتيجة التحقق</DialogTitle></DialogHeader>
             <div className="py-6 space-y-4">
-              {verifyResult.status === "valid" ? (
-                <ShieldCheck className="w-20 h-20 text-emerald-500 mx-auto" />
-              ) : (
-                <ShieldAlert className="w-20 h-20 text-red-500 mx-auto" />
-              )}
-              <p className={`font-bold whitespace-pre-wrap text-lg ${verifyResult.status === "valid" ? "text-emerald-700" : "text-red-700"}`}>
-                {verifyResult.message}
-              </p>
+              {verifyResult.status === "valid" ? <ShieldCheck className="w-20 h-20 text-emerald-500 mx-auto" /> : <ShieldAlert className="w-20 h-20 text-red-500 mx-auto" />}
+              <p className={`font-bold whitespace-pre-wrap text-lg ${verifyResult.status === "valid" ? "text-emerald-700" : "text-red-700"}`}>{verifyResult.message}</p>
               <Button onClick={() => setVerifyResult(null)} className="w-full">حسناً</Button>
             </div>
           </DialogContent>
@@ -1216,28 +1052,12 @@ export default function CashierPage() {
 
       <header className="glass-strong sticky top-0 z-40">
         <div className="container mx-auto px-4 py-3 flex items-center justify-between flex-wrap gap-3">
-          <div className="flex items-center gap-3">
-            <div className="w-11 h-11 rounded-2xl bg-gradient-primary flex items-center justify-center shadow-glow">
-              <Stethoscope className="w-5 h-5 text-white" />
-            </div>
-            <div>
-              <h1 className="text-xl font-bold text-foreground">الصندوق والخزينة</h1>
-              <p className="text-xs text-muted-foreground">تحصيل ومصروفات اليوم</p>
-            </div>
-          </div>
+          <div className="flex items-center gap-3"><div className="w-11 h-11 rounded-2xl bg-gradient-primary flex items-center justify-center shadow-glow"><Stethoscope className="w-5 h-5 text-white" /></div><div><h1 className="text-xl font-bold text-foreground">الصندوق والخزينة</h1><p className="text-xs text-muted-foreground">تحصيل ومصروفات اليوم</p></div></div>
           <div className="flex gap-2 flex-wrap">
-            <Button variant="outline" size="sm" onClick={() => startScanner(false)} className="gap-2">
-              <Camera className="w-4 h-4" />مسح QR
-            </Button>
-            <Button variant="outline" size="sm" onClick={() => navigate("/reception")} className="gap-2">
-              <Users className="w-4 h-4" />الاستقبال
-            </Button>
-            <Button variant="outline" size="sm" onClick={() => navigate("/dashboard")} className="gap-2">
-              <Home className="w-4 h-4" />الرئيسية
-            </Button>
-            <Button variant="outline" size="sm" onClick={signOut} className="gap-2 text-red-600 border-red-200 hover:bg-red-50">
-              <LogOut className="w-4 h-4" />خروج
-            </Button>
+            <Button variant="outline" size="sm" onClick={() => startScanner(false)} className="gap-2"><Camera className="w-4 h-4" />مسح QR</Button>
+            <Button variant="outline" size="sm" onClick={() => navigate("/reception")} className="gap-2"><Users className="w-4 h-4" />الاستقبال</Button>
+            <Button variant="outline" size="sm" onClick={() => navigate("/dashboard")} className="gap-2"><Home className="w-4 h-4" />الرئيسية</Button>
+            <Button variant="outline" size="sm" onClick={signOut} className="gap-2 text-red-600 border-red-200 hover:bg-red-50"><LogOut className="w-4 h-4" />خروج</Button>
           </div>
         </div>
       </header>
@@ -1245,15 +1065,9 @@ export default function CashierPage() {
       <div className="glass-strong border-b border-border/40 sticky top-18 z-30">
         <div className="container mx-auto px-4">
           <div className="flex gap-1">
-            <button onClick={() => setActiveTab("main")} className={`flex items-center gap-2 px-5 py-3 text-sm font-bold transition-all ${activeTab === "main" ? "text-primary border-b-3 border-primary" : "text-muted-foreground border-transparent hover:text-foreground"}`} style={{ borderBottomWidth: activeTab === "main" ? 3 : 0 }}>
-              <Wallet className="w-4 h-4" />الخزينة
-            </button>
-            <button onClick={() => setActiveTab("invoices")} className={`flex items-center gap-2 px-5 py-3 text-sm font-bold transition-all ${activeTab === "invoices" ? "text-primary border-b-3 border-primary" : "text-muted-foreground border-transparent hover:text-foreground"}`} style={{ borderBottomWidth: activeTab === "invoices" ? 3 : 0 }}>
-              <FileText className="w-4 h-4" />الفواتير
-            </button>
-            <button onClick={() => setActiveTab("receipts")} className={`flex items-center gap-2 px-5 py-3 text-sm font-bold transition-all ${activeTab === "receipts" ? "text-primary border-b-3 border-primary" : "text-muted-foreground border-transparent hover:text-foreground"}`} style={{ borderBottomWidth: activeTab === "receipts" ? 3 : 0 }}>
-              <BookOpen className="w-4 h-4" />الإيصالات
-            </button>
+            <button onClick={() => setActiveTab("main")} className={`flex items-center gap-2 px-5 py-3 text-sm font-bold transition-all ${activeTab === "main" ? "text-primary border-b-3 border-primary" : "text-muted-foreground border-transparent hover:text-foreground"}`} style={{ borderBottomWidth: activeTab === "main" ? 3 : 0 }}><Wallet className="w-4 h-4" />الخزينة</button>
+            <button onClick={() => setActiveTab("invoices")} className={`flex items-center gap-2 px-5 py-3 text-sm font-bold transition-all ${activeTab === "invoices" ? "text-primary border-b-3 border-primary" : "text-muted-foreground border-transparent hover:text-foreground"}`} style={{ borderBottomWidth: activeTab === "invoices" ? 3 : 0 }}><FileText className="w-4 h-4" />الفواتير</button>
+            <button onClick={() => setActiveTab("receipts")} className={`flex items-center gap-2 px-5 py-3 text-sm font-bold transition-all ${activeTab === "receipts" ? "text-primary border-b-3 border-primary" : "text-muted-foreground border-transparent hover:text-foreground"}`} style={{ borderBottomWidth: activeTab === "receipts" ? 3 : 0 }}><BookOpen className="w-4 h-4" />الإيصالات</button>
           </div>
         </div>
       </div>
@@ -1262,46 +1076,23 @@ export default function CashierPage() {
         {activeTab === "main" && (
           <>
             <CashierStats appointments={appointments} expenses={expenses} />
-
             <div className="flex flex-col md:flex-row gap-3 md:items-center justify-between">
-              <div className="relative flex-1">
-                <Search className="absolute right-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
-                <Input value={search} onChange={(e) => setSearch(e.target.value)} placeholder="بحث باسم المريض أو كود الحجز" className="pr-10" />
-              </div>
+              <div className="relative flex-1"><Search className="absolute right-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" /><Input value={search} onChange={(e) => setSearch(e.target.value)} placeholder="بحث باسم المريض أو كود الحجز" className="pr-10" /></div>
               <Input type="date" value={dateFilter} onChange={(e) => setDateFilter(e.target.value || todayStr)} className="md:w-44" />
               <select value={statusFilter} onChange={(e) => setStatusFilter(e.target.value)} className="h-10 rounded-md border border-input bg-background px-3 text-sm md:w-40">
-                <option value="active">النشطة</option>
-                <option value="all">الكل</option>
-                <option value="paid">مدفوع</option>
-                <option value="unpaid">بانتظار الدفع</option>
-                <option value="arrived">حاضر</option>
-                <option value="waiting">لم يصل</option>
+                <option value="active">النشطة</option><option value="all">الكل</option><option value="paid">مدفوع</option><option value="unpaid">بانتظار الدفع</option><option value="arrived">حاضر</option><option value="waiting">لم يصل</option>
               </select>
               <div className="flex gap-2">
                 <Button onClick={() => setWalkInOpen(true)} className="bg-primary"><Plus className="w-4 h-4 ml-1" />مريض مباشر</Button>
-                <Button variant="outline" className="text-red-600 border-red-200 hover:bg-red-50" onClick={() => setExpenseModalOpen(true)}>
-                  <MinusCircle className="w-4 h-4 ml-1" />مصروف
-                </Button>
+                <Button variant="outline" className="text-red-600 border-red-200 hover:bg-red-50" onClick={() => setExpenseModalOpen(true)}><MinusCircle className="w-4 h-4 ml-1" />مصروف</Button>
                 <Button variant="outline" onClick={() => { fetchAppointments(); fetchExpenses(); }}><RefreshCw className="w-4 h-4 ml-1" />تحديث</Button>
               </div>
             </div>
 
             {expenses.length > 0 && (
               <div className="card-modern p-4 space-y-2 bg-red-50/30 dark:bg-red-950/10 border-red-200/50">
-                <div className="flex items-center justify-between">
-                  <h3 className="text-xs font-bold text-red-600 flex items-center gap-1"><MinusCircle className="w-4 h-4" /> مصروفات اليوم ({expenses.length})</h3>
-                  <span className="text-xs font-black text-red-600">إجمالي: {expenses.reduce((s, e) => s + Number(e.amount || 0), 0).toLocaleString()}</span>
-                </div>
-                <div className="flex gap-2 overflow-x-auto pb-1">
-                  {expenses.map((exp) => (
-                    <div key={exp.id} className="bg-background border border-border px-3 py-1.5 rounded-xl text-xs shrink-0 flex items-center gap-2">
-                      <span className="font-bold text-foreground">{exp.title}</span>
-                      <span className="text-muted-foreground">({exp.category})</span>
-                      <span className="font-black text-red-500">{exp.amount}</span>
-                      <span className="text-[10px] text-muted-foreground">{String(exp.expense_time).slice(0, 5)}</span>
-                    </div>
-                  ))}
-                </div>
+                <div className="flex items-center justify-between"><h3 className="text-xs font-bold text-red-600 flex items-center gap-1"><MinusCircle className="w-4 h-4" /> مصروفات اليوم ({expenses.length})</h3><span className="text-xs font-black text-red-600">إجمالي: {expenses.reduce((s, e) => s + Number(e.amount || 0), 0).toLocaleString()}</span></div>
+                <div className="flex gap-2 overflow-x-auto pb-1">{expenses.map((exp) => (<div key={exp.id} className="bg-background border border-border px-3 py-1.5 rounded-xl text-xs shrink-0 flex items-center gap-2"><span className="font-bold text-foreground">{exp.title}</span><span className="text-muted-foreground">({exp.category})</span><span className="font-black text-red-500">{exp.amount}</span><span className="text-[10px] text-muted-foreground">{String(exp.expense_time).slice(0, 5)}</span></div>))}</div>
               </div>
             )}
 
@@ -1324,26 +1115,18 @@ export default function CashierPage() {
                         <span className="text-sm text-muted-foreground"><Clock className="w-3 h-3 inline ml-1" />{String(a.time).slice(0, 5)}</span>
                         {isArrived ? <span className="px-2 py-0.5 rounded-lg text-xs bg-emerald-500/15 text-emerald-600 font-bold">وصل</span> : <span className="px-2 py-0.5 rounded-lg text-xs bg-amber-500/15 text-amber-600 font-bold">بانتظار</span>}
                         {isPaid && <span className="px-2 py-0.5 rounded-lg text-xs bg-blue-500/15 text-blue-600 font-bold">مدفوع</span>}
-                        {a.payment_method && isPaid && <span className="px-2 py-0.5 rounded-lg text-xs bg-violet-500/15 text-violet-600 font-bold">{a.payment_method}</span>}
+                        {a.payment_status === "partial" && <span className="px-2 py-0.5 rounded-lg text-xs bg-amber-500/15 text-amber-700 font-bold">دفع جزئي</span>}
+                        {a.payment_method && <span className="px-2 py-0.5 rounded-lg text-xs bg-violet-500/15 text-violet-600 font-bold">{a.payment_method}</span>}
                       </div>
                       <h2 className="font-bold text-foreground">{cleanName}</h2>
                       <p className="text-sm text-muted-foreground">{cleanPhone} — <b>{a.services?.name || "بدون خدمة"}</b></p>
-                      {isPromo && (
-                        <p className="text-xs text-amber-700">
-                          💰 الأصلي: <s>{a.original_price ?? a.services?.price ?? "—"}</s> ← الصافي: <b>{netAmt.toLocaleString()}</b>
-                          {discLabel && ` — خصم ${discLabel}`}
-                        </p>
-                      )}
+                      {isPromo && (<p className="text-xs text-amber-700">💰 الأصلي: <s>{a.original_price ?? a.services?.price ?? "—"}</s> ← الصافي: <b>{netAmt.toLocaleString()}</b>{discLabel && ` — خصم ${discLabel}`}</p>)}
                     </div>
                     <div className="flex gap-2 items-center justify-end">
                       {isPaid ? (
-                        <Button variant="outline" className="text-emerald-600 border-emerald-500/30 bg-emerald-50/50" onClick={() => openPaymentModal(a)}>
-                          <CheckCircle className="w-4 h-4 ml-1" />عرض السند
-                        </Button>
+                        <Button variant="outline" className="text-emerald-600 border-emerald-500/30 bg-emerald-50/50" onClick={() => openPaymentModal(a)}><CheckCircle className="w-4 h-4 ml-1" />عرض السند</Button>
                       ) : (
-                        <Button className="bg-emerald-600 hover:bg-emerald-700" onClick={() => openPaymentModal(a)}>
-                          <Banknote className="w-4 h-4 ml-1" />تسجيل الدفع
-                        </Button>
+                        <Button className="bg-emerald-600 hover:bg-emerald-700" onClick={() => openPaymentModal(a)}><Banknote className="w-4 h-4 ml-1" />تسجيل الدفع</Button>
                       )}
                     </div>
                   </div>
@@ -1357,56 +1140,18 @@ export default function CashierPage() {
         {activeTab === "invoices" && (
           <>
             <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
-              <div className="card-modern p-4 bg-gradient-to-br from-emerald-500/20 to-emerald-500/5 border border-border/60">
-                <div className="flex items-center justify-between">
-                  <div>
-                    <p className="text-xs text-muted-foreground font-medium">إجمالي المدفوعات</p>
-                    <p className="text-2xl font-black text-foreground mt-1">{invoicesStats.totalPaid.toLocaleString()}</p>
-                  </div>
-                  <div className="w-11 h-11 rounded-2xl bg-background/60 flex items-center justify-center"><ArrowUpCircle className="w-5 h-5 text-emerald-500" /></div>
-                </div>
-              </div>
-              <div className="card-modern p-4 bg-gradient-to-br from-primary/20 to-primary/5 border border-border/60">
-                <div className="flex items-center justify-between">
-                  <div>
-                    <p className="text-xs text-muted-foreground font-medium">عدد الفواتير</p>
-                    <p className="text-2xl font-black text-foreground mt-1">{invoicesStats.count}</p>
-                    {invoicesStats.promoCount > 0 && <p className="text-[10px] text-amber-700 font-bold mt-0.5">منها {invoicesStats.promoCount} عرض</p>}
-                  </div>
-                  <div className="w-11 h-11 rounded-2xl bg-background/60 flex items-center justify-center"><FileText className="w-5 h-5 text-primary" /></div>
-                </div>
-              </div>
-              <div className="card-modern p-4 bg-gradient-to-br from-violet-500/20 to-violet-500/5 border border-border/60 flex items-center justify-center">
-                <Button onClick={() => startScanner(true)} className="w-full bg-violet-600 hover:bg-violet-700 text-white font-bold gap-2">
-                  <ScanLine className="w-4 h-4" />تحقق من سند (QR)
-                </Button>
-              </div>
-              <div className="card-modern p-4 bg-gradient-to-br from-sky-500/20 to-sky-500/5 border border-border/60 flex items-center justify-center">
-                <Button onClick={openCreateInvoice} className="w-full bg-sky-600 hover:bg-sky-700 text-white font-bold gap-2">
-                  <Plus className="w-4 h-4" />إنشاء فاتورة
-                </Button>
-              </div>
+              <div className="card-modern p-4 bg-gradient-to-br from-emerald-500/20 to-emerald-500/5 border border-border/60"><div className="flex items-center justify-between"><div><p className="text-xs text-muted-foreground font-medium">إجمالي المدفوعات</p><p className="text-2xl font-black text-foreground mt-1">{invoicesStats.totalPaid.toLocaleString()}</p></div><div className="w-11 h-11 rounded-2xl bg-background/60 flex items-center justify-center"><ArrowUpCircle className="w-5 h-5 text-emerald-500" /></div></div></div>
+              <div className="card-modern p-4 bg-gradient-to-br from-primary/20 to-primary/5 border border-border/60"><div className="flex items-center justify-between"><div><p className="text-xs text-muted-foreground font-medium">عدد الفواتير</p><p className="text-2xl font-black text-foreground mt-1">{invoicesStats.count}</p>{invoicesStats.promoCount > 0 && <p className="text-[10px] text-amber-700 font-bold mt-0.5">منها {invoicesStats.promoCount} عرض</p>}</div><div className="w-11 h-11 rounded-2xl bg-background/60 flex items-center justify-center"><FileText className="w-5 h-5 text-primary" /></div></div></div>
+              <div className="card-modern p-4 bg-gradient-to-br from-violet-500/20 to-violet-500/5 border border-border/60 flex items-center justify-center"><Button onClick={() => startScanner(true)} className="w-full bg-violet-600 hover:bg-violet-700 text-white font-bold gap-2"><ScanLine className="w-4 h-4" />تحقق من سند (QR)</Button></div>
+              <div className="card-modern p-4 bg-gradient-to-br from-sky-500/20 to-sky-500/5 border border-border/60 flex items-center justify-center"><Button onClick={openCreateInvoice} className="w-full bg-sky-600 hover:bg-sky-700 text-white font-bold gap-2"><Plus className="w-4 h-4" />إنشاء فاتورة</Button></div>
             </div>
 
             <div className="card-modern p-4">
               <div className="flex flex-col md:flex-row gap-3 md:items-center">
-                <div className="relative flex-1">
-                  <Search className="absolute right-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
-                  <Input value={invoicesSearch} onChange={(e) => setInvoicesSearch(e.target.value)} placeholder="بحث..." className="pr-10" />
-                </div>
-                <div className="flex items-center gap-2">
-                  <Calendar className="w-4 h-4 text-muted-foreground" />
-                  <Input type="date" value={invoicesFrom} onChange={(e) => setInvoicesFrom(e.target.value)} className="w-40" />
-                  <span className="text-muted-foreground">→</span>
-                  <Input type="date" value={invoicesTo} onChange={(e) => setInvoicesTo(e.target.value)} className="w-40" />
-                </div>
-                <label className="flex items-center gap-2 text-sm font-medium cursor-pointer">
-                  <input type="checkbox" checked={invoicesOnlyPromo} onChange={(e) => setInvoicesOnlyPromo(e.target.checked)} className="w-4 h-4 accent-amber-600" />
-                  <span className="text-amber-700">🎁 عرض فقط</span>
-                </label>
-                <Button variant="outline" onClick={fetchInvoices} disabled={invoicesLoading}>
-                  {invoicesLoading ? <Loader2 className="w-4 h-4 animate-spin ml-1" /> : <Filter className="w-4 h-4 ml-1" />}تطبيق
-                </Button>
+                <div className="relative flex-1"><Search className="absolute right-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" /><Input value={invoicesSearch} onChange={(e) => setInvoicesSearch(e.target.value)} placeholder="بحث..." className="pr-10" /></div>
+                <div className="flex items-center gap-2"><Calendar className="w-4 h-4 text-muted-foreground" /><Input type="date" value={invoicesFrom} onChange={(e) => setInvoicesFrom(e.target.value)} className="w-40" /><span className="text-muted-foreground">→</span><Input type="date" value={invoicesTo} onChange={(e) => setInvoicesTo(e.target.value)} className="w-40" /></div>
+                <label className="flex items-center gap-2 text-sm font-medium cursor-pointer"><input type="checkbox" checked={invoicesOnlyPromo} onChange={(e) => setInvoicesOnlyPromo(e.target.checked)} className="w-4 h-4 accent-amber-600" /><span className="text-amber-700">🎁 عرض فقط</span></label>
+                <Button variant="outline" onClick={fetchInvoices} disabled={invoicesLoading}>{invoicesLoading ? <Loader2 className="w-4 h-4 animate-spin ml-1" /> : <Filter className="w-4 h-4 ml-1" />}تطبيق</Button>
               </div>
               <div className="flex flex-wrap gap-2 mt-3 pt-3 border-t border-border/40">
                 <button onClick={() => { setInvoicesFrom(todayStr); setInvoicesTo(todayStr); }} className="px-3 py-1.5 rounded-lg text-xs font-bold bg-primary/10 text-primary">اليوم</button>
@@ -1428,14 +1173,8 @@ export default function CashierPage() {
                       <div className="space-y-1 flex-1">
                         <div className="flex items-center gap-2 flex-wrap">
                           <code className={`px-2 py-1 rounded-lg font-bold ${isPayment ? "text-violet-700 bg-violet-500/10" : "text-sky-700 bg-sky-500/10"}`}>{inv.invoice_number}</code>
-                          <span className={`px-2 py-0.5 rounded-lg text-xs font-bold ${isPayment ? "bg-violet-500/15 text-violet-700" : "bg-sky-500/15 text-sky-700"}`}>
-                            {isPayment ? "دفعة" : "يدوية"}
-                          </span>
-                          {inv.linked_visit_code && (
-                            <span className="px-2 py-0.5 rounded-lg text-xs bg-emerald-500/15 text-emerald-700 font-bold flex items-center gap-1">
-                              <LinkIcon className="w-3 h-3" /> زيارة: {inv.linked_visit_code}
-                            </span>
-                          )}
+                          <span className={`px-2 py-0.5 rounded-lg text-xs font-bold ${isPayment ? "bg-violet-500/15 text-violet-700" : "bg-sky-500/15 text-sky-700"}`}>{isPayment ? "دفعة" : "يدوية"}</span>
+                          {inv.linked_visit_code && (<span className="px-2 py-0.5 rounded-lg text-xs bg-emerald-500/15 text-emerald-700 font-bold flex items-center gap-1"><LinkIcon className="w-3 h-3" /> زيارة: {inv.linked_visit_code}</span>)}
                           {inv.payment_method && <span className="px-2 py-0.5 rounded-lg text-xs bg-violet-500/15 text-violet-600 font-bold">{inv.payment_method}</span>}
                           <span className="text-xs text-muted-foreground">{format(new Date(inv.created_at), "yyyy-MM-dd HH:mm")}</span>
                         </div>
@@ -1444,9 +1183,7 @@ export default function CashierPage() {
                       </div>
                       <div className="flex flex-col items-end gap-1 shrink-0">
                         <p className={`text-2xl font-black ${isPayment ? "text-violet-700" : "text-sky-700"}`}>{Number(inv.total_amount || 0).toLocaleString()}</p>
-                        <Button variant="outline" size="sm" className="text-xs gap-1" onClick={() => setSelectedInvoice(inv)}>
-                          <Receipt className="w-3.5 h-3.5" />عرض
-                        </Button>
+                        <Button variant="outline" size="sm" className="text-xs gap-1" onClick={() => setSelectedInvoice(inv)}><Receipt className="w-3.5 h-3.5" />عرض</Button>
                       </div>
                     </div>
                   );
@@ -1457,37 +1194,23 @@ export default function CashierPage() {
                   const { cleanName, cleanPhone } = extractCleanInfo(a);
                   const net = computeNetCollected(a);
                   const discFmt = formatDiscountLabel(a);
-
                   return (
                     <div key={a.id} className={`card-modern p-4 flex flex-col sm:flex-row sm:items-center justify-between gap-3 ${isPromo ? "border-amber-400/60 bg-amber-50/30 dark:bg-amber-950/10" : ""}`}>
                       <div className="space-y-1 flex-1">
                         <div className="flex items-center gap-2 flex-wrap">
                           <code className="text-primary bg-primary/10 px-2 py-1 rounded-lg font-bold">{a.reservation_code}</code>
                           {isPromo && <span className="bg-amber-500/20 text-amber-700 px-2 py-0.5 rounded-lg text-xs font-bold">🎁 عرض {a.promo_code ? `(${a.promo_code})` : ""}</span>}
-                          <span className={`px-2 py-0.5 rounded-lg text-xs font-bold ${a.payment_status === "partial" ? "bg-amber-500/15 text-amber-700" : "bg-blue-500/15 text-blue-600"}`}>
-                            {a.payment_status === "partial" ? "دفع جزئي" : "مدفوع"}
-                          </span>
+                          <span className={`px-2 py-0.5 rounded-lg text-xs font-bold ${a.payment_status === "partial" ? "bg-amber-500/15 text-amber-700" : "bg-blue-500/15 text-blue-600"}`}>{a.payment_status === "partial" ? "دفع جزئي" : "مدفوع"}</span>
                           {a.payment_method && <span className="px-2 py-0.5 rounded-lg text-xs bg-violet-500/15 text-violet-600 font-bold">{a.payment_method}</span>}
                           <span className="text-xs text-muted-foreground">{a.date} — {String(a.time).slice(0, 5)}</span>
                         </div>
                         <h2 className="font-bold text-foreground">{cleanName}</h2>
                         <p className="text-sm text-muted-foreground">{cleanPhone} — <b>{a.services?.name || "بدون خدمة"}</b></p>
-                        {isPromo && (
-                          <p className="text-xs text-amber-700">
-                            💰 الأصلي: <s>{a.original_price ?? a.services?.price ?? "—"}</s> ← الصافي: <b>{net.toLocaleString()}</b>
-                            {discFmt && ` — خصم ${discFmt}`}
-                          </p>
-                        )}
+                        {isPromo && (<p className="text-xs text-amber-700">💰 الأصلي: <s>{a.original_price ?? a.services?.price ?? "—"}</s> ← الصافي: <b>{net.toLocaleString()}</b>{discFmt && ` — خصم ${discFmt}`}</p>)}
                       </div>
                       <div className="flex flex-col items-end gap-1 shrink-0">
                         <p className="text-2xl font-black text-emerald-600">{net.toLocaleString()}</p>
-                        <Button variant="outline" size="sm" className="text-xs gap-1" onClick={() => {
-                          const enriched = { ...a, extracted_patient_name: cleanName, extracted_patient_phone: cleanPhone };
-                          openPaymentModal(enriched);
-                          setShowReceipt(true);
-                        }}>
-                          <Receipt className="w-3.5 h-3.5" />عرض السند
-                        </Button>
+                        <Button variant="outline" size="sm" className="text-xs gap-1" onClick={() => { const enriched = { ...a, extracted_patient_name: cleanName, extracted_patient_phone: cleanPhone }; openPaymentModal(enriched); setShowReceipt(true); }}><Receipt className="w-3.5 h-3.5" />عرض السند</Button>
                       </div>
                     </div>
                   );
@@ -1500,21 +1223,12 @@ export default function CashierPage() {
         {activeTab === "receipts" && (
           <div className="space-y-4">
             <div className="card-modern p-5">
-              <div className="flex items-center justify-between mb-4">
-                <h2 className="text-xl font-bold flex items-center gap-2"><BookOpen className="w-6 h-6 text-primary" /> دفتر الإيصالات (الحسابات)</h2>
-                <p className="text-sm text-muted-foreground">متابعة المدفوعات والمتبقي لكل مريض</p>
-              </div>
-              
-              {ledgerPatients.length === 0 ? (
-                <div className="text-center py-12 text-muted-foreground">لا توجد سجلات دفع في هذه الفترة</div>
-              ) : (
+              <div className="flex items-center justify-between mb-4"><h2 className="text-xl font-bold flex items-center gap-2"><BookOpen className="w-6 h-6 text-primary" /> دفتر الإيصالات (الحسابات)</h2><p className="text-sm text-muted-foreground">متابعة المدفوعات والمتبقي لكل مريض</p></div>
+              {ledgerPatients.length === 0 ? (<div className="text-center py-12 text-muted-foreground">لا توجد سجلات دفع في هذه الفترة</div>) : (
                 <div className="grid gap-3">
                   {ledgerPatients.map((p, idx) => (
                     <div key={idx} className="card-modern p-4 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 border-primary/20 bg-primary/5">
-                      <div className="flex-1">
-                        <h3 className="font-bold text-lg text-foreground">{p.name}</h3>
-                        <p className="text-sm text-muted-foreground">{p.phone}</p>
-                      </div>
+                      <div className="flex-1"><h3 className="font-bold text-lg text-foreground">{p.name}</h3><p className="text-sm text-muted-foreground">{p.phone}</p></div>
                       <div className="flex gap-6 text-center bg-background p-3 rounded-xl border border-border/50">
                         <div><p className="text-[10px] text-muted-foreground font-bold mb-1">الإجمالي</p><p className="font-black text-foreground">{p.total.toLocaleString()}</p></div>
                         <div className="border-r border-border/50"></div>
@@ -1522,15 +1236,7 @@ export default function CashierPage() {
                         <div className="border-r border-border/50"></div>
                         <div><p className="text-[10px] text-muted-foreground font-bold mb-1">الباقي</p><p className="font-black text-red-500">{p.remaining.toLocaleString()}</p></div>
                       </div>
-                      <Button onClick={() => { 
-                        setSelectedLedgerPatient(p); 
-                        setLedgerAmount(String(p.remaining > 0 ? p.remaining : 0)); 
-                        setLedgerLinkedVisit(""); 
-                        setLedgerNotes("");
-                        setLedgerModalOpen(true); 
-                      }} className="bg-primary w-full sm:w-auto shadow-glow">
-                        فتح الدفتر
-                      </Button>
+                      <Button onClick={() => { setSelectedLedgerPatient(p); setLedgerAmount(String(p.remaining > 0 ? p.remaining : 0)); setLedgerLinkedVisit(""); setLedgerNotes(""); setLedgerModalOpen(true); }} className="bg-primary w-full sm:w-auto shadow-glow">فتح الدفتر</Button>
                     </div>
                   ))}
                 </div>
@@ -1543,94 +1249,54 @@ export default function CashierPage() {
       {/* ✨ مودال الدفع */}
       {selectedAppointment && (
         <div className="fixed inset-0 z-50 bg-black/80 backdrop-blur-md flex items-center justify-center p-4 overflow-y-auto">
-          <div 
-            className="bg-background rounded-3xl max-w-md w-full shadow-2xl p-6 relative border border-border my-8"
-            onClick={(e) => e.stopPropagation()} // منع الإغلاق عند اللمس العارض
-          >
-            <button onClick={() => { setSelectedAppointment(null); setShowReceipt(false); }} className="absolute top-4 right-4 z-10 p-2 rounded-full bg-muted hover:bg-muted/80 text-foreground transition">
-              <X className="w-5 h-5" />
-            </button>
+          <div className="bg-background rounded-3xl max-w-md w-full shadow-2xl p-6 relative border border-border my-8" onClick={(e) => e.stopPropagation()}>
+            <button onClick={() => { setSelectedAppointment(null); setShowReceipt(false); }} className="absolute top-4 right-4 z-10 p-2 rounded-full bg-muted hover:bg-muted/80 text-foreground transition"><X className="w-5 h-5" /></button>
 
             {!showReceipt ? (
               <div className="space-y-5 pt-2">
                 <div className="text-center">
                   <div className="w-12 h-12 rounded-2xl bg-emerald-500/10 text-emerald-600 flex items-center justify-center mx-auto mb-2"><Banknote className="w-6 h-6" /></div>
                   <h2 className="text-xl font-bold text-foreground">تأكيد تحصيل المبلغ</h2>
-                  {selectedAppointment.is_promo && (
-                    <p className="text-xs text-amber-700 font-bold mt-2 bg-amber-50 rounded-lg px-3 py-1.5 inline-block">
-                      🎁 حجز من عرض — الخصم {formatDiscountLabel(selectedAppointment)}
-                    </p>
-                  )}
+                  {selectedAppointment.is_promo && (<p className="text-xs text-amber-700 font-bold mt-2 bg-amber-50 rounded-lg px-3 py-1.5 inline-block">🎁 حجز من عرض — الخصم {formatDiscountLabel(selectedAppointment)}</p>)}
                 </div>
 
-                {/* ✨ خيارات نوع الدفع (3 أزرار) */}
                 <div className="grid grid-cols-3 gap-2 bg-muted/30 p-2 rounded-xl">
-                  <button onClick={() => setVisitType("normal")} className={`flex flex-col items-center justify-center p-2 rounded-lg border transition ${visitType === "normal" ? "bg-primary/10 border-primary text-primary" : "bg-transparent border-transparent text-muted-foreground hover:bg-muted"}`}>
-                    <Stethoscope className="w-5 h-5 mb-1" />
-                    <span className="text-[11px] font-bold">زيارة عادية</span>
-                  </button>
-                  <button onClick={() => setVisitType("followup")} className={`flex flex-col items-center justify-center p-2 rounded-lg border transition ${visitType === "followup" ? "bg-amber-500/10 border-amber-500 text-amber-600" : "bg-transparent border-transparent text-muted-foreground hover:bg-muted"}`}>
-                    <RotateCcw className="w-5 h-5 mb-1" />
-                    <span className="text-[11px] font-bold">مراجعة طبيب</span>
-                  </button>
-                  <button onClick={() => setVisitType("link")} className={`flex flex-col items-center justify-center p-2 rounded-lg border transition ${visitType === "link" ? "bg-violet-500/10 border-violet-500 text-violet-600" : "bg-transparent border-transparent text-muted-foreground hover:bg-muted"}`}>
-                    <LinkIcon className="w-5 h-5 mb-1" />
-                    <span className="text-[11px] font-bold">دفع سابق</span>
-                  </button>
+                  <button onClick={() => setVisitType("normal")} className={`flex flex-col items-center justify-center p-2 rounded-lg border transition ${visitType === "normal" ? "bg-primary/10 border-primary text-primary" : "bg-transparent border-transparent text-muted-foreground hover:bg-muted"}`}><Stethoscope className="w-5 h-5 mb-1" /><span className="text-[11px] font-bold">زيارة عادية</span></button>
+                  <button onClick={() => setVisitType("followup")} className={`flex flex-col items-center justify-center p-2 rounded-lg border transition ${visitType === "followup" ? "bg-amber-500/10 border-amber-500 text-amber-600" : "bg-transparent border-transparent text-muted-foreground hover:bg-muted"}`}><RotateCcw className="w-5 h-5 mb-1" /><span className="text-[11px] font-bold">مراجعة طبيب</span></button>
+                  <button onClick={() => setVisitType("link")} className={`flex flex-col items-center justify-center p-2 rounded-lg border transition ${visitType === "link" ? "bg-violet-500/10 border-violet-500 text-violet-600" : "bg-transparent border-transparent text-muted-foreground hover:bg-muted"}`}><LinkIcon className="w-5 h-5 mb-1" /><span className="text-[11px] font-bold">دفع سابق</span></button>
                 </div>
 
-                {/* ✨ قائمة الزيارات السابقة للربط */}
                 {visitType === "link" && (
                   <div className="space-y-2">
                     <label className="text-xs font-semibold text-muted-foreground block mb-1">اختر الزيارة السابقة للسداد منها</label>
-                    <select 
-                      value={linkedVisitCode} 
-                      onChange={(e) => {
-                        setLinkedVisitCode(e.target.value);
-                        const v = patientPreviousVisits.find(x => x.code === e.target.value);
-                        if (v) setPaidAmountInput(String(v.remaining));
-                      }} 
-                      className="w-full h-10 rounded-md border border-input bg-background px-3 text-sm"
-                    >
+                    <select value={linkedVisitCode} onChange={(e) => { setLinkedVisitCode(e.target.value); const v = patientPreviousVisits.find(x => x.code === e.target.value); if (v) setPaidAmountInput(String(v.remaining)); }} className="w-full h-10 rounded-md border border-input bg-background px-3 text-sm">
                       <option value="">-- اختر الزيارة --</option>
-                      {patientPreviousVisits.map((v: any) => (
-                        <option key={v.code} value={v.code}>{v.code} - {v.service} (متبقي: {v.remaining})</option>
-                      ))}
+                      {patientPreviousVisits.map((v: any) => (<option key={v.code} value={v.code}>{v.code} - {v.service} (متبقي: {v.remaining})</option>))}
                     </select>
                   </div>
                 )}
 
                 <div className="card-modern p-4 bg-muted/40 space-y-3 text-sm">
-                  <div>
-                    <label className="text-xs font-semibold text-muted-foreground block mb-1">اسم المريض</label>
-                    <Input value={editPatientName} onChange={(e) => setEditPatientName(e.target.value)} placeholder="الاسم الكامل" className="font-bold text-sm bg-background" />
-                  </div>
-                  <div>
-                    <label className="text-xs font-semibold text-muted-foreground block mb-1">رقم الهاتف</label>
-                    <Input value={editPatientPhone} onChange={(e) => setEditPatientPhone(e.target.value)} className="font-bold text-sm bg-background" dir="ltr" />
-                  </div>
-                  <div className="flex justify-between border-b border-border/60 pb-2 pt-1">
-                    <span className="text-muted-foreground">كود الحجز</span>
-                    <span className="font-mono font-bold text-primary">{selectedAppointment.reservation_code}</span>
-                  </div>
-                  <div className="flex justify-between border-b border-border/60 pb-2">
-                    <span className="text-muted-foreground">الخدمة</span>
-                    <span className="font-medium text-foreground">{selectedAppointment.services?.name || "فحص طبي"}</span>
-                  </div>
+                  <div><label className="text-xs font-semibold text-muted-foreground block mb-1">اسم المريض</label><Input value={editPatientName} onChange={(e) => setEditPatientName(e.target.value)} placeholder="الاسم الكامل" className="font-bold text-sm bg-background" /></div>
+                  <div><label className="text-xs font-semibold text-muted-foreground block mb-1">رقم الهاتف</label><Input value={editPatientPhone} onChange={(e) => setEditPatientPhone(e.target.value)} className="font-bold text-sm bg-background" dir="ltr" /></div>
+                  <div className="flex justify-between border-b border-border/60 pb-2 pt-1"><span className="text-muted-foreground">كود الحجز</span><span className="font-mono font-bold text-primary">{selectedAppointment.reservation_code}</span></div>
+                  <div className="flex justify-between border-b border-border/60 pb-2"><span className="text-muted-foreground">الخدمة</span><span className="font-medium text-foreground">{selectedAppointment.services?.name || "فحص طبي"}</span></div>
 
                   <div>
                     <label className="text-xs font-semibold text-muted-foreground block mb-1">طريقة الدفع</label>
                     <div className="grid grid-cols-3 gap-2">
-                      {["نقدي", "تحويل", "بطاقة"].map(m => (
-                        <button key={m} onClick={() => setPaymentMethodInput(m)} className={`px-3 py-2 rounded-lg text-sm font-bold border transition ${paymentMethodInput === m ? "bg-primary text-white border-primary" : "bg-background border-border"}`}>{m}</button>
-                      ))}
+                      {["نقدي", "تحويل", "بطاقة"].map(m => (<button key={m} onClick={() => setPaymentMethodInput(m)} className={`px-3 py-2 rounded-lg text-sm font-bold border transition ${paymentMethodInput === m ? "bg-primary text-white border-primary" : "bg-background border-border"}`}>{m}</button>))}
                     </div>
                   </div>
 
-                  <div>
-                    <label className="text-xs font-semibold text-muted-foreground block mb-1">تاريخ الدفع</label>
-                    <Input type="date" value={paymentDate} onChange={(e) => setPaymentDate(e.target.value)} className="font-bold" />
-                  </div>
+                  <div><label className="text-xs font-semibold text-muted-foreground block mb-1">تاريخ الدفع</label><Input type="date" value={paymentDate} onChange={(e) => setPaymentDate(e.target.value)} className="font-bold" /></div>
+
+                  {visitType !== "link" && (
+                    <div>
+                      <label className="text-xs font-semibold text-amber-600 block mb-1">إجمالي تكلفة الخدمة (مثال: 250000)</label>
+                      <Input type="number" value={totalCostInput} onChange={(e) => setTotalCostInput(e.target.value)} className="font-bold text-lg text-amber-700" placeholder="0" />
+                    </div>
+                  )}
 
                   <div className="grid grid-cols-2 gap-3 pt-2">
                     <div>
@@ -1638,24 +1304,14 @@ export default function CashierPage() {
                       <Input type="number" value={paidAmountInput} onChange={(e) => setPaidAmountInput(e.target.value)} className="font-bold text-lg text-emerald-600" />
                     </div>
                     <div>
-                      <label className="text-xs font-semibold text-muted-foreground block mb-1">
-                        الخصم {modalDiscType === "percentage" ? "(نسبة %)" : "(مبلغ)"}
-                      </label>
+                      <label className="text-xs font-semibold text-muted-foreground block mb-1">الخصم {modalDiscType === "percentage" ? "(نسبة %)" : "(مبلغ)"}</label>
                       <Input type="number" value={discountInput} onChange={(e) => setDiscountInput(e.target.value)} className="font-bold text-lg text-red-500" />
                     </div>
                   </div>
 
-                  {modalDiscountCash > 0 && (
-                    <div className="flex justify-between text-sm text-red-600 bg-red-50 rounded-lg p-2">
-                      <span>الخصم المحسوب:</span>
-                      <span className="font-bold">-{modalDiscountCash.toLocaleString()}</span>
-                    </div>
-                  )}
+                  {modalDiscountCash > 0 && (<div className="flex justify-between text-sm text-red-600 bg-red-50 rounded-lg p-2"><span>الخصم المحسوب:</span><span className="font-bold">-{modalDiscountCash.toLocaleString()}</span></div>)}
 
-                  <div className="flex justify-between pt-2 border-t border-border/80 text-base">
-                    <span className="font-bold text-foreground">الصافي المُستلَم</span>
-                    <span className="font-black text-emerald-600 text-xl">{modalNetCollected.toLocaleString()}</span>
-                  </div>
+                  <div className="flex justify-between pt-2 border-t border-border/80 text-base"><span className="font-bold text-foreground">الصافي المُستلَم</span><span className="font-black text-emerald-600 text-xl">{modalNetCollected.toLocaleString()}</span></div>
                 </div>
 
                 <Button className="w-full bg-emerald-600 hover:bg-emerald-700 h-11 text-base font-bold" onClick={handlePayNow} disabled={processingPayment}>
@@ -1664,134 +1320,38 @@ export default function CashierPage() {
                 </Button>
               </div>
             ) : (
+              // ... شاشة السند (كما هي) ...
               <div className="space-y-4 pt-1">
-                <div className="text-center mb-1">
-                  <span className="inline-flex items-center gap-1 text-xs font-bold text-emerald-600 bg-emerald-50 dark:bg-emerald-950/50 px-3 py-1 rounded-full border border-emerald-200">
-                    <CheckCircle className="w-3.5 h-3.5" /> تم الدفع بنجاح
-                  </span>
-                </div>
-
-                <div id="receipt-card-container" className="bg-white text-gray-900 rounded-2xl border border-gray-200 shadow-xl overflow-hidden" style={{ direction: 'rtl', fontFamily: 'system-ui, -apple-system, sans-serif' }}>
-                  <div style={{
-                    background: selectedAppointment.is_promo ? "linear-gradient(135deg, #7c3aed 0%, #a855f7 50%, #d946ef 100%)" : "linear-gradient(135deg, #059669 0%, #0d9488 50%, #0891b2 100%)",
-                    padding: "20px 24px 18px", color: "white", display: "flex", alignItems: "center", gap: "14px"
-                  }}>
-                    <div style={{ width: "48px", height: "48px", background: "rgba(255,255,255,0.2)", borderRadius: "12px", display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0, border: "1.5px solid rgba(255,255,255,0.3)" }}>
-                      {clinic?.logo_url ? <img src={clinic.logo_url} alt="logo" style={{ width: "36px", height: "36px", borderRadius: "8px", objectFit: "cover" }} /> : <span style={{ fontSize: "22px" }}>{selectedAppointment.is_promo ? "🎁" : "🏥"}</span>}
+                 <div className="text-center mb-1"><span className="inline-flex items-center gap-1 text-xs font-bold text-emerald-600 bg-emerald-50 dark:bg-emerald-950/50 px-3 py-1 rounded-full border border-emerald-200"><CheckCircle className="w-3.5 h-3.5" /> تم الدفع بنجاح</span></div>
+                 <div id="receipt-card-container" className="bg-white text-gray-900 rounded-2xl border border-gray-200 shadow-xl overflow-hidden" style={{ direction: 'rtl', fontFamily: 'system-ui, -apple-system, sans-serif' }}>
+                    <div style={{ background: selectedAppointment.is_promo ? "linear-gradient(135deg, #7c3aed 0%, #a855f7 50%, #d946ef 100%)" : "linear-gradient(135deg, #059669 0%, #0d9488 50%, #0891b2 100%)", padding: "20px 24px 18px", color: "white", display: "flex", alignItems: "center", gap: "14px" }}>
+                      <div style={{ width: "48px", height: "48px", background: "rgba(255,255,255,0.2)", borderRadius: "12px", display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0, border: "1.5px solid rgba(255,255,255,0.3)" }}>{clinic?.logo_url ? <img src={clinic.logo_url} alt="logo" style={{ width: "36px", height: "36px", borderRadius: "8px", objectFit: "cover" }} /> : <span style={{ fontSize: "22px" }}>{selectedAppointment.is_promo ? "🎁" : "🏥"}</span>}</div>
+                      <div style={{ flex: 1 }}><p style={{ fontSize: "9px", opacity: 0.8, marginBottom: "3px", letterSpacing: "1.5px" }}>{selectedAppointment.is_promo ? "PROMO RECEIPT" : "OFFICIAL RECEIPT"}</p><h2 style={{ fontSize: "17px", fontWeight: 900, margin: 0, lineHeight: 1.2 }}>{clinic?.name || "العيادة"}</h2><p style={{ fontSize: "10px", opacity: 0.85, marginTop: "3px" }}>سند استلام مبلغ</p></div>
+                      <div style={{ background: "rgba(255,255,255,0.2)", borderRadius: "10px", padding: "6px 10px", textAlign: "center", border: "1px solid rgba(255,255,255,0.25)" }}><p style={{ fontSize: "8px", opacity: 0.9, margin: 0 }}>الحالة</p><p style={{ fontSize: "10px", fontWeight: 800, margin: "2px 0 0" }}>مدفوع ✓</p></div>
                     </div>
-                    <div style={{ flex: 1 }}>
-                      <p style={{ fontSize: "9px", opacity: 0.8, marginBottom: "3px", letterSpacing: "1.5px" }}>{selectedAppointment.is_promo ? "PROMO RECEIPT" : "OFFICIAL RECEIPT"}</p>
-                      <h2 style={{ fontSize: "17px", fontWeight: 900, margin: 0, lineHeight: 1.2 }}>{clinic?.name || "العيادة"}</h2>
-                      <p style={{ fontSize: "10px", opacity: 0.85, marginTop: "3px" }}>سند استلام مبلغ</p>
-                    </div>
-                    <div style={{ background: "rgba(255,255,255,0.2)", borderRadius: "10px", padding: "6px 10px", textAlign: "center", border: "1px solid rgba(255,255,255,0.25)" }}>
-                      <p style={{ fontSize: "8px", opacity: 0.9, margin: 0 }}>الحالة</p>
-                      <p style={{ fontSize: "10px", fontWeight: 800, margin: "2px 0 0" }}>مدفوع ✓</p>
+                    <div className="p-5 space-y-2 text-xs">
+                      <div className="flex justify-between items-center text-gray-600"><span>كود الحجز:</span><span className="font-mono font-bold text-gray-900 bg-gray-100 px-2 py-0.5 rounded">{selectedAppointment.reservation_code}</span></div>
+                      <div className="flex justify-between items-center text-gray-600"><span>التاريخ:</span><span className="font-medium text-gray-800">{format(new Date(), "yyyy/MM/dd - hh:mm a")}</span></div>
+                      <div className="flex justify-between items-center text-gray-600"><span>المريض:</span><span className="font-bold text-gray-900 text-sm">{editPatientName || extractCleanInfo(selectedAppointment).cleanName}</span></div>
+                      <div className="flex justify-between items-center text-gray-600"><span>الهاتف:</span><span className="font-medium text-gray-800" dir="ltr">{editPatientPhone || extractCleanInfo(selectedAppointment).cleanPhone}</span></div>
+                      <div className="flex justify-between items-center text-gray-600"><span>الخدمة:</span><span className="font-medium text-gray-800">{selectedAppointment.services?.name || "فحص طبي"}</span></div>
+                      <div className="flex justify-between items-center text-gray-600"><span>طريقة الدفع:</span><span className="font-bold text-gray-900">{paymentMethodInput}</span></div>
+                      <div className="my-3 border-t border-dashed border-gray-200" />
+                      <div className={`flex justify-between items-center p-3 rounded-xl border ${selectedAppointment.is_promo ? "bg-purple-50/80 border-purple-100" : "bg-emerald-50/80 border-emerald-100"}`}>
+                        <span className={`font-bold text-sm ${selectedAppointment.is_promo ? "text-purple-900" : "text-emerald-900"}`}>المبلغ المُستلَم:</span>
+                        <span className={`font-black text-xl ${selectedAppointment.is_promo ? "text-purple-700" : "text-emerald-700"}`}>{Number(selectedAppointment.paid_amount || 0).toLocaleString()}</span>
+                      </div>
+                      <div className="mt-4 pt-3 border-t border-gray-100 flex items-center justify-between"><div><p className="text-[10px] font-bold text-gray-700">رمز التحقق:</p><p className="text-[9px] font-mono text-gray-400 mt-0.5">{getUniquePaymentToken(selectedAppointment)}</p></div><div className="bg-white p-1 rounded-lg border border-gray-200 shrink-0"><img src={`https://api.qrserver.com/v1/create-qr-code/?size=120x100&data=${encodeURIComponent(getUniquePaymentToken(selectedAppointment))}`} alt="QR" className="w-12 h-12" crossOrigin="anonymous" /></div></div>
+                      <div className="mt-3 text-center text-[9px] text-gray-400 border-t border-gray-100 pt-2">معتمد إلكترونياً عبر صندوق الخزينة</div>
                     </div>
                   </div>
-
-                  <div className="p-5 space-y-2 text-xs">
-                    <div className="flex justify-between items-center text-gray-600">
-                      <span>كود الحجز:</span>
-                      <span className="font-mono font-bold text-gray-900 bg-gray-100 px-2 py-0.5 rounded">{selectedAppointment.reservation_code}</span>
-                    </div>
-                    <div className="flex justify-between items-center text-gray-600">
-                      <span>التاريخ:</span>
-                      <span className="font-medium text-gray-800">{format(new Date(), "yyyy/MM/dd - hh:mm a")}</span>
-                    </div>
-                    <div className="flex justify-between items-center text-gray-600">
-                      <span>المريض:</span>
-                      <span className="font-bold text-gray-900 text-sm">{editPatientName || extractCleanInfo(selectedAppointment).cleanName}</span>
-                    </div>
-                    <div className="flex justify-between items-center text-gray-600">
-                      <span>الهاتف:</span>
-                      <span className="font-medium text-gray-800" dir="ltr">{editPatientPhone || extractCleanInfo(selectedAppointment).cleanPhone}</span>
-                    </div>
-                    <div className="flex justify-between items-center text-gray-600">
-                      <span>الخدمة:</span>
-                      <span className="font-medium text-gray-800">{selectedAppointment.services?.name || "فحص طبي"}</span>
-                    </div>
-                    <div className="flex justify-between items-center text-gray-600">
-                      <span>طريقة الدفع:</span>
-                      <span className="font-bold text-gray-900">{paymentMethodInput}</span>
-                    </div>
-
-                    {selectedAppointment.is_promo && (
-                      <>
-                        <div className="my-2 border-t border-dashed border-purple-200" />
-                        <div className="bg-gradient-to-r from-purple-50 to-fuchsia-50 border border-purple-200 rounded-xl p-3 space-y-1.5">
-                          <p className="text-[10px] font-bold text-purple-800 uppercase">🎁 تفاصيل العرض</p>
-                          {selectedAppointment.promo_code && (
-                            <div className="flex justify-between items-center">
-                              <span className="text-purple-700">كود:</span>
-                              <span className="font-mono font-bold text-purple-900 bg-white px-2 py-0.5 rounded">{selectedAppointment.promo_code}</span>
-                            </div>
-                          )}
-                          {selectedAppointment.original_price != null && (
-                            <div className="flex justify-between items-center">
-                              <span className="text-purple-700">السعر الأصلي:</span>
-                              <span className="font-medium text-purple-900 line-through">{Number(selectedAppointment.original_price).toLocaleString()}</span>
-                            </div>
-                          )}
-                          {formatDiscountLabel(selectedAppointment) && (
-                            <div className="flex justify-between items-center">
-                              <span className="text-purple-700">نسبة الخصم:</span>
-                              <span className="font-bold text-purple-700">{formatDiscountLabel(selectedAppointment)}</span>
-                            </div>
-                          )}
-                          {selectedAppointment.discount_applied != null && selectedAppointment.discount_applied > 0 && (
-                            <div className="flex justify-between items-center">
-                              <span className="text-purple-700">قيمة الخصم:</span>
-                              <span className="font-bold text-red-600">-{Number(selectedAppointment.discount_applied).toLocaleString()}</span>
-                            </div>
-                          )}
-                          {selectedAppointment.final_price != null && (
-                            <div className="flex justify-between items-center border-t border-purple-200 pt-1.5 mt-1">
-                              <span className="text-purple-700 font-bold">السعر بعد الخصم:</span>
-                              <span className="font-black text-purple-900 text-base">{Number(selectedAppointment.final_price).toLocaleString()}</span>
-                            </div>
-                          )}
-                        </div>
-                      </>
-                    )}
-
-                    <div className="my-3 border-t border-dashed border-gray-200" />
-
-                    <div className={`flex justify-between items-center p-3 rounded-xl border ${selectedAppointment.is_promo ? "bg-purple-50/80 border-purple-100" : "bg-emerald-50/80 border-emerald-100"}`}>
-                      <span className={`font-bold text-sm ${selectedAppointment.is_promo ? "text-purple-900" : "text-emerald-900"}`}>المبلغ المُستلَم:</span>
-                      <span className={`font-black text-xl ${selectedAppointment.is_promo ? "text-purple-700" : "text-emerald-700"}`}>
-                        {Number(selectedAppointment.paid_amount || 0).toLocaleString()}
-                      </span>
-                    </div>
-
-                    <div className="mt-4 pt-3 border-t border-gray-100 flex items-center justify-between">
-                      <div>
-                        <p className="text-[10px] font-bold text-gray-700">رمز التحقق:</p>
-                        <p className="text-[9px] font-mono text-gray-400 mt-0.5">{getUniquePaymentToken(selectedAppointment)}</p>
-                      </div>
-                      <div className="bg-white p-1 rounded-lg border border-gray-200 shrink-0">
-                        <img src={`https://api.qrserver.com/v1/create-qr-code/?size=120x100&data=${encodeURIComponent(getUniquePaymentToken(selectedAppointment))}`} alt="QR" className="w-12 h-12" crossOrigin="anonymous" />
-                      </div>
-                    </div>
-
-                    <div className="mt-3 text-center text-[9px] text-gray-400 border-t border-gray-100 pt-2">معتمد إلكترونياً عبر صندوق الخزينة</div>
+                  <div className="grid grid-cols-2 gap-2 pt-2">
+                    <Button variant="outline" size="sm" className="text-xs gap-1" onClick={downloadReceipt}><Download className="w-3.5 h-3.5" />تنزيل</Button>
+                    <Button variant="outline" size="sm" className="text-xs gap-1" onClick={printReceipt}><Printer className="w-3.5 h-3.5" />طباعة</Button>
+                    <Button size="sm" className="text-xs gap-1 bg-[#25D366] hover:bg-[#20ba5a] text-white font-bold" onClick={sendViaWhatsApp} disabled={sendingReceipt}>{sendingReceipt ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <MessageCircle className="w-3.5 h-3.5" />}واتساب</Button>
+                    {(selectedAppointment.customer_telegram_id || selectedAppointment.patients?.telegram_user_id) && (<Button size="sm" className="text-xs gap-1 bg-[#0088cc] hover:bg-[#0077b5] text-white font-bold" onClick={sendViaTelegram} disabled={sendingTelegram}>{sendingTelegram ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Send className="w-3.5 h-3.5" />}تلجرام</Button>)}
                   </div>
-                </div>
-
-                <div className="grid grid-cols-2 gap-2 pt-2">
-                  <Button variant="outline" size="sm" className="text-xs gap-1" onClick={downloadReceipt}><Download className="w-3.5 h-3.5" />تنزيل</Button>
-                  <Button variant="outline" size="sm" className="text-xs gap-1" onClick={printReceipt}><Printer className="w-3.5 h-3.5" />طباعة</Button>
-                  <Button size="sm" className="text-xs gap-1 bg-[#25D366] hover:bg-[#20ba5a] text-white font-bold" onClick={sendViaWhatsApp} disabled={sendingReceipt}>
-                    {sendingReceipt ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <MessageCircle className="w-3.5 h-3.5" />}واتساب
-                  </Button>
-                  {(selectedAppointment.customer_telegram_id || selectedAppointment.patients?.telegram_user_id) && (
-                    <Button size="sm" className="text-xs gap-1 bg-[#0088cc] hover:bg-[#0077b5] text-white font-bold" onClick={sendViaTelegram} disabled={sendingTelegram}>
-                      {sendingTelegram ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Send className="w-3.5 h-3.5" />}تلجرام
-                    </Button>
-                  )}
-                </div>
-
-                <Button variant="ghost" className="w-full text-xs mt-1" onClick={() => { setSelectedAppointment(null); setShowReceipt(false); }}>إغلاق</Button>
+                  <Button variant="ghost" className="w-full text-xs mt-1" onClick={() => { setSelectedAppointment(null); setShowReceipt(false); }}>إغلاق</Button>
               </div>
             )}
           </div>
@@ -1800,306 +1360,170 @@ export default function CashierPage() {
 
       {/* ✨ مودال إنشاء فاتورة */}
       <Dialog open={createInvoiceOpen} onOpenChange={setCreateInvoiceOpen}>
-        <DialogContent 
-          dir="rtl" 
-          className="max-w-2xl max-h-[92vh] overflow-y-auto"
-          onInteractOutside={(e) => e.preventDefault()} 
-          onEscapeKeyDown={(e) => e.preventDefault()}
-        >
+        <DialogContent dir="rtl" className="max-w-2xl max-h-[92vh] overflow-y-auto" onInteractOutside={(e) => e.preventDefault()} onEscapeKeyDown={(e) => e.preventDefault()}>
           <DialogHeader><DialogTitle className="flex items-center gap-2"><FileText className="w-5 h-5 text-sky-600" />إنشاء فاتورة جديدة</DialogTitle></DialogHeader>
-
           <div className="space-y-4 pt-2">
             <div className="grid grid-cols-2 gap-3">
-              <div>
-                <label className="text-xs font-semibold text-muted-foreground block mb-1">اسم المريض</label>
-                <Input value={invPatientName} onChange={(e) => setInvPatientName(e.target.value)} placeholder="اسم المريض" onKeyDown={(e) => e.key === 'Enter' && e.preventDefault()} />
-              </div>
-              <div>
-                <label className="text-xs font-semibold text-muted-foreground block mb-1">رقم الهاتف</label>
-                <Input value={invPatientPhone} onChange={(e) => setInvPatientPhone(e.target.value)} dir="ltr" onKeyDown={(e) => e.key === 'Enter' && e.preventDefault()} />
-              </div>
+              <div><label className="text-xs font-semibold text-muted-foreground block mb-1">اسم المريض</label><Input value={invPatientName} onChange={(e) => setInvPatientName(e.target.value)} placeholder="اسم المريض" onKeyDown={(e) => e.key === 'Enter' && e.preventDefault()} /></div>
+              <div><label className="text-xs font-semibold text-muted-foreground block mb-1">رقم الهاتف</label><Input value={invPatientPhone} onChange={(e) => setInvPatientPhone(e.target.value)} dir="ltr" onKeyDown={(e) => e.key === 'Enter' && e.preventDefault()} /></div>
             </div>
-
             <div>
-              <div className="flex items-center justify-between mb-2">
-                <label className="text-sm font-bold text-foreground">البنود</label>
-                <Button size="sm" variant="outline" onClick={addInvoiceItem} className="gap-1"><Plus className="w-3.5 h-3.5" />إضافة بند</Button>
-              </div>
+              <div className="flex items-center justify-between mb-2"><label className="text-sm font-bold text-foreground">البنود</label><Button size="sm" variant="outline" onClick={addInvoiceItem} className="gap-1"><Plus className="w-3.5 h-3.5" />إضافة بند</Button></div>
               <div className="space-y-2">
                 {invItems.map((it, idx) => (
                   <div key={idx} className="grid grid-cols-[1fr_70px_90px_40px] gap-2 items-center">
                     <Input value={it.name} onChange={(e) => updateInvoiceItem(idx, { name: e.target.value })} placeholder="اسم الخدمة" className="text-sm" onKeyDown={(e) => e.key === 'Enter' && e.preventDefault()} />
                     <Input type="number" value={it.qty} onChange={(e) => updateInvoiceItem(idx, { qty: parseInt(e.target.value) || 0 })} placeholder="الكمية" className="text-sm text-center" min={1} onKeyDown={(e) => e.key === 'Enter' && e.preventDefault()} />
                     <Input type="number" value={it.price} onChange={(e) => updateInvoiceItem(idx, { price: parseFloat(e.target.value) || 0 })} placeholder="السعر" className="text-sm" min={0} onKeyDown={(e) => e.key === 'Enter' && e.preventDefault()} />
-                    <Button size="sm" variant="ghost" onClick={() => removeInvoiceItem(idx)} disabled={invItems.length === 1} className="text-red-600 hover:text-red-700 p-0 h-9">
-                      <Trash2 className="w-4 h-4" />
-                    </Button>
+                    <Button size="sm" variant="ghost" onClick={() => removeInvoiceItem(idx)} disabled={invItems.length === 1} className="text-red-600 hover:text-red-700 p-0 h-9"><Trash2 className="w-4 h-4" /></Button>
                   </div>
                 ))}
               </div>
             </div>
-
             <div className="bg-muted/30 rounded-xl p-3 space-y-2">
-              <div className="flex justify-between text-sm">
-                <span className="text-muted-foreground">المجموع الفرعي:</span>
-                <span className="font-bold">{calcInvoiceSubtotal().toLocaleString()}</span>
-              </div>
+              <div className="flex justify-between text-sm"><span className="text-muted-foreground">المجموع الفرعي:</span><span className="font-bold">{calcInvoiceSubtotal().toLocaleString()}</span></div>
               <div className="grid grid-cols-[110px_1fr_auto] gap-2 items-center">
-                <select value={invDiscountType} onChange={(e) => setInvDiscountType(e.target.value as any)} className="h-10 rounded-md border border-input bg-background px-3 text-sm">
-                  <option value="fixed">مبلغ ثابت</option>
-                  <option value="percentage">نسبة %</option>
-                </select>
+                <select value={invDiscountType} onChange={(e) => setInvDiscountType(e.target.value as any)} className="h-10 rounded-md border border-input bg-background px-3 text-sm"><option value="fixed">مبلغ ثابت</option><option value="percentage">نسبة %</option></select>
                 <Input type="number" value={invDiscountValue} onChange={(e) => setInvDiscountValue(e.target.value)} placeholder="0" min={0} onKeyDown={(e) => e.key === 'Enter' && e.preventDefault()} />
                 <span className="text-sm font-bold text-red-500 whitespace-nowrap">-{calcInvoiceDiscount(calcInvoiceSubtotal()).toLocaleString()}</span>
               </div>
-              <div className="flex justify-between items-center pt-2 border-t border-border/60">
-                <span className="font-bold text-foreground">الإجمالي:</span>
-                <span className="font-black text-emerald-600 text-xl">{Math.max(0, calcInvoiceSubtotal() - calcInvoiceDiscount(calcInvoiceSubtotal())).toLocaleString()}</span>
-              </div>
+              <div className="flex justify-between items-center pt-2 border-t border-border/60"><span className="font-bold text-foreground">الإجمالي:</span><span className="font-black text-emerald-600 text-xl">{Math.max(0, calcInvoiceSubtotal() - calcInvoiceDiscount(calcInvoiceSubtotal())).toLocaleString()}</span></div>
             </div>
-
             <div className="grid grid-cols-2 gap-3">
               <div>
                 <label className="text-xs font-semibold text-muted-foreground block mb-1">طريقة الدفع</label>
-                <div className="grid grid-cols-3 gap-1">
-                  {["نقدي", "تحويل", "بطاقة"].map(m => (
-                    <button key={m} onClick={() => setInvPaymentMethod(m)} className={`px-2 py-2 rounded-lg text-xs font-bold border transition ${invPaymentMethod === m ? "bg-primary text-white border-primary" : "bg-background border-border"}`}>{m}</button>
-                  ))}
-                </div>
+                <div className="grid grid-cols-3 gap-1">{["نقدي", "تحويل", "بطاقة"].map(m => (<button key={m} onClick={() => setInvPaymentMethod(m)} className={`px-2 py-2 rounded-lg text-xs font-bold border transition ${invPaymentMethod === m ? "bg-primary text-white border-primary" : "bg-background border-border"}`}>{m}</button>))}</div>
               </div>
-              <div>
-                <label className="text-xs font-semibold text-muted-foreground block mb-1">ملاحظات</label>
-                <Input value={invNotes} onChange={(e) => setInvNotes(e.target.value)} placeholder="اختياري" onKeyDown={(e) => e.key === 'Enter' && e.preventDefault()} />
-              </div>
+              <div><label className="text-xs font-semibold text-muted-foreground block mb-1">ملاحظات</label><Input value={invNotes} onChange={(e) => setInvNotes(e.target.value)} placeholder="اختياري" onKeyDown={(e) => e.key === 'Enter' && e.preventDefault()} /></div>
             </div>
-
             <div className="flex gap-2 pt-2">
               <Button variant="outline" onClick={() => setCreateInvoiceOpen(false)} className="flex-1">إلغاء</Button>
-              <Button onClick={handleSaveInvoice} disabled={invSaving} className="flex-1 bg-sky-600 hover:bg-sky-700 text-white font-bold">
-                {invSaving ? <Loader2 className="w-4 h-4 animate-spin ml-1" /> : <CheckCircle className="w-4 h-4 ml-1" />}حفظ
-              </Button>
+              <Button onClick={handleSaveInvoice} disabled={invSaving} className="flex-1 bg-sky-600 hover:bg-sky-700 text-white font-bold">{invSaving ? <Loader2 className="w-4 h-4 animate-spin ml-1" /> : <CheckCircle className="w-4 h-4 ml-1" />}حفظ</Button>
             </div>
           </div>
         </DialogContent>
       </Dialog>
 
-      {/* ✨ مودال عرض الفاتورة اليدوية / الدفعات */}
+      {/* ✨ مودال عرض الفاتورة اليدوية */}
       {selectedInvoice && (
         <div className="fixed inset-0 z-50 bg-black/80 backdrop-blur-md flex items-center justify-center p-4 overflow-y-auto">
           <div className="bg-background rounded-3xl max-w-md w-full shadow-2xl p-6 relative border border-border my-8">
             <button onClick={() => setSelectedInvoice(null)} className="absolute top-4 right-4 z-10 p-2 rounded-full bg-muted hover:bg-muted/80 text-foreground transition"><X className="w-5 h-5" /></button>
-
             <div id="invoice-card-container" className="bg-white text-gray-900 rounded-2xl border border-gray-200 shadow-xl overflow-hidden" style={{ direction: 'rtl' }}>
               <div style={{ background: "linear-gradient(135deg, #059669 0%, #0d9488 50%, #0891b2 100%)", padding: "20px 24px", color: "white", display: "flex", alignItems: "center", gap: "14px" }}>
-                <div style={{ width: "48px", height: "48px", background: "rgba(255,255,255,0.2)", borderRadius: "12px", display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0, border: "1.5px solid rgba(255,255,255,0.3)" }}>
-                  {clinic?.logo_url ? <img src={clinic.logo_url} alt="logo" style={{ width: "36px", height: "36px", borderRadius: "8px", objectFit: "cover" }} /> : <span style={{ fontSize: "22px" }}>🏥</span>}
-                </div>
-                <div style={{ flex: 1 }}>
-                  <p style={{ fontSize: "9px", opacity: 0.8, marginBottom: "3px", letterSpacing: "1.5px" }}>{isPaymentRecord(selectedInvoice) ? "PAYMENT RECEIPT" : "OFFICIAL INVOICE"}</p>
-                  <h2 style={{ fontSize: "17px", fontWeight: 900, margin: 0, lineHeight: 1.2 }}>{clinic?.name || "العيادة"}</h2>
-                  <p style={{ fontSize: "10px", opacity: 0.85, marginTop: "3px" }}>{isPaymentRecord(selectedInvoice) ? "سند استلام دفعة" : "فاتورة رسمية"}</p>
-                </div>
+                <div style={{ width: "48px", height: "48px", background: "rgba(255,255,255,0.2)", borderRadius: "12px", display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0, border: "1.5px solid rgba(255,255,255,0.3)" }}>{clinic?.logo_url ? <img src={clinic.logo_url} alt="logo" style={{ width: "36px", height: "36px", borderRadius: "8px", objectFit: "cover" }} /> : <span style={{ fontSize: "22px" }}>🏥</span>}</div>
+                <div style={{ flex: 1 }}><p style={{ fontSize: "9px", opacity: 0.8, marginBottom: "3px", letterSpacing: "1.5px" }}>{isPaymentRecord(selectedInvoice) ? "PAYMENT RECEIPT" : "OFFICIAL INVOICE"}</p><h2 style={{ fontSize: "17px", fontWeight: 900, margin: 0, lineHeight: 1.2 }}>{clinic?.name || "العيادة"}</h2><p style={{ fontSize: "10px", opacity: 0.85, marginTop: "3px" }}>{isPaymentRecord(selectedInvoice) ? "سند استلام دفعة" : "فاتورة رسمية"}</p></div>
               </div>
-
               <div className="p-5 space-y-2 text-xs">
                 <div className="flex justify-between"><span className="text-gray-600">الرقم:</span><span className="font-mono font-bold bg-gray-100 px-2 rounded">{selectedInvoice.invoice_number}</span></div>
                 <div className="flex justify-between"><span className="text-gray-600">التاريخ:</span><span className="font-medium">{format(new Date(selectedInvoice.created_at), "yyyy/MM/dd - HH:mm")}</span></div>
                 <div className="flex justify-between"><span className="text-gray-600">المريض:</span><span className="font-bold">{selectedInvoice.patient_name || "—"}</span></div>
                 <div className="flex justify-between"><span className="text-gray-600">الهاتف:</span><span className="font-medium" dir="ltr">{selectedInvoice.patient_phone || "—"}</span></div>
                 <div className="flex justify-between"><span className="text-gray-600">طريقة الدفع:</span><span className="font-bold">{selectedInvoice.payment_method || "—"}</span></div>
-                {selectedInvoice.linked_visit_code && (
-                  <div className="flex justify-between"><span className="text-gray-600">مرتبطة بزيارة:</span><span className="font-bold text-emerald-700">{selectedInvoice.linked_visit_code}</span></div>
-                )}
-
+                {selectedInvoice.linked_visit_code && (<div className="flex justify-between"><span className="text-gray-600">مرتبطة بزيارة:</span><span className="font-bold text-emerald-700">{selectedInvoice.linked_visit_code}</span></div>)}
                 <div className="my-3 border-t border-dashed border-gray-200" />
-
-                <div className="space-y-1.5">
-                  <p className="text-[10px] font-bold text-gray-700 uppercase">البنود:</p>
-                  {selectedInvoice.items.map((it, i) => (
-                    <div key={i} className="flex justify-between items-center bg-gray-50 rounded-lg px-3 py-2">
-                      <span className="font-medium">{it.name} × {it.qty}</span>
-                      <span className="font-bold">{(Number(it.qty) * Number(it.price)).toLocaleString()}</span>
-                    </div>
-                  ))}
-                </div>
-
+                <div className="space-y-1.5"><p className="text-[10px] font-bold text-gray-700 uppercase">البنود:</p>{selectedInvoice.items.map((it, i) => (<div key={i} className="flex justify-between items-center bg-gray-50 rounded-lg px-3 py-2"><span className="font-medium">{it.name} × {it.qty}</span><span className="font-bold">{(Number(it.qty) * Number(it.price)).toLocaleString()}</span></div>))}</div>
                 <div className="my-3 border-t border-dashed border-gray-200" />
-
                 <div className="flex justify-between"><span className="text-gray-600">المجموع الفرعي:</span><span className="font-bold">{Number(selectedInvoice.subtotal).toLocaleString()}</span></div>
-                {selectedInvoice.discount_amount > 0 && (
-                  <div className="flex justify-between text-red-600">
-                    <span>الخصم {selectedInvoice.discount_type === "percentage" ? `(${selectedInvoice.discount_value}%)` : ""}:</span>
-                    <span className="font-bold">-{Number(selectedInvoice.discount_amount).toLocaleString()}</span>
-                  </div>
-                )}
-                <div className="flex justify-between items-center bg-emerald-50 rounded-lg p-3 border border-emerald-100 mt-2">
-                  <span className="font-bold text-emerald-900 text-sm">الإجمالي:</span>
-                  <span className="font-black text-emerald-700 text-xl">{Number(selectedInvoice.total_amount).toLocaleString()}</span>
-                </div>
-
+                {selectedInvoice.discount_amount > 0 && (<div className="flex justify-between text-red-600"><span>الخصم {selectedInvoice.discount_type === "percentage" ? `(${selectedInvoice.discount_value}%)` : ""}:</span><span className="font-bold">-{Number(selectedInvoice.discount_amount).toLocaleString()}</span></div>)}
+                <div className="flex justify-between items-center bg-emerald-50 rounded-lg p-3 border border-emerald-100 mt-2"><span className="font-bold text-emerald-900 text-sm">الإجمالي:</span><span className="font-black text-emerald-700 text-xl">{Number(selectedInvoice.total_amount).toLocaleString()}</span></div>
                 <div className="mt-4 pt-3 border-t border-gray-100 flex items-center justify-between">
-                  <div>
-                    <p className="text-[10px] font-bold text-gray-700">رمز التحقق:</p>
-                    <p className="text-[9px] font-mono text-gray-400">{selectedInvoice.invoice_number}</p>
-                  </div>
-                  <div className="flex flex-col items-center gap-1">
-                    <img src={`https://api.qrserver.com/v1/create-qr-code/?size=120x100&data=${encodeURIComponent(selectedInvoice.invoice_number)}`} alt="QR" className="w-12 h-12" crossOrigin="anonymous" />
-                    <img src={`https://barcode.tec-it.com/barcode.ashx?data=${selectedInvoice.invoice_number}&code=Code128&dpi=96`} alt="barcode" style={{ height: "24px", width: "80px", objectFit: "contain" }} crossOrigin="anonymous" />
-                  </div>
+                  <div><p className="text-[10px] font-bold text-gray-700">رمز التحقق:</p><p className="text-[9px] font-mono text-gray-400">{selectedInvoice.invoice_number}</p></div>
+                  <div className="flex flex-col items-center gap-1"><img src={`https://api.qrserver.com/v1/create-qr-code/?size=120x100&data=${encodeURIComponent(selectedInvoice.invoice_number)}`} alt="QR" className="w-12 h-12" crossOrigin="anonymous" /><img src={`https://barcode.tec-it.com/barcode.ashx?data=${selectedInvoice.invoice_number}&code=Code128&dpi=96`} alt="barcode" style={{ height: "24px", width: "80px", objectFit: "contain" }} crossOrigin="anonymous" /></div>
                 </div>
               </div>
             </div>
-
             <div className="grid grid-cols-2 gap-2 pt-3">
               <Button variant="outline" size="sm" className="text-xs gap-1" onClick={async () => {
-                try {
-                  const el = document.getElementById("invoice-card-container");
-                  if (!el) return;
-                  const canvas = await html2canvas(el, { scale: 3, useCORS: true, backgroundColor: "#ffffff" });
-                  const link = document.createElement("a");
-                  link.href = canvas.toDataURL("image/png");
-                  link.download = `سند_${selectedInvoice.invoice_number}.png`;
-                  link.click();
-                } catch { toast({ title: "خطأ", variant: "destructive" }); }
-              }}>
-                <Download className="w-3.5 h-3.5" />تنزيل
-              </Button>
+                try { const el = document.getElementById("invoice-card-container"); if (!el) return; const canvas = await html2canvas(el, { scale: 3, useCORS: true, backgroundColor: "#ffffff" }); const link = document.createElement("a"); link.href = canvas.toDataURL("image/png"); link.download = `سند_${selectedInvoice.invoice_number}.png`; link.click(); } catch { toast({ title: "خطأ", variant: "destructive" }); }
+              }}><Download className="w-3.5 h-3.5" />تنزيل</Button>
               <Button variant="outline" size="sm" className="text-xs gap-1" onClick={async () => {
-                try {
-                  const el = document.getElementById("invoice-card-container");
-                  if (!el) return;
-                  const canvas = await html2canvas(el, { scale: 3, useCORS: true, backgroundColor: "#ffffff" });
-                  const imgData = canvas.toDataURL("image/png");
-                  const win = window.open("", "_blank");
-                  if (win) { win.document.write(`<html><head><title>طباعة</title></head><body style="margin:0;display:flex;align-items:center;justify-content:center;min-height:100vh;background:#f4f4f5;"><img src="${imgData}" style="max-width:100%;height:auto;" onload="window.print();window.close();" /></body></html>`); win.document.close(); }
-                } catch { toast({ title: "خطأ", variant: "destructive" }); }
-              }}>
-                <Printer className="w-3.5 h-3.5" />طباعة
-              </Button>
+                try { const el = document.getElementById("invoice-card-container"); if (!el) return; const canvas = await html2canvas(el, { scale: 3, useCORS: true, backgroundColor: "#ffffff" }); const imgData = canvas.toDataURL("image/png"); const win = window.open("", "_blank"); if (win) { win.document.write(`<html><head><title>طباعة</title></head><body style="margin:0;display:flex;align-items:center;justify-content:center;min-height:100vh;background:#f4f4f5;"><img src="${imgData}" style="max-width:100%;height:auto;" onload="window.print();window.close();" /></body></html>`); win.document.close(); } } catch { toast({ title: "خطأ", variant: "destructive" }); }
+              }}><Printer className="w-3.5 h-3.5" />طباعة</Button>
             </div>
-
             <Button variant="ghost" className="w-full text-xs mt-2" onClick={() => setSelectedInvoice(null)}>إغلاق</Button>
           </div>
         </div>
       )}
 
-      {/* ✨ مودال دفتر المريض (يدعم عشرات الزيارات) */}
+      {/* ✨ مودال دفتر المريض */}
       <Dialog open={ledgerModalOpen} onOpenChange={setLedgerModalOpen}>
         <DialogContent dir="rtl" className="max-w-4xl max-h-[90vh] overflow-y-auto" onInteractOutside={(e) => e.preventDefault()}>
-          <DialogHeader>
-            <DialogTitle className="flex items-center gap-2">
-              <BookOpen className="w-5 h-5 text-primary" />
-              دفتر المريض: {selectedLedgerPatient?.name}
-            </DialogTitle>
-          </DialogHeader>
+          <DialogHeader><DialogTitle className="flex items-center gap-2"><BookOpen className="w-5 h-5 text-primary" />دفتر المريض: {selectedLedgerPatient?.name}</DialogTitle></DialogHeader>
           
           <div className="space-y-5">
-            {/* الزيارات */}
             <div className="space-y-2">
               <h3 className="font-bold text-sm text-foreground flex items-center gap-1"><Clock className="w-4 h-4 text-primary"/> سجل الزيارات</h3>
               <div className="overflow-x-auto rounded-xl border border-border max-h-60">
                 <table className="w-full text-sm text-right bg-card relative">
-                  <thead className="bg-muted sticky top-0 z-10">
-                    <tr>
-                      <th className="p-3 font-bold text-muted-foreground">الزيارات</th>
-                      <th className="p-3 font-bold text-muted-foreground">التاريخ</th>
-                      <th className="p-3 font-bold text-muted-foreground">نوع العمل</th>
-                      <th className="p-3 font-bold text-muted-foreground">المبلغ</th>
-                      <th className="p-3 font-bold text-muted-foreground">الواصل</th>
-                      <th className="p-3 font-bold text-muted-foreground">الباقي</th>
-                    </tr>
-                  </thead>
+                  <thead className="bg-muted sticky top-0 z-10"><tr><th className="p-3 font-bold text-muted-foreground">الزيارات</th><th className="p-3 font-bold text-muted-foreground">التاريخ</th><th className="p-3 font-bold text-muted-foreground">نوع العمل</th><th className="p-3 font-bold text-muted-foreground">المبلغ</th><th className="p-3 font-bold text-muted-foreground">الواصل</th><th className="p-3 font-bold text-muted-foreground">الباقي</th></tr></thead>
                   <tbody className="divide-y divide-border">
                     {selectedLedgerPatient?.visits.map((v: any, i: number) => (
                       <tr key={i} className="hover:bg-muted/50 transition">
-                        <td className="p-3 font-mono text-xs">{v.code}</td>
-                        <td className="p-3">{v.date}</td>
-                        <td className="p-3">
-                          {v.service}
-                          {v.discount && <span className="block text-[10px] text-amber-600 font-bold">خصم: {v.discount}</span>}
-                        </td>
-                        <td className="p-3 font-bold">{v.amount.toLocaleString()}</td>
-                        <td className="p-3 font-bold text-emerald-600">{v.paid.toLocaleString()}</td>
-                        <td className="p-3 font-bold text-red-500">{(v.amount - v.paid).toLocaleString()}</td>
+                        <td className="p-3 font-mono text-xs">{v.code}</td><td className="p-3">{v.date}</td><td className="p-3">{v.service}{v.discount && <span className="block text-[10px] text-amber-600 font-bold">خصم: {v.discount}</span>}</td>
+                        <td className="p-3 font-bold">{v.amount.toLocaleString()}</td><td className="p-3 font-bold text-emerald-600">{v.paid.toLocaleString()}</td><td className="p-3 font-bold text-red-500">{(v.amount - v.paid).toLocaleString()}</td>
                       </tr>
                     ))}
-                    {selectedLedgerPatient?.visits.length === 0 && (
-                      <tr><td colSpan={6} className="text-center p-4 text-muted-foreground">لا توجد زيارات مسجلة</td></tr>
-                    )}
                   </tbody>
                 </table>
               </div>
             </div>
-
-            {/* الدفعات */}
             <div className="space-y-2">
               <h3 className="font-bold text-sm text-foreground flex items-center gap-1"><Wallet className="w-4 h-4 text-emerald-600"/> سجل الدفعات (السندات)</h3>
               <div className="overflow-x-auto rounded-xl border border-border max-h-60">
                 <table className="w-full text-sm text-right bg-card relative">
-                  <thead className="bg-emerald-50/50 sticky top-0 z-10">
-                    <tr>
-                      <th className="p-3 font-bold text-emerald-800">المرجع</th>
-                      <th className="p-3 font-bold text-emerald-800">التاريخ</th>
-                      <th className="p-3 font-bold text-emerald-800">المبلغ</th>
-                      <th className="p-3 font-bold text-emerald-800">طريقة الدفع</th>
-                      <th className="p-3 font-bold text-emerald-800">مرتبطة بزيارة</th>
-                    </tr>
-                  </thead>
+                  <thead className="bg-emerald-50/50 sticky top-0 z-10"><tr><th className="p-3 font-bold text-emerald-800">المرجع</th><th className="p-3 font-bold text-emerald-800">التاريخ</th><th className="p-3 font-bold text-emerald-800">المبلغ</th><th className="p-3 font-bold text-emerald-800">طريقة الدفع</th><th className="p-3 font-bold text-emerald-800">مرتبطة بزيارة</th></tr></thead>
                   <tbody className="divide-y divide-border">
                     {selectedLedgerPatient?.payments.map((p: any, i: number) => (
                       <tr key={i} className="hover:bg-emerald-50/30 transition">
-                        <td className="p-3 font-mono text-xs text-emerald-700 font-bold">{p.ref}</td>
-                        <td className="p-3">{p.date}</td>
-                        <td className="p-3 font-bold text-emerald-600">{p.amount.toLocaleString()}</td>
-                        <td className="p-3">{p.method}</td>
-                        <td className="p-3 font-mono text-xs">{p.linkedVisit ? <span className="bg-primary/10 text-primary px-2 py-0.5 rounded flex items-center w-fit gap-1"><LinkIcon className="w-3 h-3"/>{p.linkedVisit}</span> : "—"}</td>
+                        <td className="p-3 font-mono text-xs text-emerald-700 font-bold">{p.ref}</td><td className="p-3">{p.date}</td><td className="p-3 font-bold text-emerald-600">{p.amount.toLocaleString()}</td>
+                        <td className="p-3">{p.method}</td><td className="p-3 font-mono text-xs">{p.linkedVisit ? <span className="bg-primary/10 text-primary px-2 py-0.5 rounded flex items-center w-fit gap-1"><LinkIcon className="w-3 h-3"/>{p.linkedVisit}</span> : "—"}</td>
                       </tr>
                     ))}
-                    {selectedLedgerPatient?.payments.length === 0 && (
-                      <tr><td colSpan={5} className="text-center p-4 text-muted-foreground">لا توجد دفعات مسجلة</td></tr>
-                    )}
                   </tbody>
                 </table>
               </div>
             </div>
-
-            {/* تسجيل دفعة جديدة */}
             <div className="p-4 bg-muted/30 rounded-xl space-y-3 border border-border/50">
               <h4 className="font-bold text-foreground">تسجيل دفعة جديدة</h4>
               <div className="grid grid-cols-1 md:grid-cols-4 gap-3">
-                <div>
-                  <label className="text-xs font-semibold text-muted-foreground block mb-1">المبلغ</label>
-                  <Input type="number" value={ledgerAmount} onChange={(e) => setLedgerAmount(e.target.value)} placeholder="المبلغ" className="font-bold text-lg" />
-                </div>
-                <div>
-                  <label className="text-xs font-semibold text-muted-foreground block mb-1">طريقة الدفع</label>
-                  <select value={ledgerMethod} onChange={(e) => setLedgerMethod(e.target.value)} className="h-10 rounded-md border border-input bg-background px-3 text-sm w-full">
-                    <option value="نقدي">نقدي</option>
-                    <option value="تحويل">تحويل</option>
-                    <option value="بطاقة">بطاقة</option>
-                  </select>
-                </div>
-                <div>
-                  <label className="text-xs font-semibold text-muted-foreground block mb-1">ربط بزيارة (اختياري)</label>
-                  <select value={ledgerLinkedVisit} onChange={(e) => setLedgerLinkedVisit(e.target.value)} className="h-10 rounded-md border border-input bg-background px-3 text-sm w-full">
-                    <option value="">بدون ربط</option>
-                    {selectedLedgerPatient?.visits.filter((v: any) => v.amount > v.paid).map((v: any) => (
-                      <option key={v.code} value={v.code}>{v.code} - متبقي: {v.amount - v.paid}</option>
-                    ))}
-                  </select>
-                </div>
-                <div>
-                  <label className="text-xs font-semibold text-muted-foreground block mb-1">ملاحظات</label>
-                  <Input value={ledgerNotes} onChange={(e) => setLedgerNotes(e.target.value)} placeholder="اختياري" />
-                </div>
+                <div><label className="text-xs font-semibold text-muted-foreground block mb-1">المبلغ</label><Input type="number" value={ledgerAmount} onChange={(e) => setLedgerAmount(e.target.value)} placeholder="المبلغ" className="font-bold text-lg" /></div>
+                <div><label className="text-xs font-semibold text-muted-foreground block mb-1">طريقة الدفع</label><select value={ledgerMethod} onChange={(e) => setLedgerMethod(e.target.value)} className="h-10 rounded-md border border-input bg-background px-3 text-sm w-full"><option value="نقدي">نقدي</option><option value="تحويل">تحويل</option><option value="بطاقة">بطاقة</option></select></div>
+                <div><label className="text-xs font-semibold text-muted-foreground block mb-1">ربط بزيارة (اختياري)</label><select value={ledgerLinkedVisit} onChange={(e) => setLedgerLinkedVisit(e.target.value)} className="h-10 rounded-md border border-input bg-background px-3 text-sm w-full"><option value="">بدون ربط</option>{selectedLedgerPatient?.visits.filter((v: any) => v.amount > v.paid).map((v: any) => (<option key={v.code} value={v.code}>{v.code} - متبقي: {v.amount - v.paid}</option>))}</select></div>
+                <div><label className="text-xs font-semibold text-muted-foreground block mb-1">ملاحظات</label><Input value={ledgerNotes} onChange={(e) => setLedgerNotes(e.target.value)} placeholder="اختياري" /></div>
               </div>
-              <Button onClick={handleAddLedgerPayment} className="w-full bg-emerald-600 hover:bg-emerald-700 text-white font-bold mt-2">
-                <CheckCircle className="w-4 h-4 ml-1" />تسجيل الدفعة
-              </Button>
+              <Button onClick={handleAddLedgerPayment} className="w-full bg-emerald-600 hover:bg-emerald-700 text-white font-bold mt-2"><CheckCircle className="w-4 h-4 ml-1" />تسجيل الدفعة</Button>
             </div>
           </div>
         </DialogContent>
       </Dialog>
+
+      {/* ✨ حاوية مخفية لتصدير دفتر الحساب إلى التليجرام */}
+      {selectedLedgerPatient && (
+        <div className="absolute -left-[9999px] top-0">
+          <div id="ledger-export-container" className="p-6 bg-white w-[600px] text-right" dir="rtl" style={{ fontFamily: 'system-ui, -apple-system, sans-serif' }}>
+            <div style={{ background: "linear-gradient(135deg, #059669 0%, #0d9488 50%, #0891b2 100%)", padding: "20px", color: "white", borderRadius: "12px", marginBottom: "20px" }}>
+              <h1 className="text-xl font-bold">{clinic?.name} - كشف حساب</h1>
+              <p className="text-sm mt-2">المريض: {selectedLedgerPatient.name} | {selectedLedgerPatient.phone}</p>
+              <p className="text-sm">التاريخ: {format(new Date(), "yyyy/MM/dd")}</p>
+            </div>
+            <div className="flex justify-between items-center bg-emerald-50 p-4 rounded-xl border border-emerald-200 mb-4 text-emerald-900 font-bold">
+              <span>الإجمالي: {selectedLedgerPatient.total.toLocaleString()}</span>
+              <span>الواصل: {selectedLedgerPatient.paid.toLocaleString()}</span>
+              <span>المتبقي: {selectedLedgerPatient.remaining.toLocaleString()}</span>
+            </div>
+            <table className="w-full text-sm text-right mb-4 border-collapse">
+              <thead><tr className="bg-gray-100"><th className="p-2 border">الزيارة</th><th className="p-2 border">التاريخ</th><th className="p-2 border">الخدمة</th><th className="p-2 border">المبلغ</th><th className="p-2 border">الواصل</th><th className="p-2 border">الباقي</th></tr></thead>
+              <tbody>
+                {selectedLedgerPatient.visits.map((v: any, i: number) => (
+                  <tr key={i}><td className="p-2 border font-mono">{v.code}</td><td className="p-2 border">{v.date}</td><td className="p-2 border">{v.service}</td><td className="p-2 border">{v.amount}</td><td className="p-2 border text-emerald-600">{v.paid}</td><td className="p-2 border text-red-500">{v.amount - v.paid}</td></tr>
+                ))}
+              </tbody>
+            </table>
+            <p className="text-center text-xs text-gray-400 mt-4 border-t pt-2">معتمد إلكترونياً - {clinic?.name}</p>
+          </div>
+        </div>
+      )}
 
       <Dialog open={walkInOpen} onOpenChange={setWalkInOpen}>
         <DialogContent dir="rtl" className="max-w-md" onInteractOutside={(e) => e.preventDefault()}>
@@ -2116,39 +1540,19 @@ export default function CashierPage() {
         <DialogContent dir="rtl" className="max-w-md" onInteractOutside={(e) => e.preventDefault()}>
           <DialogHeader><DialogTitle className="text-red-600 flex items-center gap-1"><MinusCircle className="w-5 h-5" /> تسجيل مصروف</DialogTitle></DialogHeader>
           <div className="space-y-3 pt-2">
-            <div>
-              <label className="text-xs font-semibold text-muted-foreground block mb-1">البيان</label>
-              <Input value={expenseTitle} onChange={(e) => setExpenseTitle(e.target.value)} placeholder="سبب المصروف" />
-            </div>
+            <div><label className="text-xs font-semibold text-muted-foreground block mb-1">البيان</label><Input value={expenseTitle} onChange={(e) => setExpenseTitle(e.target.value)} placeholder="سبب المصروف" /></div>
             <div className="grid grid-cols-3 gap-2">
-              <div>
-                <label className="text-xs font-semibold text-muted-foreground block mb-1">المبلغ</label>
-                <Input type="number" value={expenseAmount} onChange={(e) => setExpenseAmount(e.target.value)} placeholder="0.00" />
-              </div>
-              <div>
-                <label className="text-xs font-semibold text-muted-foreground block mb-1">التاريخ</label>
-                <Input type="date" value={expenseDate} onChange={(e) => setExpenseDate(e.target.value)} />
-              </div>
-              <div>
-                <label className="text-xs font-semibold text-muted-foreground block mb-1">الوقت</label>
-                <Input type="time" value={expenseTime} onChange={(e) => setExpenseTime(e.target.value)} />
-              </div>
+              <div><label className="text-xs font-semibold text-muted-foreground block mb-1">المبلغ</label><Input type="number" value={expenseAmount} onChange={(e) => setExpenseAmount(e.target.value)} placeholder="0.00" /></div>
+              <div><label className="text-xs font-semibold text-muted-foreground block mb-1">التاريخ</label><Input type="date" value={expenseDate} onChange={(e) => setExpenseDate(e.target.value)} /></div>
+              <div><label className="text-xs font-semibold text-muted-foreground block mb-1">الوقت</label><Input type="time" value={expenseTime} onChange={(e) => setExpenseTime(e.target.value)} /></div>
             </div>
             <div>
               <label className="text-xs font-semibold text-muted-foreground block mb-1">الفئة</label>
               <select value={expenseCategory} onChange={(e) => setExpenseCategory(e.target.value)} className="h-10 rounded-md border border-input bg-background px-3 text-sm w-full">
-                <option value="نثريات">نثريات</option>
-                <option value="أدوات طبية">أدوات طبية</option>
-                <option value="صيانة">صيانة</option>
-                <option value="كهرباء/ماء">كهرباء/ماء</option>
-                <option value="إيجار">إيجار</option>
-                <option value="رواتب">رواتب</option>
-                <option value="أخرى">أخرى</option>
+                <option value="نثريات">نثريات</option><option value="أدوات طبية">أدوات طبية</option><option value="صيانة">صيانة</option><option value="كهرباء/ماء">كهرباء/ماء</option><option value="إيجار">إيجار</option><option value="رواتب">رواتب</option><option value="أخرى">أخرى</option>
               </select>
             </div>
-            <Button onClick={handleAddExpense} className="w-full bg-red-600 hover:bg-red-700 text-white font-bold">
-              <MinusCircle className="w-4 h-4 ml-1" />قيد المصروف
-            </Button>
+            <Button onClick={handleAddExpense} className="w-full bg-red-600 hover:bg-red-700 text-white font-bold"><MinusCircle className="w-4 h-4 ml-1" />قيد المصروف</Button>
           </div>
         </DialogContent>
       </Dialog>
