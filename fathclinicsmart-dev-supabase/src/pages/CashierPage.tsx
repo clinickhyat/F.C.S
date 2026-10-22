@@ -98,7 +98,6 @@ type Invoice = {
 const QR_CAMERA_ELEMENT_ID = "qr-camera-container-cashier";
 const QR_FILE_ELEMENT_ID = "qr-hidden-file-reader-cashier";
 
-// دالة تقريب الأرقام لمنع الأرقام العشرية الطويلة
 const round2 = (num: number): number => {
   return Math.round((num + Number.EPSILON) * 100) / 100;
 };
@@ -224,11 +223,9 @@ export default function CashierPage() {
 
   const todayStr = format(new Date(), "yyyy-MM-dd");
   
-  // تواريخ الفلترة للخزينة
   const [dateFilter, setDateFilter] = useState<string>(todayStr);
   const today = dateFilter;
   
-  // تواريخ الفلترة للفواتير والإيصالات
   const [invoicesFrom, setInvoicesFrom] = useState<string>(todayStr);
   const [invoicesTo, setInvoicesTo] = useState<string>(todayStr);
 
@@ -244,17 +241,17 @@ export default function CashierPage() {
   const [discountInput, setDiscountInput] = useState<string>("0");
   const [paymentMethodInput, setPaymentMethodInput] = useState<string>("نقدي");
   const [showReceipt, setShowReceipt] = useState(false);
+  const [receiptMode, setReceiptMode] = useState<"paid" | "partial" | "promo">("paid"); // ✨ حالة لون السند
+  
   const [processingPayment, setProcessingPayment] = useState(false);
   const [sendingReceipt, setSendingReceipt] = useState(false);
   const [sendingTelegram, setSendingTelegram] = useState(false);
 
-  // متغيرات التحكم في نوع الدفع
   const [visitType, setVisitType] = useState<"normal" | "followup" | "link">("normal");
   const [linkedVisitCode, setLinkedVisitCode] = useState<string>("");
   const [patientPreviousVisits, setPatientPreviousVisits] = useState<any[]>([]);
   const [paymentDate, setPaymentDate] = useState<string>(todayStr);
 
-  // متغيرات الماسح
   const [scannerOpen, setScannerOpen] = useState(false);
   const [verifyScannerOpen, setVerifyScannerOpen] = useState(false);
   const [verifyResult, setVerifyResult] = useState<{ status: "idle" | "loading" | "valid" | "invalid"; message: string } | null>(null);
@@ -730,6 +727,11 @@ export default function CashierPage() {
 
       toast({ title: isFullyPaid ? "✅ تم سداد الزيارة بالكامل" : "✅ تم تسجيل دفعة جزئية", description: `الواصل الآن: ${totalPaidNow.toLocaleString()}` });
 
+      // ✨ تحديد لون السند
+      if (selectedAppointment.is_promo) setReceiptMode("promo");
+      else if (!isFullyPaid) setReceiptMode("partial");
+      else setReceiptMode("paid");
+
       setSelectedAppointment({
         ...selectedAppointment,
         payment_status: isFullyPaid ? "paid" : "partial",
@@ -914,7 +916,7 @@ export default function CashierPage() {
   const modalNetCollected = round2(Math.max(0, modalRawAmount - modalDiscountCash));
 
   // ============================================================
-  // LEDGER — حساب الزيارات والدفعات (تم إصلاح الحسابات)
+  // LEDGER — إصلاح جذري للازدواجية المحاسبية
   // ============================================================
   const ledgerPatients = useMemo(() => {
     type Visit = { code: string; date: string; service: string; amount: number; paid: number; method?: string; discount?: number };
@@ -923,26 +925,30 @@ export default function CashierPage() {
 
     const map = new Map<string, Patient>();
     
+    // 1. حساب الزيارات (المصدر الوحيد للحقيقة هو جدول appointments)
     invoiceAppointments.forEach(a => {
       const { cleanName, cleanPhone } = extractCleanInfo(a);
       const key = cleanPhone !== "بدون رقم" ? cleanPhone : cleanName;
       if (!map.has(key)) map.set(key, { name: cleanName, phone: cleanPhone, visits: [], payments: [], total: 0, paid: 0, remaining: 0 });
       const p = map.get(key)!;
       
-      const finalAmount = round2(a.final_price ?? a.paid_amount ?? a.services?.price ?? 0);
+      // ✨ إصلاح الخصم: المبلغ هو السعر النهائي بعد الخصم، وليس الأصلي
       const originalAmount = round2(a.original_price ?? a.services?.price ?? 0);
-      const discount = round2(a.discount_applied ?? (originalAmount - finalAmount));
+      const discount = round2(a.discount_applied || 0);
+      const finalAmount = round2(a.final_price ?? (originalAmount - discount) ?? a.paid_amount ?? 0);
+      const paid = round2(a.paid_amount || 0);
       
       p.visits.push({
         code: a.reservation_code, date: a.date, service: a.services?.name || "فحص",
-        amount: finalAmount, paid: round2(a.paid_amount || 0), method: a.payment_method || "نقدي",
+        amount: finalAmount, paid: paid, method: a.payment_method || "نقدي",
         discount: discount > 0 ? discount : undefined
       });
       
       p.total = round2(p.total + finalAmount); 
-      p.paid = round2(p.paid + (a.paid_amount || 0));
+      p.paid = round2(p.paid + paid);
     });
 
+    // 2. إضافة الدفعات اليدوية أو الفواتير
     invoicesList.forEach(inv => {
       const name = inv.patient_name || "غير محدد";
       const phone = inv.patient_phone || "بدون رقم";
@@ -954,13 +960,10 @@ export default function CashierPage() {
       const linkedVisit = extractLinkedVisit(inv) || undefined;
 
       if (isPayment) {
+        // دفعة: نسجلها في سجل الدفعات فقط، ولا نضيفها لـ p.paid لأنها محدثة بالفعل في appointments.paid_amount
         p.payments.push({ ref: inv.invoice_number, date: inv.created_at.split('T')[0], amount: round2(inv.total_amount), method: inv.payment_method || "نقدي", linkedVisit, notes: inv.notes || undefined });
-        p.paid = round2(p.paid + inv.total_amount);
-        if (linkedVisit) {
-          const visitIndex = p.visits.findIndex(v => v.code === linkedVisit);
-          if (visitIndex !== -1) p.visits[visitIndex].paid = round2(p.visits[visitIndex].paid + inv.total_amount);
-        }
       } else {
+        // فاتورة يدوية: نسجلها كزيارة جديدة ونضيفها للإجمالي
         p.visits.push({ code: inv.invoice_number, date: inv.created_at.split('T')[0], service: 'فاتورة يدوية', amount: round2(inv.total_amount), paid: round2(inv.total_amount), method: inv.payment_method || "نقدي" });
         p.total = round2(p.total + inv.total_amount);
         p.paid = round2(p.paid + inv.total_amount);
@@ -999,11 +1002,15 @@ export default function CashierPage() {
     }
     
     toast({ title: "✅ تم تسجيل الدفعة", description: `المرجع: ${paymentRef}` });
-    setLedgerAmount(""); setLedgerLinkedVisit(""); setLedgerNotes(""); setLedgerModalOpen(false);
-    fetchInvoices(); fetchAppointments();
+    setLedgerAmount(""); setLedgerLinkedVisit(""); setLedgerNotes("");
+    
+    // تحديث البيانات محلياً لإغلاق المودال وتحديث الأرقام
+    await fetchInvoices(); 
+    await fetchAppointments();
 
     setTimeout(() => {
       sendTelegramLedger(selectedLedgerPatient.name, selectedLedgerPatient.phone);
+      setLedgerModalOpen(false);
     }, 1000);
   };
 
@@ -1309,7 +1316,7 @@ export default function CashierPage() {
 
                   {visitType !== "link" && (
                     <div>
-                      <label className="text-xs font-semibold text-amber-600 block mb-1">إجمالي تكلفة الخدمة (مثال: 250000)</label>
+                      <label className="text-xs font-semibold text-amber-600 block mb-1">إجمالي تكلفة الخدمة</label>
                       <Input type="number" value={totalCostInput} onChange={(e) => setTotalCostInput(e.target.value)} className="font-bold text-lg text-amber-700" placeholder="0" />
                     </div>
                   )}
@@ -1338,11 +1345,16 @@ export default function CashierPage() {
             ) : (
               <div className="space-y-4 pt-1">
                  <div className="text-center mb-1"><span className="inline-flex items-center gap-1 text-xs font-bold text-emerald-600 bg-emerald-50 dark:bg-emerald-950/50 px-3 py-1 rounded-full border border-emerald-200"><CheckCircle className="w-3.5 h-3.5" /> تم الدفع بنجاح</span></div>
+                 
+                 {/* ✨ لون السند يتغير ديناميكياً حسب receiptMode */}
                  <div id="receipt-card-container" className="bg-white text-gray-900 rounded-2xl border border-gray-200 shadow-xl overflow-hidden" style={{ direction: 'rtl', fontFamily: 'system-ui, -apple-system, sans-serif' }}>
-                    <div style={{ background: selectedAppointment.is_promo ? "linear-gradient(135deg, #7c3aed 0%, #a855f7 50%, #d946ef 100%)" : "linear-gradient(135deg, #059669 0%, #0d9488 50%, #0891b2 100%)", padding: "20px 24px 18px", color: "white", display: "flex", alignItems: "center", gap: "14px" }}>
-                      <div style={{ width: "48px", height: "48px", background: "rgba(255,255,255,0.2)", borderRadius: "12px", display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0, border: "1.5px solid rgba(255,255,255,0.3)" }}>{clinic?.logo_url ? <img src={clinic.logo_url} alt="logo" style={{ width: "36px", height: "36px", borderRadius: "8px", objectFit: "cover" }} /> : <span style={{ fontSize: "22px" }}>{selectedAppointment.is_promo ? "🎁" : "🏥"}</span>}</div>
-                      <div style={{ flex: 1 }}><p style={{ fontSize: "9px", opacity: 0.8, marginBottom: "3px", letterSpacing: "1.5px" }}>{selectedAppointment.is_promo ? "PROMO RECEIPT" : "OFFICIAL RECEIPT"}</p><h2 style={{ fontSize: "17px", fontWeight: 900, margin: 0, lineHeight: 1.2 }}>{clinic?.name || "العيادة"}</h2><p style={{ fontSize: "10px", opacity: 0.85, marginTop: "3px" }}>سند استلام مبلغ</p></div>
-                      <div style={{ background: "rgba(255,255,255,0.2)", borderRadius: "10px", padding: "6px 10px", textAlign: "center", border: "1px solid rgba(255,255,255,0.25)" }}><p style={{ fontSize: "8px", opacity: 0.9, margin: 0 }}>الحالة</p><p style={{ fontSize: "10px", fontWeight: 800, margin: "2px 0 0" }}>مدفوع ✓</p></div>
+                    <div style={{ 
+                      background: receiptMode === "promo" ? "linear-gradient(135deg, #7c3aed 0%, #a855f7 50%, #d946ef 100%)" : receiptMode === "partial" ? "linear-gradient(135deg, #ea580c 0%, #f97316 50%, #fb923c 100%)" : "linear-gradient(135deg, #059669 0%, #0d9488 50%, #0891b2 100%)", 
+                      padding: "20px 24px 18px", color: "white", display: "flex", alignItems: "center", gap: "14px" 
+                    }}>
+                      <div style={{ width: "48px", height: "48px", background: "rgba(255,255,255,0.2)", borderRadius: "12px", display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0, border: "1.5px solid rgba(255,255,255,0.3)" }}>{clinic?.logo_url ? <img src={clinic.logo_url} alt="logo" style={{ width: "36px", height: "36px", borderRadius: "8px", objectFit: "cover" }} /> : <span style={{ fontSize: "22px" }}>{receiptMode === "promo" ? "🎁" : "🏥"}</span>}</div>
+                      <div style={{ flex: 1 }}><p style={{ fontSize: "9px", opacity: 0.8, marginBottom: "3px", letterSpacing: "1.5px" }}>{receiptMode === "promo" ? "PROMO RECEIPT" : receiptMode === "partial" ? "PARTIAL RECEIPT" : "OFFICIAL RECEIPT"}</p><h2 style={{ fontSize: "17px", fontWeight: 900, margin: 0, lineHeight: 1.2 }}>{clinic?.name || "العيادة"}</h2><p style={{ fontSize: "10px", opacity: 0.85, marginTop: "3px" }}>سند استلام مبلغ</p></div>
+                      <div style={{ background: "rgba(255,255,255,0.2)", borderRadius: "10px", padding: "6px 10px", textAlign: "center", border: "1px solid rgba(255,255,255,0.25)" }}><p style={{ fontSize: "8px", opacity: 0.9, margin: 0 }}>الحالة</p><p style={{ fontSize: "10px", fontWeight: 800, margin: "2px 0 0" }}>{receiptMode === "partial" ? "دفع جزئي" : "مدفوع ✓"}</p></div>
                     </div>
                     <div className="p-5 space-y-2 text-xs">
                       <div className="flex justify-between items-center text-gray-600"><span>كود الحجز:</span><span className="font-mono font-bold text-gray-900 bg-gray-100 px-2 py-0.5 rounded">{selectedAppointment.reservation_code}</span></div>
@@ -1351,10 +1363,25 @@ export default function CashierPage() {
                       <div className="flex justify-between items-center text-gray-600"><span>الهاتف:</span><span className="font-medium text-gray-800" dir="ltr">{editPatientPhone || extractCleanInfo(selectedAppointment).cleanPhone}</span></div>
                       <div className="flex justify-between items-center text-gray-600"><span>الخدمة:</span><span className="font-medium text-gray-800">{selectedAppointment.services?.name || "فحص طبي"}</span></div>
                       <div className="flex justify-between items-center text-gray-600"><span>طريقة الدفع:</span><span className="font-bold text-gray-900">{paymentMethodInput}</span></div>
+                      
+                      {selectedAppointment.is_promo && (
+                        <>
+                          <div className="my-2 border-t border-dashed border-purple-200" />
+                          <div className="bg-gradient-to-r from-purple-50 to-fuchsia-50 border border-purple-200 rounded-xl p-3 space-y-1.5">
+                            <p className="text-[10px] font-bold text-purple-800 uppercase">🎁 تفاصيل العرض</p>
+                            {selectedAppointment.promo_code && (<div className="flex justify-between items-center"><span className="text-purple-700">كود:</span><span className="font-mono font-bold text-purple-900 bg-white px-2 py-0.5 rounded">{selectedAppointment.promo_code}</span></div>)}
+                            {selectedAppointment.original_price != null && (<div className="flex justify-between items-center"><span className="text-purple-700">السعر الأصلي:</span><span className="font-medium text-purple-900 line-through">{Number(selectedAppointment.original_price).toLocaleString()}</span></div>)}
+                            {formatDiscountLabel(selectedAppointment) && (<div className="flex justify-between items-center"><span className="text-purple-700">نسبة الخصم:</span><span className="font-bold text-purple-700">{formatDiscountLabel(selectedAppointment)}</span></div>)}
+                            {selectedAppointment.discount_applied != null && selectedAppointment.discount_applied > 0 && (<div className="flex justify-between items-center"><span className="text-purple-700">قيمة الخصم:</span><span className="font-bold text-red-600">-{Number(selectedAppointment.discount_applied).toLocaleString()}</span></div>)}
+                            {selectedAppointment.final_price != null && (<div className="flex justify-between items-center border-t border-purple-200 pt-1.5 mt-1"><span className="text-purple-700 font-bold">السعر بعد الخصم:</span><span className="font-black text-purple-900 text-base">{Number(selectedAppointment.final_price).toLocaleString()}</span></div>)}
+                          </div>
+                        </>
+                      )}
+
                       <div className="my-3 border-t border-dashed border-gray-200" />
-                      <div className={`flex justify-between items-center p-3 rounded-xl border ${selectedAppointment.is_promo ? "bg-purple-50/80 border-purple-100" : "bg-emerald-50/80 border-emerald-100"}`}>
-                        <span className={`font-bold text-sm ${selectedAppointment.is_promo ? "text-purple-900" : "text-emerald-900"}`}>المبلغ المُستلَم:</span>
-                        <span className={`font-black text-xl ${selectedAppointment.is_promo ? "text-purple-700" : "text-emerald-700"}`}>{Number(selectedAppointment.paid_amount || 0).toLocaleString()}</span>
+                      <div className={`flex justify-between items-center p-3 rounded-xl border ${receiptMode === "promo" ? "bg-purple-50/80 border-purple-100" : receiptMode === "partial" ? "bg-orange-50/80 border-orange-100" : "bg-emerald-50/80 border-emerald-100"}`}>
+                        <span className={`font-bold text-sm ${receiptMode === "promo" ? "text-purple-900" : receiptMode === "partial" ? "text-orange-900" : "text-emerald-900"}`}>المبلغ المُستلَم:</span>
+                        <span className={`font-black text-xl ${receiptMode === "promo" ? "text-purple-700" : receiptMode === "partial" ? "text-orange-700" : "text-emerald-700"}`}>{Number(selectedAppointment.paid_amount || 0).toLocaleString()}</span>
                       </div>
                       <div className="mt-4 pt-3 border-t border-gray-100 flex items-center justify-between"><div><p className="text-[10px] font-bold text-gray-700">رمز التحقق:</p><p className="text-[9px] font-mono text-gray-400 mt-0.5">{getUniquePaymentToken(selectedAppointment)}</p></div><div className="bg-white p-1 rounded-lg border border-gray-200 shrink-0"><img src={`https://api.qrserver.com/v1/create-qr-code/?size=120x100&data=${encodeURIComponent(getUniquePaymentToken(selectedAppointment))}`} alt="QR" className="w-12 h-12" crossOrigin="anonymous" /></div></div>
                       <div className="mt-3 text-center text-[9px] text-gray-400 border-t border-gray-100 pt-2">معتمد إلكترونياً عبر صندوق الخزينة</div>
@@ -1513,29 +1540,71 @@ export default function CashierPage() {
         </DialogContent>
       </Dialog>
 
-      {/* ✨ حاوية مخفية لتصدير دفتر الحساب إلى التليجرام */}
+      {/* ✨ حاوية مخفية لتصدير دفتر الحساب إلى التليجرام (مصممة باحترافية كما في الصورة) */}
       {selectedLedgerPatient && (
         <div className="absolute -left-[9999px] top-0">
-          <div id="ledger-export-container" className="p-6 bg-white w-[600px] text-right" dir="rtl" style={{ fontFamily: 'system-ui, -apple-system, sans-serif' }}>
-            <div style={{ background: "linear-gradient(135deg, #059669 0%, #0d9488 50%, #0891b2 100%)", padding: "20px", color: "white", borderRadius: "12px", marginBottom: "20px" }}>
-              <h1 className="text-xl font-bold">{clinic?.name} - كشف حساب</h1>
-              <p className="text-sm mt-2">المريض: {selectedLedgerPatient.name} | {selectedLedgerPatient.phone}</p>
-              <p className="text-sm">التاريخ: {format(new Date(), "yyyy/MM/dd")}</p>
+          <div id="ledger-export-container" className="p-8 bg-gray-50 w-[800px] text-right" dir="rtl" style={{ fontFamily: 'system-ui, -apple-system, sans-serif' }}>
+            {/* الهيدر */}
+            <div style={{ background: "linear-gradient(135deg, #059669 0%, #0d9488 50%, #0891b2 100%)", padding: "30px", color: "white", borderRadius: "16px", marginBottom: "24px", display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+              <div>
+                <h1 className="text-2xl font-bold mb-2">{clinic?.name} - كشف حساب</h1>
+                <p className="text-sm opacity-90">المريض: {selectedLedgerPatient.name} | {selectedLedgerPatient.phone}</p>
+                <p className="text-sm opacity-90">التاريخ: {format(new Date(), "yyyy/MM/dd")}</p>
+              </div>
+              {clinic?.logo_url && <img src={clinic.logo_url} alt="logo" className="w-20 h-20 rounded-xl object-cover bg-white p-1" />}
             </div>
-            <div className="flex justify-between items-center bg-emerald-50 p-4 rounded-xl border border-emerald-200 mb-4 text-emerald-900 font-bold">
-              <span>الإجمالي: {selectedLedgerPatient.total.toLocaleString()}</span>
-              <span>الواصل: {selectedLedgerPatient.paid.toLocaleString()}</span>
-              <span>المتبقي: {selectedLedgerPatient.remaining.toLocaleString()}</span>
+
+            {/* الإحصائيات */}
+            <div className="flex justify-between items-center bg-emerald-50 p-6 rounded-xl border border-emerald-200 mb-6 text-emerald-900">
+              <div className="text-center flex-1"><p className="text-xs text-emerald-600 font-bold mb-1">الإجمالي</p><p className="font-black text-2xl">{selectedLedgerPatient.total.toLocaleString()}</p></div>
+              <div className="w-px h-12 bg-emerald-200"></div>
+              <div className="text-center flex-1"><p className="text-xs text-emerald-600 font-bold mb-1">الواصل</p><p className="font-black text-2xl">{selectedLedgerPatient.paid.toLocaleString()}</p></div>
+              <div className="w-px h-12 bg-emerald-200"></div>
+              <div className="text-center flex-1"><p className="text-xs text-red-600 font-bold mb-1">المتبقي</p><p className="font-black text-2xl text-red-500">{selectedLedgerPatient.remaining.toLocaleString()}</p></div>
             </div>
-            <table className="w-full text-sm text-right mb-4 border-collapse">
-              <thead><tr className="bg-gray-100"><th className="p-2 border">الزيارة</th><th className="p-2 border">التاريخ</th><th className="p-2 border">الخدمة</th><th className="p-2 border">المبلغ</th><th className="p-2 border">الواصل</th><th className="p-2 border">الباقي</th></tr></thead>
-              <tbody>
-                {selectedLedgerPatient.visits.map((v: any, i: number) => (
-                  <tr key={i}><td className="p-2 border font-mono">{v.code}</td><td className="p-2 border">{v.date}</td><td className="p-2 border">{v.service}</td><td className="p-2 border">{v.amount}</td><td className="p-2 border text-emerald-600">{v.paid}</td><td className="p-2 border text-red-500">{v.amount - v.paid}</td></tr>
-                ))}
-              </tbody>
-            </table>
-            <p className="text-center text-xs text-gray-400 mt-4 border-t pt-2">معتمد إلكترونياً - {clinic?.name}</p>
+
+            {/* جدول الزيارات */}
+            <div className="mb-6">
+              <h3 className="font-bold text-gray-700 mb-2">سجل الزيارات</h3>
+              <table className="w-full text-sm text-right bg-white rounded-xl overflow-hidden shadow-sm border border-gray-200">
+                <thead className="bg-gray-100 text-gray-600 font-bold"><tr><th className="p-3">الزيارة</th><th className="p-3">التاريخ</th><th className="p-3">الخدمة</th><th className="p-3">المبلغ</th><th className="p-3">الواصل</th><th className="p-3">الباقي</th></tr></thead>
+                <tbody className="divide-y divide-gray-100">
+                  {selectedLedgerPatient.visits.map((v: any, i: number) => (
+                    <tr key={i}>
+                      <td className="p-3 font-mono text-xs">{v.code}</td>
+                      <td className="p-3">{v.date}</td>
+                      <td className="p-3">{v.service} {v.discount && <span className="text-[10px] text-amber-600 block">خصم: {v.discount}</span>}</td>
+                      <td className="p-3 font-bold">{v.amount.toLocaleString()}</td>
+                      <td className="p-3 font-bold text-emerald-600">{v.paid.toLocaleString()}</td>
+                      <td className="p-3 font-bold text-red-500">{(v.amount - v.paid).toLocaleString()}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+
+            {/* جدول الدفعات */}
+            {selectedLedgerPatient.payments.length > 0 && (
+              <div>
+                <h3 className="font-bold text-gray-700 mb-2">سجل الدفعات (السندات)</h3>
+                <table className="w-full text-sm text-right bg-white rounded-xl overflow-hidden shadow-sm border border-gray-200">
+                  <thead className="bg-emerald-50 text-emerald-800 font-bold"><tr><th className="p-3">المرجع</th><th className="p-3">التاريخ</th><th className="p-3">المبلغ</th><th className="p-3">طريقة الدفع</th><th className="p-3">مرتبطة بزيارة</th></tr></thead>
+                  <tbody className="divide-y divide-gray-100">
+                    {selectedLedgerPatient.payments.map((p: any, i: number) => (
+                      <tr key={i}>
+                        <td className="p-3 font-mono text-xs text-emerald-700">{p.ref}</td>
+                        <td className="p-3">{p.date}</td>
+                        <td className="p-3 font-bold text-emerald-600">{p.amount.toLocaleString()}</td>
+                        <td className="p-3">{p.method}</td>
+                        <td className="p-3 text-xs">{p.linkedVisit ? p.linkedVisit : "—"}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            )}
+
+            <p className="text-center text-xs text-gray-400 mt-8 border-t border-gray-200 pt-4">معتمد إلكترونياً - {clinic?.name}</p>
           </div>
         </div>
       )}
