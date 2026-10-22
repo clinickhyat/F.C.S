@@ -1874,5 +1874,6 @@ function CashierStats({ appointments, expenses }: { appointments: Appointment[];
         </div>
       </div>
     </div>
+ 
   );
 }
