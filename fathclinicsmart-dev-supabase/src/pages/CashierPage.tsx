@@ -98,6 +98,11 @@ type Invoice = {
 const QR_CAMERA_ELEMENT_ID = "qr-camera-container-cashier";
 const QR_FILE_ELEMENT_ID = "qr-hidden-file-reader-cashier";
 
+// دالة تقريب الأرقام لمنع الأرقام العشرية الطويلة
+const round2 = (num: number): number => {
+  return Math.round((num + Number.EPSILON) * 100) / 100;
+};
+
 const parseQRText = (text: string) => {
   let code = "", name = "", phone = "", service = "", date = "", time = "";
   const codeMatch = text.match(/RE-[A-Za-z0-9]+/i) || text.match(/WI-[A-Za-z0-9]+/i) || text.match(/INV-[A-Za-z0-9]+/i) || text.match(/PAY-[A-Za-z0-9-]+/i) || text.match(/PAY-VERIFIED\|([A-Za-z0-9-]+)/i);
@@ -157,7 +162,7 @@ const extractCleanInfo = (a: Appointment) => {
 
 const calcDiscountAmount = (baseAmount: number, value: number, type: string | null | undefined): number => {
   if (!value || value <= 0 || !baseAmount || baseAmount <= 0) return 0;
-  if (type === "percentage") return Math.round(baseAmount * (value / 100) * 100) / 100;
+  if (type === "percentage") return round2(baseAmount * (value / 100));
   return Math.min(value, baseAmount);
 };
 
@@ -169,11 +174,11 @@ const formatDiscountLabel = (a: Appointment): string => {
 };
 
 const computeNetCollected = (a: Appointment): number => {
-  if (typeof a.paid_amount === "number" && a.paid_amount > 0) return a.paid_amount;
-  if (typeof a.final_price === "number" && a.final_price > 0) return a.final_price;
+  if (typeof a.paid_amount === "number" && a.paid_amount > 0) return round2(a.paid_amount);
+  if (typeof a.final_price === "number" && a.final_price > 0) return round2(a.final_price);
   if (typeof a.services?.price === "number" && a.services.price > 0) {
     const disc = calcDiscountAmount(a.services.price, a.discount_amount || 0, a.discount_type);
-    return Math.max(0, a.services.price - disc);
+    return round2(Math.max(0, a.services.price - disc));
   }
   return 0;
 };
@@ -218,9 +223,16 @@ export default function CashierPage() {
   const [expenseTime, setExpenseTime] = useState<string>(format(new Date(), "HH:mm"));
 
   const todayStr = format(new Date(), "yyyy-MM-dd");
+  
+  // تواريخ الفلترة للخزينة
   const [dateFilter, setDateFilter] = useState<string>(todayStr);
-  const [statusFilter, setStatusFilter] = useState<string>("active");
   const today = dateFilter;
+  
+  // تواريخ الفلترة للفواتير والإيصالات
+  const [invoicesFrom, setInvoicesFrom] = useState<string>(todayStr);
+  const [invoicesTo, setInvoicesTo] = useState<string>(todayStr);
+
+  const [statusFilter, setStatusFilter] = useState<string>("active");
 
   const [selectedAppointment, setSelectedAppointment] = useState<Appointment | null>(null);
   const [editPatientName, setEditPatientName] = useState<string>("");
@@ -236,11 +248,13 @@ export default function CashierPage() {
   const [sendingReceipt, setSendingReceipt] = useState(false);
   const [sendingTelegram, setSendingTelegram] = useState(false);
 
+  // متغيرات التحكم في نوع الدفع
   const [visitType, setVisitType] = useState<"normal" | "followup" | "link">("normal");
   const [linkedVisitCode, setLinkedVisitCode] = useState<string>("");
   const [patientPreviousVisits, setPatientPreviousVisits] = useState<any[]>([]);
   const [paymentDate, setPaymentDate] = useState<string>(todayStr);
 
+  // متغيرات الماسح
   const [scannerOpen, setScannerOpen] = useState(false);
   const [verifyScannerOpen, setVerifyScannerOpen] = useState(false);
   const [verifyResult, setVerifyResult] = useState<{ status: "idle" | "loading" | "valid" | "invalid"; message: string } | null>(null);
@@ -253,8 +267,6 @@ export default function CashierPage() {
   const fileInputRef = useRef<HTMLInputElement | null>(null);
   const appointmentsRef = useRef<Appointment[]>([]);
 
-  const [invoicesFrom, setInvoicesFrom] = useState<string>(todayStr);
-  const [invoicesTo, setInvoicesTo] = useState<string>(todayStr);
   const [invoicesSearch, setInvoicesSearch] = useState<string>("");
   const [invoicesOnlyPromo, setInvoicesOnlyPromo] = useState<boolean>(false);
   const [invoicesLoading, setInvoicesLoading] = useState<boolean>(false);
@@ -394,7 +406,7 @@ export default function CashierPage() {
       setPatientPreviousVisits(data.map((v: any) => ({
         code: v.reservation_code,
         service: v.services?.name || "خدمة",
-        remaining: (v.final_price || 0) - (v.paid_amount || 0),
+        remaining: round2((v.final_price || 0) - (v.paid_amount || 0)),
       })));
     }
   };
@@ -596,7 +608,6 @@ export default function CashierPage() {
     } finally { setSendingTelegram(false); }
   };
 
-  // ✨ دالة جديدة لإرسال صورة دفتر الحساب للتليجرام
   const sendTelegramLedger = async (patientName: string, phone: string) => {
     const el = document.getElementById("ledger-export-container");
     if (!el) return;
@@ -605,7 +616,6 @@ export default function CashierPage() {
       const canvas = await html2canvas(el, { scale: 2, useCORS: true, backgroundColor: "#ffffff" });
       const imgData = canvas.toDataURL("image/png");
       
-      // محاولة جلب معرف التليجرام للمريض
       let tgId = "";
       const pVisits = invoiceAppointments.find(a => extractCleanInfo(a).cleanPhone === phone || extractCleanInfo(a).cleanName === patientName);
       if (pVisits) {
@@ -640,11 +650,11 @@ export default function CashierPage() {
     if (!selectedAppointment || !clinic) return;
     setProcessingPayment(true);
 
-    const totalCost = parseFloat(totalCostInput) || 0;
-    const paidNow = parseFloat(paidAmountInput) || 0;
-    const discountCash = parseFloat(discountInput) || 0;
+    const totalCost = round2(parseFloat(totalCostInput) || 0);
+    const paidNow = round2(parseFloat(paidAmountInput) || 0);
+    const discountCash = round2(parseFloat(discountInput) || 0);
     
-    const netCollected = Math.max(0, paidNow - discountCash);
+    const netCollected = round2(Math.max(0, paidNow - discountCash));
     const patientId = selectedAppointment.patients?.id || selectedAppointment.patient_id;
 
     if (patientId && (editPatientName.trim() || editPatientPhone.trim())) {
@@ -674,7 +684,7 @@ export default function CashierPage() {
       if (targetVisit) {
         const { data: oldAppt } = await supabase.from("appointments").select("paid_amount, final_price").eq("reservation_code", linkedVisitCode).single();
         if (oldAppt) {
-          const newPaid = (oldAppt.paid_amount || 0) + netCollected;
+          const newPaid = round2((oldAppt.paid_amount || 0) + netCollected);
           const isFullyPaid = newPaid >= (oldAppt.final_price || 0);
           await supabase.from("appointments").update({ paid_amount: newPaid, payment_status: isFullyPaid ? "paid" : "partial" }).eq("reservation_code", linkedVisitCode);
         }
@@ -690,7 +700,7 @@ export default function CashierPage() {
     } 
     // ✨ 2. حالة الدفع لهذه الزيارة الحالية (عادية أو مراجعة)
     else {
-      const totalPaidNow = (selectedAppointment.paid_amount || 0) + netCollected;
+      const totalPaidNow = round2((selectedAppointment.paid_amount || 0) + netCollected);
       const isFullyPaid = totalPaidNow >= totalCost || visitType === "followup";
 
       const updatePayload: any = {
@@ -698,7 +708,7 @@ export default function CashierPage() {
         status: "confirmed",
         department: "صندوق",
         paid_amount: totalPaidNow,
-        discount_amount: parseFloat(discountInput) || 0,
+        discount_amount: round2(parseFloat(discountInput) || 0),
         discount_applied: discountCash,
         payment_method: paymentMethodInput,
         payment_time: new Date(paymentDate).toISOString(),
@@ -832,7 +842,7 @@ export default function CashierPage() {
   const addInvoiceItem = () => setInvItems(prev => [...prev, { name: "", qty: 1, price: 0 }]);
   const updateInvoiceItem = (index: number, patch: Partial<InvoiceItem>) => setInvItems(prev => prev.map((it, i) => i === index ? { ...it, ...patch } : it));
   const removeInvoiceItem = (index: number) => setInvItems(prev => prev.filter((_, i) => i !== index));
-  const calcInvoiceSubtotal = (): number => invItems.reduce((s, it) => s + (Number(it.qty) || 0) * (Number(it.price) || 0), 0);
+  const calcInvoiceSubtotal = (): number => round2(invItems.reduce((s, it) => s + (Number(it.qty) || 0) * (Number(it.price) || 0), 0));
   const calcInvoiceDiscount = (subtotal: number): number => calcDiscountAmount(subtotal, parseFloat(invDiscountValue) || 0, invDiscountType);
 
   const handleSaveInvoice = async () => {
@@ -842,7 +852,7 @@ export default function CashierPage() {
     setInvSaving(true);
     try {
       const discountAmount = calcInvoiceDiscount(subtotal);
-      const totalAmount = Math.max(0, subtotal - discountAmount);
+      const totalAmount = round2(Math.max(0, subtotal - discountAmount));
       const invoiceNumber = `INV-${Date.now().toString().slice(-8)}`;
       
       const newInvoiceData = { clinic_id: clinic.id, patient_name: invPatientName.trim() || null, patient_phone: invPatientPhone.trim() || null, invoice_number: invoiceNumber, items: invItems.filter(it => it.name.trim() && Number(it.price) > 0), subtotal, discount_type: invDiscountType, discount_value: parseFloat(invDiscountValue) || 0, discount_amount: discountAmount, total_amount: totalAmount, paid_status: "paid", paid_amount: totalAmount, payment_method: invPaymentMethod, notes: invNotes.trim() || null, paid_at: new Date().toISOString() };
@@ -894,17 +904,17 @@ export default function CashierPage() {
   const invoicesStats = useMemo(() => {
     const apptTotal = filteredInvoices.reduce((s, a) => s + computeNetCollected(a), 0);
     const invTotal = filteredInvoicesList.reduce((s, i) => s + (i.total_amount || 0), 0);
-    return { totalPaid: apptTotal + invTotal, count: filteredInvoices.length + filteredInvoicesList.length, promoCount: filteredInvoices.filter(a => a.is_promo).length };
+    return { totalPaid: round2(apptTotal + invTotal), count: filteredInvoices.length + filteredInvoicesList.length, promoCount: filteredInvoices.filter(a => a.is_promo).length };
   }, [filteredInvoices, filteredInvoicesList]);
 
-  const modalRawAmount = parseFloat(paidAmountInput) || 0;
-  const modalRawDiscount = parseFloat(discountInput) || 0;
+  const modalRawAmount = round2(parseFloat(paidAmountInput) || 0);
+  const modalRawDiscount = round2(parseFloat(discountInput) || 0);
   const modalDiscType = selectedAppointment?.discount_type || (selectedAppointment?.is_promo ? "percentage" : "fixed");
   const modalDiscountCash = calcDiscountAmount(modalRawAmount, modalRawDiscount, modalDiscType);
-  const modalNetCollected = Math.max(0, modalRawAmount - modalDiscountCash);
+  const modalNetCollected = round2(Math.max(0, modalRawAmount - modalDiscountCash));
 
   // ============================================================
-  // LEDGER — حساب الزيارات والدفعات
+  // LEDGER — حساب الزيارات والدفعات (تم إصلاح الحسابات)
   // ============================================================
   const ledgerPatients = useMemo(() => {
     type Visit = { code: string; date: string; service: string; amount: number; paid: number; method?: string; discount?: number };
@@ -919,18 +929,18 @@ export default function CashierPage() {
       if (!map.has(key)) map.set(key, { name: cleanName, phone: cleanPhone, visits: [], payments: [], total: 0, paid: 0, remaining: 0 });
       const p = map.get(key)!;
       
-      const finalAmount = a.final_price ?? a.paid_amount ?? a.services?.price ?? 0;
-      const originalAmount = a.original_price ?? a.services?.price ?? 0;
-      const discount = a.discount_applied ?? (originalAmount - finalAmount);
+      const finalAmount = round2(a.final_price ?? a.paid_amount ?? a.services?.price ?? 0);
+      const originalAmount = round2(a.original_price ?? a.services?.price ?? 0);
+      const discount = round2(a.discount_applied ?? (originalAmount - finalAmount));
       
       p.visits.push({
         code: a.reservation_code, date: a.date, service: a.services?.name || "فحص",
-        amount: finalAmount, paid: a.paid_amount || 0, method: a.payment_method || "نقدي",
+        amount: finalAmount, paid: round2(a.paid_amount || 0), method: a.payment_method || "نقدي",
         discount: discount > 0 ? discount : undefined
       });
       
-      p.total += finalAmount; 
-      p.paid += (a.paid_amount || 0);
+      p.total = round2(p.total + finalAmount); 
+      p.paid = round2(p.paid + (a.paid_amount || 0));
     });
 
     invoicesList.forEach(inv => {
@@ -944,25 +954,25 @@ export default function CashierPage() {
       const linkedVisit = extractLinkedVisit(inv) || undefined;
 
       if (isPayment) {
-        p.payments.push({ ref: inv.invoice_number, date: inv.created_at.split('T')[0], amount: inv.total_amount, method: inv.payment_method || "نقدي", linkedVisit, notes: inv.notes || undefined });
-        p.paid += inv.total_amount;
+        p.payments.push({ ref: inv.invoice_number, date: inv.created_at.split('T')[0], amount: round2(inv.total_amount), method: inv.payment_method || "نقدي", linkedVisit, notes: inv.notes || undefined });
+        p.paid = round2(p.paid + inv.total_amount);
         if (linkedVisit) {
           const visitIndex = p.visits.findIndex(v => v.code === linkedVisit);
-          if (visitIndex !== -1) p.visits[visitIndex].paid += inv.total_amount;
+          if (visitIndex !== -1) p.visits[visitIndex].paid = round2(p.visits[visitIndex].paid + inv.total_amount);
         }
       } else {
-        p.visits.push({ code: inv.invoice_number, date: inv.created_at.split('T')[0], service: 'فاتورة يدوية', amount: inv.total_amount, paid: inv.total_amount, method: inv.payment_method || "نقدي" });
-        p.total += inv.total_amount;
-        p.paid += inv.total_amount;
+        p.visits.push({ code: inv.invoice_number, date: inv.created_at.split('T')[0], service: 'فاتورة يدوية', amount: round2(inv.total_amount), paid: round2(inv.total_amount), method: inv.payment_method || "نقدي" });
+        p.total = round2(p.total + inv.total_amount);
+        p.paid = round2(p.paid + inv.total_amount);
       }
     });
 
-    return Array.from(map.values()).map(p => ({ ...p, remaining: Math.max(0, p.total - p.paid) })).filter(p => p.total > 0);
+    return Array.from(map.values()).map(p => ({ ...p, remaining: round2(Math.max(0, p.total - p.paid)) })).filter(p => p.total > 0);
   }, [invoiceAppointments, invoicesList]);
 
   const handleAddLedgerPayment = async () => {
     if (!selectedLedgerPatient || !clinic || !ledgerAmount) return;
-    const amount = parseFloat(ledgerAmount) || 0;
+    const amount = round2(parseFloat(ledgerAmount) || 0);
     if (amount <= 0) { toast({ title: "❌ المبلغ غير صحيح", variant: "destructive" }); return; }
 
     const paymentRef = generatePaymentReference(selectedLedgerPatient.phone || selectedLedgerPatient.name);
@@ -982,7 +992,7 @@ export default function CashierPage() {
     if (ledgerLinkedVisit) {
       const { data: oldAppt } = await supabase.from("appointments").select("paid_amount, final_price").eq("reservation_code", ledgerLinkedVisit).single();
       if (oldAppt) {
-        const newPaid = (oldAppt.paid_amount || 0) + amount;
+        const newPaid = round2((oldAppt.paid_amount || 0) + amount);
         const isFullyPaid = newPaid >= (oldAppt.final_price || 0);
         await supabase.from("appointments").update({ paid_amount: newPaid, payment_status: isFullyPaid ? "paid" : "partial" }).eq("reservation_code", ledgerLinkedVisit);
       }
@@ -992,7 +1002,6 @@ export default function CashierPage() {
     setLedgerAmount(""); setLedgerLinkedVisit(""); setLedgerNotes(""); setLedgerModalOpen(false);
     fetchInvoices(); fetchAppointments();
 
-    // ✨ إرسال دفتر الحساب المحدث إلى التليجرام
     setTimeout(() => {
       sendTelegramLedger(selectedLedgerPatient.name, selectedLedgerPatient.phone);
     }, 1000);
@@ -1224,6 +1233,13 @@ export default function CashierPage() {
           <div className="space-y-4">
             <div className="card-modern p-5">
               <div className="flex items-center justify-between mb-4"><h2 className="text-xl font-bold flex items-center gap-2"><BookOpen className="w-6 h-6 text-primary" /> دفتر الإيصالات (الحسابات)</h2><p className="text-sm text-muted-foreground">متابعة المدفوعات والمتبقي لكل مريض</p></div>
+              
+              <div className="flex flex-col md:flex-row gap-3 md:items-center mb-4 pb-4 border-b border-border/40">
+                <div className="relative flex-1"><Search className="absolute right-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" /><Input value={invoicesSearch} onChange={(e) => setInvoicesSearch(e.target.value)} placeholder="بحث..." className="pr-10" /></div>
+                <div className="flex items-center gap-2"><Calendar className="w-4 h-4 text-muted-foreground" /><Input type="date" value={invoicesFrom} onChange={(e) => setInvoicesFrom(e.target.value)} className="w-40" /><span className="text-muted-foreground">→</span><Input type="date" value={invoicesTo} onChange={(e) => setInvoicesTo(e.target.value)} className="w-40" /></div>
+                <Button variant="outline" onClick={fetchInvoices} disabled={invoicesLoading}>{invoicesLoading ? <Loader2 className="w-4 h-4 animate-spin ml-1" /> : <Filter className="w-4 h-4 ml-1" />}تطبيق</Button>
+              </div>
+
               {ledgerPatients.length === 0 ? (<div className="text-center py-12 text-muted-foreground">لا توجد سجلات دفع في هذه الفترة</div>) : (
                 <div className="grid gap-3">
                   {ledgerPatients.map((p, idx) => (
@@ -1320,7 +1336,6 @@ export default function CashierPage() {
                 </Button>
               </div>
             ) : (
-              // ... شاشة السند (كما هي) ...
               <div className="space-y-4 pt-1">
                  <div className="text-center mb-1"><span className="inline-flex items-center gap-1 text-xs font-bold text-emerald-600 bg-emerald-50 dark:bg-emerald-950/50 px-3 py-1 rounded-full border border-emerald-200"><CheckCircle className="w-3.5 h-3.5" /> تم الدفع بنجاح</span></div>
                  <div id="receipt-card-container" className="bg-white text-gray-900 rounded-2xl border border-gray-200 shadow-xl overflow-hidden" style={{ direction: 'rtl', fontFamily: 'system-ui, -apple-system, sans-serif' }}>
