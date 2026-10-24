@@ -159,6 +159,7 @@ const extractCleanInfo = (a: Appointment) => {
   return { cleanName, cleanPhone };
 };
 
+// ✨ دالة حساب الخصم (تم إصلاحها لدعم النسبة المئوية)
 const calcDiscountAmount = (baseAmount: number, value: number, type: string | null | undefined): number => {
   if (!value || value <= 0 || !baseAmount || baseAmount <= 0) return 0;
   if (type === "percentage") return round2(baseAmount * (value / 100));
@@ -241,7 +242,6 @@ export default function CashierPage() {
   const [discountInput, setDiscountInput] = useState<string>("0");
   const [paymentMethodInput, setPaymentMethodInput] = useState<string>("نقدي");
   const [showReceipt, setShowReceipt] = useState(false);
-  const [receiptMode, setReceiptMode] = useState<"paid" | "partial" | "promo">("paid"); // ✨ حالة لون السند
   
   const [processingPayment, setProcessingPayment] = useState(false);
   const [sendingReceipt, setSendingReceipt] = useState(false);
@@ -579,7 +579,7 @@ export default function CashierPage() {
     }
   };
 
-  const sendTelegramReceipt = async (payload: { code: string, name: string, service: string, amount: number, tgId: string }) => {
+  const sendTelegramReceipt = async (payload: { code: string, name: string, service: string, amount: number, tgId: string, type: string }) => {
     if (!payload.tgId) return;
     setSendingTelegram(true);
     try {
@@ -595,6 +595,7 @@ export default function CashierPage() {
           patient_name: payload.name,
           service_name: payload.service,
           amount: payload.amount,
+          type: payload.type,
           clinic_name: clinic?.name || "العيادة الطبية",
         },
       });
@@ -631,6 +632,7 @@ export default function CashierPage() {
           patient_name: patientName,
           service_name: "كشف حساب - دفتر الإيصالات",
           amount: 0,
+          type: "ledger",
           clinic_name: clinic?.name || "العيادة",
         }
       });
@@ -649,9 +651,16 @@ export default function CashierPage() {
 
     const totalCost = round2(parseFloat(totalCostInput) || 0);
     const paidNow = round2(parseFloat(paidAmountInput) || 0);
-    const discountCash = round2(parseFloat(discountInput) || 0);
+    const discountValue = round2(parseFloat(discountInput) || 0);
+    const discType = selectedAppointment.discount_type || (selectedAppointment.is_promo ? "percentage" : "fixed");
     
-    const netCollected = round2(Math.max(0, paidNow - discountCash));
+    // ✨ إصلاح: حساب الخصم الفعلي (سواء نسبة أو مبلغ)
+    const discountCash = calcDiscountAmount(totalCost, discountValue, discType);
+    const finalPrice = round2(Math.max(0, totalCost - discountCash));
+    
+    // الصافي المستلم هو ما دفعه المريض بالفعل
+    const netCollected = paidNow; 
+    
     const patientId = selectedAppointment.patients?.id || selectedAppointment.patient_id;
 
     if (patientId && (editPatientName.trim() || editPatientPhone.trim())) {
@@ -661,7 +670,7 @@ export default function CashierPage() {
       await supabase.from("patients").update(updateData).eq("id", patientId);
     }
 
-    // ✨ 1. حالة الربط بزيارة سابقة (دفع جزئي لزيارة سابقة)
+    // 1. حالة الربط بزيارة سابقة (دفع جزئي لزيارة سابقة)
     if (visitType === "link" && linkedVisitCode) {
       const paymentRef = generatePaymentReference(editPatientPhone || "0000");
       const notes = `تسديد دفعة للزيارة ${linkedVisitCode} [LINKED_VISIT:${linkedVisitCode}]`;
@@ -695,21 +704,22 @@ export default function CashierPage() {
       setSelectedAppointment(null);
 
     } 
-    // ✨ 2. حالة الدفع لهذه الزيارة الحالية (عادية أو مراجعة)
+    // 2. حالة الدفع لهذه الزيارة الحالية (عادية أو مراجعة)
     else {
       const totalPaidNow = round2((selectedAppointment.paid_amount || 0) + netCollected);
-      const isFullyPaid = totalPaidNow >= totalCost || visitType === "followup";
+      const isFullyPaid = totalPaidNow >= finalPrice || visitType === "followup";
 
       const updatePayload: any = {
         payment_status: isFullyPaid ? "paid" : "partial",
         status: "confirmed",
         department: "صندوق",
         paid_amount: totalPaidNow,
-        discount_amount: round2(parseFloat(discountInput) || 0),
+        discount_amount: discountValue,
         discount_applied: discountCash,
+        discount_type: discType,
         payment_method: paymentMethodInput,
         payment_time: new Date(paymentDate).toISOString(),
-        final_price: totalCost,
+        final_price: finalPrice,
         original_price: totalCost
       };
 
@@ -727,16 +737,11 @@ export default function CashierPage() {
 
       toast({ title: isFullyPaid ? "✅ تم سداد الزيارة بالكامل" : "✅ تم تسجيل دفعة جزئية", description: `الواصل الآن: ${totalPaidNow.toLocaleString()}` });
 
-      // ✨ تحديد لون السند
-      if (selectedAppointment.is_promo) setReceiptMode("promo");
-      else if (!isFullyPaid) setReceiptMode("partial");
-      else setReceiptMode("paid");
-
       setSelectedAppointment({
         ...selectedAppointment,
         payment_status: isFullyPaid ? "paid" : "partial",
         paid_amount: totalPaidNow,
-        final_price: totalCost,
+        final_price: finalPrice,
         payment_method: paymentMethodInput,
       });
       setShowReceipt(true);
@@ -752,7 +757,8 @@ export default function CashierPage() {
         name: editPatientName,
         service: visitType === "link" ? "تسديد سابق" : (selectedAppointment.services?.name || "خدمة"),
         amount: netCollected,
-        tgId: selectedAppointment.customer_telegram_id || selectedAppointment.patients?.telegram_user_id || ""
+        tgId: selectedAppointment.customer_telegram_id || selectedAppointment.patients?.telegram_user_id || "",
+        type: selectedAppointment.is_promo ? "promo" : (!isFullyPaid ? "partial" : "paid")
       }); 
     }, 800);
   };
@@ -828,7 +834,8 @@ export default function CashierPage() {
       name: editPatientName,
       service: selectedAppointment.services?.name || "فحص طبي",
       amount: selectedAppointment.paid_amount || 0,
-      tgId: tgUserId
+      tgId: tgUserId,
+      type: selectedAppointment.is_promo ? "promo" : (selectedAppointment.payment_status === "partial" ? "partial" : "paid")
     });
   };
 
@@ -925,14 +932,14 @@ export default function CashierPage() {
 
     const map = new Map<string, Patient>();
     
-    // 1. حساب الزيارات (المصدر الوحيد للحقيقة هو جدول appointments)
+    // 1. حساب الزيارات
     invoiceAppointments.forEach(a => {
       const { cleanName, cleanPhone } = extractCleanInfo(a);
       const key = cleanPhone !== "بدون رقم" ? cleanPhone : cleanName;
       if (!map.has(key)) map.set(key, { name: cleanName, phone: cleanPhone, visits: [], payments: [], total: 0, paid: 0, remaining: 0 });
       const p = map.get(key)!;
       
-      // ✨ إصلاح الخصم: المبلغ هو السعر النهائي بعد الخصم، وليس الأصلي
+      // ✨ المبلغ هو السعر النهائي بعد الخصم
       const originalAmount = round2(a.original_price ?? a.services?.price ?? 0);
       const discount = round2(a.discount_applied || 0);
       const finalAmount = round2(a.final_price ?? (originalAmount - discount) ?? a.paid_amount ?? 0);
@@ -960,10 +967,10 @@ export default function CashierPage() {
       const linkedVisit = extractLinkedVisit(inv) || undefined;
 
       if (isPayment) {
-        // دفعة: نسجلها في سجل الدفعات فقط، ولا نضيفها لـ p.paid لأنها محدثة بالفعل في appointments.paid_amount
+        // دفعة: نسجلها في سجل الدفعات فقط (الـ paid_amount في الزيارة تم تحديثه مسبقاً)
         p.payments.push({ ref: inv.invoice_number, date: inv.created_at.split('T')[0], amount: round2(inv.total_amount), method: inv.payment_method || "نقدي", linkedVisit, notes: inv.notes || undefined });
       } else {
-        // فاتورة يدوية: نسجلها كزيارة جديدة ونضيفها للإجمالي
+        // فاتورة يدوية: نسجلها كزيارة جديدة
         p.visits.push({ code: inv.invoice_number, date: inv.created_at.split('T')[0], service: 'فاتورة يدوية', amount: round2(inv.total_amount), paid: round2(inv.total_amount), method: inv.payment_method || "نقدي" });
         p.total = round2(p.total + inv.total_amount);
         p.paid = round2(p.paid + inv.total_amount);
@@ -1004,12 +1011,63 @@ export default function CashierPage() {
     toast({ title: "✅ تم تسجيل الدفعة", description: `المرجع: ${paymentRef}` });
     setLedgerAmount(""); setLedgerLinkedVisit(""); setLedgerNotes("");
     
-    // تحديث البيانات محلياً لإغلاق المودال وتحديث الأرقام
+    // تحديث البيانات محلياً
     await fetchInvoices(); 
     await fetchAppointments();
 
-    setTimeout(() => {
-      sendTelegramLedger(selectedLedgerPatient.name, selectedLedgerPatient.phone);
+    // ✨ إرسال سند دفع يدوي (بلون وردي) وكشف حساب محدث
+    setTimeout(async () => {
+      // إرسال كشف الحساب المحدث
+      await sendTelegramLedger(selectedLedgerPatient.name, selectedLedgerPatient.phone);
+
+      // توليد سند يدوي سريع وإرساله
+      try {
+        const manualReceiptHtml = `
+          <div id="manual-receipt-temp" style="width:400px; background:#fff; padding:20px; direction:rtl; font-family:sans-serif; border-radius:16px; border:1px solid #fbcfe8;">
+            <div style="background:linear-gradient(135deg, #db2777 0%, #e11d48 100%); padding:20px; color:white; border-radius:12px; margin-bottom:15px; display:flex; justify-content:space-between; align-items:center;">
+              <div><h1 style="margin:0; font-size:18px;">${clinic?.name || "العيادة"}</h1><p style="margin:5px 0 0; font-size:10px;">سند استلام دفعة يدوية</p></div>
+              <div style="background:rgba(255,255,255,0.2); padding:8px; border-radius:8px; text-align:center;"><p style="margin:0; font-size:8px;">الحالة</p><p style="margin:2px 0 0; font-size:10px; font-weight:bold;">دفعة ✓</p></div>
+            </div>
+            <div style="font-size:12px; color:#555; display:flex; flex-direction:column; gap:8px;">
+              <div style="display:flex; justify-content:space-between;"><span>المريض:</span><b style="color:#111;">${selectedLedgerPatient.name}</b></div>
+              <div style="display:flex; justify-content:space-between;"><span>المرجع:</span><b style="color:#111; font-family:monospace;">${paymentRef}</b></div>
+              <div style="display:flex; justify-content:space-between;"><span>التاريخ:</span><b style="color:#111;">${format(new Date(), "yyyy/MM/dd - hh:mm a")}</b></div>
+              ${ledgerLinkedVisit ? `<div style="display:flex; justify-content:space-between;"><span>مرتبطة بزيارة:</span><b style="color:#111; font-family:monospace;">${ledgerLinkedVisit}</b></div>` : ''}
+              <div style="background:#fdf2f8; border:1px solid #fbcfe8; padding:12px; border-radius:8px; margin-top:10px; display:flex; justify-content:space-between; align-items:center;">
+                <span style="font-weight:bold; color:#9d174d;">المبلغ المستلم:</span>
+                <span style="font-size:18px; font-weight:900; color:#db2777;">${amount.toLocaleString()}</span>
+              </div>
+            </div>
+            <p style="text-align:center; font-size:9px; color:#9ca3af; margin-top:15px; border-top:1px solid #f3f4f6; padding-top:10px;">معتمد إلكترونياً</p>
+          </div>
+        `;
+        const tempDiv = document.createElement("div");
+        tempDiv.innerHTML = manualReceiptHtml;
+        tempDiv.style.position = "absolute";
+        tempDiv.style.left = "-9999px";
+        document.body.appendChild(tempDiv);
+
+        const canvas = await html2canvas(tempDiv.firstElementChild as HTMLElement, { scale: 2, useCORS: true });
+        const imgData = canvas.toDataURL("image/png");
+        
+        await supabase.functions.invoke("telegram-bot", {
+          body: {
+            action: "send_receipt",
+            clinic_id: clinic?.id,
+            chat_id: selectedLedgerPatient.phone || "0", // تأكد من تمرير chat_id الصحيح هنا
+            receipt_image: imgData,
+            reservation_code: paymentRef,
+            patient_name: selectedLedgerPatient.name,
+            service_name: "دفعة يدوية",
+            amount: amount,
+            type: "manual",
+            clinic_name: clinic?.name || "العيادة",
+          }
+        });
+
+        document.body.removeChild(tempDiv);
+      } catch(e) { console.warn("Failed to send manual receipt", e); }
+
       setLedgerModalOpen(false);
     }, 1000);
   };
@@ -1346,15 +1404,14 @@ export default function CashierPage() {
               <div className="space-y-4 pt-1">
                  <div className="text-center mb-1"><span className="inline-flex items-center gap-1 text-xs font-bold text-emerald-600 bg-emerald-50 dark:bg-emerald-950/50 px-3 py-1 rounded-full border border-emerald-200"><CheckCircle className="w-3.5 h-3.5" /> تم الدفع بنجاح</span></div>
                  
-                 {/* ✨ لون السند يتغير ديناميكياً حسب receiptMode */}
                  <div id="receipt-card-container" className="bg-white text-gray-900 rounded-2xl border border-gray-200 shadow-xl overflow-hidden" style={{ direction: 'rtl', fontFamily: 'system-ui, -apple-system, sans-serif' }}>
                     <div style={{ 
-                      background: receiptMode === "promo" ? "linear-gradient(135deg, #7c3aed 0%, #a855f7 50%, #d946ef 100%)" : receiptMode === "partial" ? "linear-gradient(135deg, #ea580c 0%, #f97316 50%, #fb923c 100%)" : "linear-gradient(135deg, #059669 0%, #0d9488 50%, #0891b2 100%)", 
+                      background: selectedAppointment.is_promo ? "linear-gradient(135deg, #7c3aed 0%, #a855f7 50%, #d946ef 100%)" : (selectedAppointment.payment_status === "partial" ? "linear-gradient(135deg, #ea580c 0%, #f97316 50%, #fb923c 100%)" : "linear-gradient(135deg, #059669 0%, #0d9488 50%, #0891b2 100%)"), 
                       padding: "20px 24px 18px", color: "white", display: "flex", alignItems: "center", gap: "14px" 
                     }}>
-                      <div style={{ width: "48px", height: "48px", background: "rgba(255,255,255,0.2)", borderRadius: "12px", display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0, border: "1.5px solid rgba(255,255,255,0.3)" }}>{clinic?.logo_url ? <img src={clinic.logo_url} alt="logo" style={{ width: "36px", height: "36px", borderRadius: "8px", objectFit: "cover" }} /> : <span style={{ fontSize: "22px" }}>{receiptMode === "promo" ? "🎁" : "🏥"}</span>}</div>
-                      <div style={{ flex: 1 }}><p style={{ fontSize: "9px", opacity: 0.8, marginBottom: "3px", letterSpacing: "1.5px" }}>{receiptMode === "promo" ? "PROMO RECEIPT" : receiptMode === "partial" ? "PARTIAL RECEIPT" : "OFFICIAL RECEIPT"}</p><h2 style={{ fontSize: "17px", fontWeight: 900, margin: 0, lineHeight: 1.2 }}>{clinic?.name || "العيادة"}</h2><p style={{ fontSize: "10px", opacity: 0.85, marginTop: "3px" }}>سند استلام مبلغ</p></div>
-                      <div style={{ background: "rgba(255,255,255,0.2)", borderRadius: "10px", padding: "6px 10px", textAlign: "center", border: "1px solid rgba(255,255,255,0.25)" }}><p style={{ fontSize: "8px", opacity: 0.9, margin: 0 }}>الحالة</p><p style={{ fontSize: "10px", fontWeight: 800, margin: "2px 0 0" }}>{receiptMode === "partial" ? "دفع جزئي" : "مدفوع ✓"}</p></div>
+                      <div style={{ width: "48px", height: "48px", background: "rgba(255,255,255,0.2)", borderRadius: "12px", display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0, border: "1.5px solid rgba(255,255,255,0.3)" }}>{clinic?.logo_url ? <img src={clinic.logo_url} alt="logo" style={{ width: "36px", height: "36px", borderRadius: "8px", objectFit: "cover" }} /> : <span style={{ fontSize: "22px" }}>{selectedAppointment.is_promo ? "🎁" : "🏥"}</span>}</div>
+                      <div style={{ flex: 1 }}><p style={{ fontSize: "9px", opacity: 0.8, marginBottom: "3px", letterSpacing: "1.5px" }}>{selectedAppointment.is_promo ? "PROMO RECEIPT" : selectedAppointment.payment_status === "partial" ? "PARTIAL RECEIPT" : "OFFICIAL RECEIPT"}</p><h2 style={{ fontSize: "17px", fontWeight: 900, margin: 0, lineHeight: 1.2 }}>{clinic?.name || "العيادة"}</h2><p style={{ fontSize: "10px", opacity: 0.85, marginTop: "3px" }}>سند استلام مبلغ</p></div>
+                      <div style={{ background: "rgba(255,255,255,0.2)", borderRadius: "10px", padding: "6px 10px", textAlign: "center", border: "1px solid rgba(255,255,255,0.25)" }}><p style={{ fontSize: "8px", opacity: 0.9, margin: 0 }}>الحالة</p><p style={{ fontSize: "10px", fontWeight: 800, margin: "2px 0 0" }}>{selectedAppointment.payment_status === "partial" ? "دفع جزئي" : "مدفوع ✓"}</p></div>
                     </div>
                     <div className="p-5 space-y-2 text-xs">
                       <div className="flex justify-between items-center text-gray-600"><span>كود الحجز:</span><span className="font-mono font-bold text-gray-900 bg-gray-100 px-2 py-0.5 rounded">{selectedAppointment.reservation_code}</span></div>
@@ -1379,9 +1436,9 @@ export default function CashierPage() {
                       )}
 
                       <div className="my-3 border-t border-dashed border-gray-200" />
-                      <div className={`flex justify-between items-center p-3 rounded-xl border ${receiptMode === "promo" ? "bg-purple-50/80 border-purple-100" : receiptMode === "partial" ? "bg-orange-50/80 border-orange-100" : "bg-emerald-50/80 border-emerald-100"}`}>
-                        <span className={`font-bold text-sm ${receiptMode === "promo" ? "text-purple-900" : receiptMode === "partial" ? "text-orange-900" : "text-emerald-900"}`}>المبلغ المُستلَم:</span>
-                        <span className={`font-black text-xl ${receiptMode === "promo" ? "text-purple-700" : receiptMode === "partial" ? "text-orange-700" : "text-emerald-700"}`}>{Number(selectedAppointment.paid_amount || 0).toLocaleString()}</span>
+                      <div className={`flex justify-between items-center p-3 rounded-xl border ${selectedAppointment.is_promo ? "bg-purple-50/80 border-purple-100" : selectedAppointment.payment_status === "partial" ? "bg-orange-50/80 border-orange-100" : "bg-emerald-50/80 border-emerald-100"}`}>
+                        <span className={`font-bold text-sm ${selectedAppointment.is_promo ? "text-purple-900" : selectedAppointment.payment_status === "partial" ? "text-orange-900" : "text-emerald-900"}`}>المبلغ المُستلَم:</span>
+                        <span className={`font-black text-xl ${selectedAppointment.is_promo ? "text-purple-700" : selectedAppointment.payment_status === "partial" ? "text-orange-700" : "text-emerald-700"}`}>{Number(selectedAppointment.paid_amount || 0).toLocaleString()}</span>
                       </div>
                       <div className="mt-4 pt-3 border-t border-gray-100 flex items-center justify-between"><div><p className="text-[10px] font-bold text-gray-700">رمز التحقق:</p><p className="text-[9px] font-mono text-gray-400 mt-0.5">{getUniquePaymentToken(selectedAppointment)}</p></div><div className="bg-white p-1 rounded-lg border border-gray-200 shrink-0"><img src={`https://api.qrserver.com/v1/create-qr-code/?size=120x100&data=${encodeURIComponent(getUniquePaymentToken(selectedAppointment))}`} alt="QR" className="w-12 h-12" crossOrigin="anonymous" /></div></div>
                       <div className="mt-3 text-center text-[9px] text-gray-400 border-t border-gray-100 pt-2">معتمد إلكترونياً عبر صندوق الخزينة</div>
@@ -1540,7 +1597,7 @@ export default function CashierPage() {
         </DialogContent>
       </Dialog>
 
-      {/* ✨ حاوية مخفية لتصدير دفتر الحساب إلى التليجرام (مصممة باحترافية كما في الصورة) */}
+      {/* ✨ حاوية مخفية لتصدير دفتر الحساب إلى التليجرام (تصميم احترافي كامل) */}
       {selectedLedgerPatient && (
         <div className="absolute -left-[9999px] top-0">
           <div id="ledger-export-container" className="p-8 bg-gray-50 w-[800px] text-right" dir="rtl" style={{ fontFamily: 'system-ui, -apple-system, sans-serif' }}>
@@ -1874,6 +1931,5 @@ function CashierStats({ appointments, expenses }: { appointments: Appointment[];
         </div>
       </div>
     </div>
- 
   );
 }
