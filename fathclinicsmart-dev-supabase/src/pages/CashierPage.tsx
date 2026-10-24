@@ -93,7 +93,7 @@ type Invoice = {
 };
 
 // ============================================================
-// Constants & Helpers
+// Helpers
 // ============================================================
 const QR_CAMERA_ELEMENT_ID = "qr-camera-container-cashier";
 const QR_FILE_ELEMENT_ID = "qr-hidden-file-reader-cashier";
@@ -159,7 +159,6 @@ const extractCleanInfo = (a: Appointment) => {
   return { cleanName, cleanPhone };
 };
 
-// ✨ دالة حساب الخصم (تم إصلاحها لدعم النسبة المئوية)
 const calcDiscountAmount = (baseAmount: number, value: number, type: string | null | undefined): number => {
   if (!value || value <= 0 || !baseAmount || baseAmount <= 0) return 0;
   if (type === "percentage") return round2(baseAmount * (value / 100));
@@ -287,6 +286,9 @@ export default function CashierPage() {
   const [ledgerMethod, setLedgerMethod] = useState("نقدي");
   const [ledgerLinkedVisit, setLedgerLinkedVisit] = useState<string>("");
   const [ledgerNotes, setLedgerNotes] = useState("");
+  
+  // حالة خاصة بسجل المريض الكامل
+  const [fullPatientHistory, setFullPatientHistory] = useState<{ visits: any[], payments: any[], total: number, paid: number, remaining: number } | null>(null);
 
   useEffect(() => { appointmentsRef.current = appointments; }, [appointments]);
   useEffect(() => { if (!authLoading && !user) navigate("/auth"); }, [authLoading, user, navigate]);
@@ -323,7 +325,7 @@ export default function CashierPage() {
           .from("appointments")
           .select("id,patient_id,date,time,status,reservation_code,arrived_at,payment_status,paid_amount,discount_amount,discount_applied,discount_type,is_walk_in,notes,customer_telegram_id,is_promo,promo_code,promotion_id,original_price,final_price,payment_method,payment_time,created_at,patients(id,name,phone,telegram_user_id),services(name,price)")
           .eq("clinic_id", clinic.id)
-          .in("payment_status", ["paid", "partial"])
+          .in("payment_status", ["paid", "partial", "unpaid"])
           .gte("date", invoicesFrom)
           .lte("date", invoicesTo)
           .order("date", { ascending: false })
@@ -559,12 +561,17 @@ export default function CashierPage() {
     setEditPatientName(cleanName !== "مريض غير محدد" ? cleanName : "");
     setEditPatientPhone(cleanPhone === "بدون رقم" ? "" : cleanPhone);
 
-    const defaultTotal = appointment.original_price ?? appointment.final_price ?? appointment.services?.price ?? 0;
-    const defaultDiscount = appointment.discount_amount ?? 0;
+    const original = appointment.original_price ?? appointment.final_price ?? appointment.services?.price ?? 0;
+    const isPromo = appointment.is_promo === true;
+    const discountValue = appointment.discount_amount ?? 0;
+    const discountType = appointment.discount_type || (isPromo ? "percentage" : "fixed");
+    const discountAmt = appointment.discount_applied ?? calcDiscountAmount(original, discountValue, discountType);
+    const final = appointment.final_price ?? (original - discountAmt);
     
-    setTotalCostInput(String(defaultTotal || ""));
-    setPaidAmountInput(String(defaultTotal || "")); // الافتراضي يدفع الكل
-    setDiscountInput(String(defaultDiscount));
+    setTotalCostInput(String(original));
+    // ✨ هنا السحر: وضع السعر النهائي (بعد الخصم) في خانة المدفوع
+    setPaidAmountInput(String(final > 0 ? final : original)); 
+    setDiscountInput(String(discountValue));
     setPaymentMethodInput(appointment.payment_method || "نقدي");
     setShowReceipt(appointment.payment_status === "paid");
     
@@ -579,50 +586,181 @@ export default function CashierPage() {
     }
   };
 
-  const sendTelegramReceipt = async (payload: { code: string, name: string, service: string, amount: number, tgId: string, type: string }) => {
+  // ============================================================
+  // محرك التوليد والإرسال التلقائي (Zero-Touch)
+  // ============================================================
+  const autoSendToTelegram = async (payload: {
+    type: "paid" | "partial" | "promo" | "manual" | "previous";
+    code: string;
+    name: string;
+    service: string;
+    amount: number;
+    original?: number;
+    discount?: number;
+    discountType?: string;
+    tgId: string;
+    linkedVisit?: string;
+  }) => {
     if (!payload.tgId) return;
     setSendingTelegram(true);
     try {
-      const canvas = await generateReceiptCanvas();
-      const receiptImageBase64 = canvas.toDataURL("image/png");
-      const { data, error } = await supabase.functions.invoke("telegram-bot", {
+      let bgColor = "#059669"; // Green
+      let title = "OFFICIAL RECEIPT";
+      let status = "مدفوع ✓";
+      let colorCode = "#ecfdf5";
+      let textColor = "#065f46";
+
+      if (payload.type === "promo") { bgColor = "#7c3aed"; title = "PROMO RECEIPT"; colorCode = "#f5f3ff"; textColor = "#5b21b6"; }
+      if (payload.type === "partial") { bgColor = "#ea580c"; title = "PARTIAL RECEIPT"; colorCode = "#fff7ed"; textColor = "#9a3412"; status = "دفع جزئي"; }
+      if (payload.type === "manual") { bgColor = "#e11d48"; title = "MANUAL RECEIPT"; colorCode = "#fff1f2"; textColor = "#9f1239"; status = "دفعة يدوية"; }
+      if (payload.type === "previous") { bgColor = "#0284c7"; title = "PREVIOUS PAYMENT"; colorCode = "#f0f9ff"; textColor = "#075985"; status = "سداد سابق"; }
+
+      const receiptHtml = `
+        <div style="width:380px; background:#fff; padding:0; direction:rtl; font-family:'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; border-radius:16px; overflow:hidden; border:1px solid #e5e7eb; box-shadow: 0 10px 25px -5px rgba(0,0,0,0.1);">
+          <div style="background:linear-gradient(135deg, ${bgColor} 0%, ${bgColor}cc 100%); padding:24px; color:white; display:flex; justify-content:space-between; align-items:center;">
+            <div>
+              <p style="font-size:10px; opacity:0.9; margin:0 0 4px; letter-spacing:2px; font-weight:600;">${title}</p>
+              <h2 style="font-size:20px; font-weight:900; margin:0; line-height:1.2;">${clinic?.name || "العيادة"}</h2>
+              <p style="font-size:11px; opacity:0.9; margin:4px 0 0;">سند استلام مبلغ</p>
+            </div>
+            <div style="background:rgba(255,255,255,0.15); border-radius:12px; padding:8px 12px; text-align:center; border:1px solid rgba(255,255,255,0.3);">
+              <p style="font-size:9px; opacity:0.9; margin:0;">الحالة</p>
+              <p style="font-size:12px; font-weight:800; margin:2px 0 0;">${status}</p>
+            </div>
+          </div>
+          <div style="padding:24px; font-size:13px; color:#374151; display:flex; flex-direction:column; gap:10px;">
+            <div style="display:flex; justify-content:space-between;"><span>رقم المستند:</span><b style="color:#111; font-family:monospace;">${payload.code}</b></div>
+            <div style="display:flex; justify-content:space-between;"><span>التاريخ:</span><b style="color:#111;">${format(new Date(), "yyyy/MM/dd - hh:mm a")}</b></div>
+            <div style="display:flex; justify-content:space-between;"><span>المريض:</span><b style="color:#111;">${payload.name}</b></div>
+            <div style="display:flex; justify-content:space-between;"><span>الخدمة:</span><b style="color:#111;">${payload.service}</b></div>
+            ${payload.linkedVisit ? `<div style="display:flex; justify-content:space-between;"><span>مرتبطة بزيارة:</span><b style="color:${bgColor}; background:${colorCode}; padding:2px 6px; border-radius:4px; font-size:11px;">${payload.linkedVisit}</b></div>` : ''}
+            
+            ${payload.type === "promo" && payload.original ? `
+              <div style="border-top:1px dashed #e5e7eb; margin:10px 0;"></div>
+              <div style="background:${colorCode}; border:1px solid ${bgColor}40; padding:12px; border-radius:10px; display:flex; flex-direction:column; gap:6px;">
+                <div style="display:flex; justify-content:space-between; color:${textColor};"><span>السعر الأصلي:</span><s>${payload.original}</s></div>
+                <div style="display:flex; justify-content:space-between; color:${textColor};"><span>الخصم (${payload.discountType === 'percentage' ? payload.discount + '%' : 'مبلغ'}):</span><span style="color:#dc2626; font-weight:bold;">-${payload.discountType === 'percentage' ? calcDiscountAmount(payload.original, payload.discount || 0, 'percentage') : payload.discount}</span></div>
+              </div>
+            ` : ''}
+
+            <div style="border-top:1px dashed #e5e7eb; margin:10px 0;"></div>
+            <div style="background:${colorCode}; border:1px solid ${bgColor}40; padding:16px; border-radius:12px; display:flex; justify-content:space-between; align-items:center;">
+              <span style="font-weight:bold; color:${textColor};">المبلغ المستلم:</span>
+              <span style="font-size:24px; font-weight:900; color:${bgColor};">${payload.amount.toLocaleString()}</span>
+            </div>
+            <p style="text-align:center; font-size:10px; color:#9ca3af; margin-top:12px;">معتمد إلكترونياً - ${clinic?.name}</p>
+          </div>
+        </div>
+      `;
+
+      const tempDiv = document.createElement("div");
+      tempDiv.style.position = "absolute";
+      tempDiv.style.left = "-9999px";
+      tempDiv.innerHTML = receiptHtml;
+      document.body.appendChild(tempDiv);
+
+      const canvas = await html2canvas(tempDiv.firstElementChild as HTMLElement, { scale: 3, useCORS: true, backgroundColor: "#ffffff" });
+      const imgData = canvas.toDataURL("image/png");
+      document.body.removeChild(tempDiv);
+
+      await supabase.functions.invoke("telegram-bot", {
         body: {
           action: "send_receipt",
           clinic_id: clinic?.id,
           chat_id: payload.tgId,
-          receipt_image: receiptImageBase64,
+          receipt_image: imgData,
           reservation_code: payload.code,
           patient_name: payload.name,
           service_name: payload.service,
           amount: payload.amount,
           type: payload.type,
-          clinic_name: clinic?.name || "العيادة الطبية",
-        },
+          clinic_name: clinic?.name || "العيادة",
+        }
       });
-      if (error) throw error;
-      if (data?.ok) toast({ title: "✈️ تم إرسال السند تلقائياً للتليجرام" });
-    } catch (err: any) {
-      console.warn("[AUTO-RECEIPT] خطأ:", err?.message);
-    } finally { setSendingTelegram(false); }
+    } catch (err) {
+      console.warn("[AUTO-RECEIPT] فشل إرسال السند:", err);
+    } finally {
+      setSendingTelegram(false);
+    }
   };
 
-  const sendTelegramLedger = async (patientName: string, phone: string) => {
-    const el = document.getElementById("ledger-export-container");
-    if (!el) return;
+  const sendTelegramLedger = async (patientName: string, phone: string, history: any) => {
+    if (!history) return;
     setSendingTelegram(true);
     try {
-      const canvas = await html2canvas(el, { scale: 2, useCORS: true, backgroundColor: "#ffffff" });
-      const imgData = canvas.toDataURL("image/png");
-      
       let tgId = "";
       const pVisits = invoiceAppointments.find(a => extractCleanInfo(a).cleanPhone === phone || extractCleanInfo(a).cleanName === patientName);
-      if (pVisits) {
-        tgId = pVisits.customer_telegram_id || pVisits.patients?.telegram_user_id || "";
-      }
+      if (pVisits) tgId = pVisits.customer_telegram_id || pVisits.patients?.telegram_user_id || "";
+      if (!tgId) { setSendingTelegram(false); return; }
 
-      if (!tgId) { console.warn("لا يوجد معرف تليجرام للمريض"); setSendingTelegram(false); return; }
+      const visitsHtml = history.visits.map((v: any) => `
+        <tr>
+          <td style="padding:10px; border-bottom:1px solid #f3f4f6; font-family:monospace; font-size:12px;">${v.code}</td>
+          <td style="padding:10px; border-bottom:1px solid #f3f4f6; font-size:12px;">${v.date}</td>
+          <td style="padding:10px; border-bottom:1px solid #f3f4f6; font-size:12px;">${v.service} ${v.discount ? `<br><span style="font-size:10px; color:#d97706;">خصم: ${v.discount}</span>` : ''}</td>
+          <td style="padding:10px; border-bottom:1px solid #f3f4f6; font-weight:bold; font-size:12px;">${v.amount.toLocaleString()}</td>
+          <td style="padding:10px; border-bottom:1px solid #f3f4f6; font-weight:bold; color:#059669; font-size:12px;">${v.paid.toLocaleString()}</td>
+          <td style="padding:10px; border-bottom:1px solid #f3f4f6; font-weight:bold; color:#dc2626; font-size:12px;">${(v.amount - v.paid).toLocaleString()}</td>
+        </tr>
+      `).join("");
 
-      const { data, error } = await supabase.functions.invoke("telegram-bot", {
+      const paymentsHtml = history.payments.map((p: any) => `
+        <tr>
+          <td style="padding:10px; border-bottom:1px solid #f3f4f6; font-family:monospace; font-size:12px; color:#059669;">${p.ref}</td>
+          <td style="padding:10px; border-bottom:1px solid #f3f4f6; font-size:12px;">${p.date}</td>
+          <td style="padding:10px; border-bottom:1px solid #f3f4f6; font-weight:bold; color:#059669; font-size:12px;">${p.amount.toLocaleString()}</td>
+          <td style="padding:10px; border-bottom:1px solid #f3f4f6; font-size:12px;">${p.method}</td>
+          <td style="padding:10px; border-bottom:1px solid #f3f4f6; font-size:12px;">${p.linkedVisit || "—"}</td>
+        </tr>
+      `).join("");
+
+      const ledgerHtml = `
+        <div style="width:800px; background:#f9fafb; padding:40px; direction:rtl; font-family:'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;">
+          <div style="background:linear-gradient(135deg, #059669 0%, #0d9488 100%); padding:30px; color:white; border-radius:16px; margin-bottom:24px; display:flex; justify-content:space-between; align-items:center;">
+            <div>
+              <h1 style="font-size:24px; font-weight:bold; margin:0 0 8px;">${clinic?.name} - كشف حساب شامل</h1>
+              <p style="margin:4px 0; font-size:14px; opacity:0.9;">المريض: ${patientName} | ${phone}</p>
+              <p style="margin:4px 0; font-size:14px; opacity:0.9;">التاريخ: ${format(new Date(), "yyyy/MM/dd")}</p>
+            </div>
+            ${clinic?.logo_url ? `<img src="${clinic.logo_url}" style="width:80px; height:80px; border-radius:12px; object-fit:cover; background:white; padding:4px;" />` : ''}
+          </div>
+          <div style="display:flex; justify-content:space-between; align-items:center; background:#ecfdf5; padding:24px; border-radius:12px; border:1px solid #a7f3d0; margin-bottom:24px;">
+            <div style="text-align:center; flex:1;"><p style="font-size:12px; color:#047857; font-weight:bold; margin:0 0 4px;">الإجمالي</p><p style="font-size:24px; font-weight:900; margin:0;">${history.total.toLocaleString()}</p></div>
+            <div style="width:1px; height:40px; background:#a7f3d0;"></div>
+            <div style="text-align:center; flex:1;"><p style="font-size:12px; color:#047857; font-weight:bold; margin:0 0 4px;">الواصل</p><p style="font-size:24px; font-weight:900; margin:0; color:#059669;">${history.paid.toLocaleString()}</p></div>
+            <div style="width:1px; height:40px; background:#a7f3d0;"></div>
+            <div style="text-align:center; flex:1;"><p style="font-size:12px; color:#b91c1c; font-weight:bold; margin:0 0 4px;">المتبقي</p><p style="font-size:24px; font-weight:900; margin:0; color:#dc2626;">${history.remaining.toLocaleString()}</p></div>
+          </div>
+          <div style="margin-bottom:24px;">
+            <h3 style="font-size:16px; color:#374151; margin:0 0 12px;">سجل الزيارات</h3>
+            <table style="width:100%; text-align:right; background:white; border-radius:12px; overflow:hidden; border:1px solid #e5e7eb; border-collapse:collapse;">
+              <thead style="background:#f3f4f6; color:#4b5563;"><tr><th style="padding:12px; font-size:12px;">الزيارة</th><th style="padding:12px; font-size:12px;">التاريخ</th><th style="padding:12px; font-size:12px;">الخدمة</th><th style="padding:12px; font-size:12px;">المبلغ</th><th style="padding:12px; font-size:12px;">الواصل</th><th style="padding:12px; font-size:12px;">الباقي</th></tr></thead>
+              <tbody>${visitsHtml}</tbody>
+            </table>
+          </div>
+          ${history.payments.length > 0 ? `
+          <div>
+            <h3 style="font-size:16px; color:#374151; margin:0 0 12px;">سجل الدفعات (السندات)</h3>
+            <table style="width:100%; text-align:right; background:white; border-radius:12px; overflow:hidden; border:1px solid #e5e7eb; border-collapse:collapse;">
+              <thead style="background:#ecfdf5; color:#065f46;"><tr><th style="padding:12px; font-size:12px;">المرجع</th><th style="padding:12px; font-size:12px;">التاريخ</th><th style="padding:12px; font-size:12px;">المبلغ</th><th style="padding:12px; font-size:12px;">طريقة الدفع</th><th style="padding:12px; font-size:12px;">مرتبطة بزيارة</th></tr></thead>
+              <tbody>${paymentsHtml}</tbody>
+            </table>
+          </div>` : ''}
+          <p style="text-align:center; font-size:12px; color:#9ca3af; margin-top:32px; border-top:1px solid #e5e7eb; padding-top:16px;">معتمد إلكترونياً - ${clinic?.name}</p>
+        </div>
+      `;
+
+      const tempDiv = document.createElement("div");
+      tempDiv.style.position = "absolute";
+      tempDiv.style.left = "-9999px";
+      tempDiv.innerHTML = ledgerHtml;
+      document.body.appendChild(tempDiv);
+
+      const canvas = await html2canvas(tempDiv.firstElementChild as HTMLElement, { scale: 2, useCORS: true, backgroundColor: "#ffffff" });
+      const imgData = canvas.toDataURL("image/png");
+      document.body.removeChild(tempDiv);
+
+      await supabase.functions.invoke("telegram-bot", {
         body: {
           action: "send_receipt",
           clinic_id: clinic?.id,
@@ -630,16 +768,14 @@ export default function CashierPage() {
           receipt_image: imgData,
           reservation_code: "LEDGER",
           patient_name: patientName,
-          service_name: "كشف حساب - دفتر الإيصالات",
+          service_name: "كشف حساب شامل",
           amount: 0,
           type: "ledger",
           clinic_name: clinic?.name || "العيادة",
         }
       });
-      if (error) throw error;
-      if (data?.ok) toast({ title: "✈️ تم إرسال كشف الحساب للتليجرام" });
-    } catch (err: any) {
-      console.warn("[AUTO-LEDGER] خطأ:", err?.message);
+    } catch (err) {
+      console.warn("[AUTO-LEDGER] فشل إرسال الكشف:", err);
     } finally {
       setSendingTelegram(false);
     }
@@ -650,18 +786,20 @@ export default function CashierPage() {
     setProcessingPayment(true);
 
     const totalCost = round2(parseFloat(totalCostInput) || 0);
-    const paidNow = round2(parseFloat(paidAmountInput) || 0);
+    let paidNow = round2(parseFloat(paidAmountInput) || 0);
     const discountValue = round2(parseFloat(discountInput) || 0);
     const discType = selectedAppointment.discount_type || (selectedAppointment.is_promo ? "percentage" : "fixed");
     
-    // ✨ إصلاح: حساب الخصم الفعلي (سواء نسبة أو مبلغ)
     const discountCash = calcDiscountAmount(totalCost, discountValue, discType);
     const finalPrice = round2(Math.max(0, totalCost - discountCash));
     
-    // الصافي المستلم هو ما دفعه المريض بالفعل
+    if (paidNow > finalPrice && visitType !== "link") {
+      paidNow = finalPrice; 
+    }
+
     const netCollected = paidNow; 
-    
     const patientId = selectedAppointment.patients?.id || selectedAppointment.patient_id;
+    const tgId = selectedAppointment.customer_telegram_id || selectedAppointment.patients?.telegram_user_id || "";
 
     if (patientId && (editPatientName.trim() || editPatientPhone.trim())) {
       const updateData: any = {};
@@ -670,7 +808,7 @@ export default function CashierPage() {
       await supabase.from("patients").update(updateData).eq("id", patientId);
     }
 
-    // 1. حالة الربط بزيارة سابقة (دفع جزئي لزيارة سابقة)
+    // 1. حالة الربط بزيارة سابقة
     if (visitType === "link" && linkedVisitCode) {
       const paymentRef = generatePaymentReference(editPatientPhone || "0000");
       const notes = `تسديد دفعة للزيارة ${linkedVisitCode} [LINKED_VISIT:${linkedVisitCode}]`;
@@ -697,14 +835,15 @@ export default function CashierPage() {
       }
 
       toast({ title: "✅ تم تسجيل الدفعة للسابق", description: `المرجع: ${paymentRef}` });
-      setSelectedInvoice({
-        id: "temp", clinic_id: clinic.id, patient_name: editPatientName.trim(), patient_phone: editPatientPhone.trim(), invoice_number: paymentRef,
-        items: [{ name: "تسديد دفعة سابقة", qty: 1, price: netCollected }], subtotal: netCollected, discount_type: "fixed", discount_value: 0, discount_amount: 0, total_amount: netCollected, paid_status: "paid", paid_amount: netCollected, payment_method: paymentMethodInput, notes, created_at: new Date().toISOString(), linked_visit_code: linkedVisitCode
+      
+      await autoSendToTelegram({
+        type: "previous", code: linkedVisitCode, name: editPatientName, service: "تسديد دفعة سابقة", amount: netCollected, tgId
       });
+      
       setSelectedAppointment(null);
 
     } 
-    // 2. حالة الدفع لهذه الزيارة الحالية (عادية أو مراجعة)
+    // 2. حالة الدفع العادي
     else {
       const totalPaidNow = round2((selectedAppointment.paid_amount || 0) + netCollected);
       const isFullyPaid = totalPaidNow >= finalPrice || visitType === "followup";
@@ -745,22 +884,23 @@ export default function CashierPage() {
         payment_method: paymentMethodInput,
       });
       setShowReceipt(true);
+
+      await autoSendToTelegram({
+        type: selectedAppointment.is_promo ? "promo" : (!isFullyPaid ? "partial" : "paid"),
+        code: selectedAppointment.reservation_code,
+        name: editPatientName,
+        service: selectedAppointment.services?.name || "فحص طبي",
+        amount: netCollected,
+        original: totalCost,
+        discount: discountValue,
+        discountType: discType,
+        tgId
+      });
     }
 
     setProcessingPayment(false);
     fetchAppointments();
     fetchInvoices();
-    
-    setTimeout(() => { 
-      sendTelegramReceipt({
-        code: linkedVisitCode || selectedAppointment.reservation_code,
-        name: editPatientName,
-        service: visitType === "link" ? "تسديد سابق" : (selectedAppointment.services?.name || "خدمة"),
-        amount: netCollected,
-        tgId: selectedAppointment.customer_telegram_id || selectedAppointment.patients?.telegram_user_id || "",
-        type: selectedAppointment.is_promo ? "promo" : (!isFullyPaid ? "partial" : "paid")
-      }); 
-    }, 800);
   };
 
   const addWalkIn = async () => {
@@ -829,13 +969,13 @@ export default function CashierPage() {
     if (!selectedAppointment) return;
     const tgUserId = selectedAppointment.customer_telegram_id || selectedAppointment.patients?.telegram_user_id;
     if (!tgUserId) { toast({ title: "❌ المريض غير مسجل عبر تلجرام", variant: "destructive" }); return; }
-    sendTelegramReceipt({
+    await autoSendToTelegram({
+      type: selectedAppointment.is_promo ? "promo" : (selectedAppointment.payment_status === "partial" ? "partial" : "paid"),
       code: selectedAppointment.reservation_code,
       name: editPatientName,
       service: selectedAppointment.services?.name || "فحص طبي",
       amount: selectedAppointment.paid_amount || 0,
-      tgId: tgUserId,
-      type: selectedAppointment.is_promo ? "promo" : (selectedAppointment.payment_status === "partial" ? "partial" : "paid")
+      tgId: tgUserId
     });
   };
 
@@ -932,14 +1072,12 @@ export default function CashierPage() {
 
     const map = new Map<string, Patient>();
     
-    // 1. حساب الزيارات
     invoiceAppointments.forEach(a => {
       const { cleanName, cleanPhone } = extractCleanInfo(a);
       const key = cleanPhone !== "بدون رقم" ? cleanPhone : cleanName;
       if (!map.has(key)) map.set(key, { name: cleanName, phone: cleanPhone, visits: [], payments: [], total: 0, paid: 0, remaining: 0 });
       const p = map.get(key)!;
       
-      // ✨ المبلغ هو السعر النهائي بعد الخصم
       const originalAmount = round2(a.original_price ?? a.services?.price ?? 0);
       const discount = round2(a.discount_applied || 0);
       const finalAmount = round2(a.final_price ?? (originalAmount - discount) ?? a.paid_amount ?? 0);
@@ -955,7 +1093,6 @@ export default function CashierPage() {
       p.paid = round2(p.paid + paid);
     });
 
-    // 2. إضافة الدفعات اليدوية أو الفواتير
     invoicesList.forEach(inv => {
       const name = inv.patient_name || "غير محدد";
       const phone = inv.patient_phone || "بدون رقم";
@@ -967,10 +1104,8 @@ export default function CashierPage() {
       const linkedVisit = extractLinkedVisit(inv) || undefined;
 
       if (isPayment) {
-        // دفعة: نسجلها في سجل الدفعات فقط (الـ paid_amount في الزيارة تم تحديثه مسبقاً)
         p.payments.push({ ref: inv.invoice_number, date: inv.created_at.split('T')[0], amount: round2(inv.total_amount), method: inv.payment_method || "نقدي", linkedVisit, notes: inv.notes || undefined });
       } else {
-        // فاتورة يدوية: نسجلها كزيارة جديدة
         p.visits.push({ code: inv.invoice_number, date: inv.created_at.split('T')[0], service: 'فاتورة يدوية', amount: round2(inv.total_amount), paid: round2(inv.total_amount), method: inv.payment_method || "نقدي" });
         p.total = round2(p.total + inv.total_amount);
         p.paid = round2(p.paid + inv.total_amount);
@@ -979,6 +1114,33 @@ export default function CashierPage() {
 
     return Array.from(map.values()).map(p => ({ ...p, remaining: round2(Math.max(0, p.total - p.paid)) })).filter(p => p.total > 0);
   }, [invoiceAppointments, invoicesList]);
+
+  const handleOpenLedger = async (patient: any) => {
+    setSelectedLedgerPatient(patient);
+    setLedgerAmount(String(patient.remaining > 0 ? patient.remaining : 0)); 
+    setLedgerLinkedVisit(""); 
+    setLedgerNotes("");
+    
+    // جلب كل السجلات لهذا المريض
+    const { data: appts } = await supabase.from("appointments").select("reservation_code, date, final_price, paid_amount, services(name)").eq("patient_id", patient.id || patient.patient_id).neq("payment_status", "cancelled");
+    const { data: invs } = await supabase.from("invoices").select("*").eq("patient_phone", patient.phone).or(`patient_name.eq.${patient.name}`);
+    
+    const visits = (appts || []).map(a => ({
+        code: a.reservation_code, date: a.date, service: a.services?.name || "فحص", amount: round2(a.final_price || 0), paid: round2(a.paid_amount || 0)
+    }));
+    const payments = (invs || []).filter(i => isPaymentRecord(i)).map(i => ({
+        ref: i.invoice_number, date: i.created_at.split('T')[0], amount: round2(i.total_amount), method: i.payment_method, linkedVisit: extractLinkedVisit(i)
+    }));
+    
+    setFullPatientHistory({
+        visits, payments,
+        total: visits.reduce((s, v) => s + v.amount, 0),
+        paid: visits.reduce((s, v) => s + v.paid, 0),
+        remaining: visits.reduce((s, v) => s + (v.amount - v.paid), 0)
+    });
+    
+    setLedgerModalOpen(true);
+  };
 
   const handleAddLedgerPayment = async () => {
     if (!selectedLedgerPatient || !clinic || !ledgerAmount) return;
@@ -1011,63 +1173,22 @@ export default function CashierPage() {
     toast({ title: "✅ تم تسجيل الدفعة", description: `المرجع: ${paymentRef}` });
     setLedgerAmount(""); setLedgerLinkedVisit(""); setLedgerNotes("");
     
-    // تحديث البيانات محلياً
     await fetchInvoices(); 
     await fetchAppointments();
+    await handleOpenLedger(selectedLedgerPatient); // تحديث السجل
 
-    // ✨ إرسال سند دفع يدوي (بلون وردي) وكشف حساب محدث
+    // ✨ إرسال السند العنابي وكشف الحساب
     setTimeout(async () => {
-      // إرسال كشف الحساب المحدث
-      await sendTelegramLedger(selectedLedgerPatient.name, selectedLedgerPatient.phone);
+      let tgId = "";
+      const pVisits = invoiceAppointments.find(a => extractCleanInfo(a).cleanPhone === selectedLedgerPatient.phone || extractCleanInfo(a).cleanName === selectedLedgerPatient.name);
+      if (pVisits) tgId = pVisits.customer_telegram_id || pVisits.patients?.telegram_user_id || "";
 
-      // توليد سند يدوي سريع وإرساله
-      try {
-        const manualReceiptHtml = `
-          <div id="manual-receipt-temp" style="width:400px; background:#fff; padding:20px; direction:rtl; font-family:sans-serif; border-radius:16px; border:1px solid #fbcfe8;">
-            <div style="background:linear-gradient(135deg, #db2777 0%, #e11d48 100%); padding:20px; color:white; border-radius:12px; margin-bottom:15px; display:flex; justify-content:space-between; align-items:center;">
-              <div><h1 style="margin:0; font-size:18px;">${clinic?.name || "العيادة"}</h1><p style="margin:5px 0 0; font-size:10px;">سند استلام دفعة يدوية</p></div>
-              <div style="background:rgba(255,255,255,0.2); padding:8px; border-radius:8px; text-align:center;"><p style="margin:0; font-size:8px;">الحالة</p><p style="margin:2px 0 0; font-size:10px; font-weight:bold;">دفعة ✓</p></div>
-            </div>
-            <div style="font-size:12px; color:#555; display:flex; flex-direction:column; gap:8px;">
-              <div style="display:flex; justify-content:space-between;"><span>المريض:</span><b style="color:#111;">${selectedLedgerPatient.name}</b></div>
-              <div style="display:flex; justify-content:space-between;"><span>المرجع:</span><b style="color:#111; font-family:monospace;">${paymentRef}</b></div>
-              <div style="display:flex; justify-content:space-between;"><span>التاريخ:</span><b style="color:#111;">${format(new Date(), "yyyy/MM/dd - hh:mm a")}</b></div>
-              ${ledgerLinkedVisit ? `<div style="display:flex; justify-content:space-between;"><span>مرتبطة بزيارة:</span><b style="color:#111; font-family:monospace;">${ledgerLinkedVisit}</b></div>` : ''}
-              <div style="background:#fdf2f8; border:1px solid #fbcfe8; padding:12px; border-radius:8px; margin-top:10px; display:flex; justify-content:space-between; align-items:center;">
-                <span style="font-weight:bold; color:#9d174d;">المبلغ المستلم:</span>
-                <span style="font-size:18px; font-weight:900; color:#db2777;">${amount.toLocaleString()}</span>
-              </div>
-            </div>
-            <p style="text-align:center; font-size:9px; color:#9ca3af; margin-top:15px; border-top:1px solid #f3f4f6; padding-top:10px;">معتمد إلكترونياً</p>
-          </div>
-        `;
-        const tempDiv = document.createElement("div");
-        tempDiv.innerHTML = manualReceiptHtml;
-        tempDiv.style.position = "absolute";
-        tempDiv.style.left = "-9999px";
-        document.body.appendChild(tempDiv);
-
-        const canvas = await html2canvas(tempDiv.firstElementChild as HTMLElement, { scale: 2, useCORS: true });
-        const imgData = canvas.toDataURL("image/png");
-        
-        await supabase.functions.invoke("telegram-bot", {
-          body: {
-            action: "send_receipt",
-            clinic_id: clinic?.id,
-            chat_id: selectedLedgerPatient.phone || "0", // تأكد من تمرير chat_id الصحيح هنا
-            receipt_image: imgData,
-            reservation_code: paymentRef,
-            patient_name: selectedLedgerPatient.name,
-            service_name: "دفعة يدوية",
-            amount: amount,
-            type: "manual",
-            clinic_name: clinic?.name || "العيادة",
-          }
+      if (tgId) {
+        await autoSendToTelegram({
+          type: "manual", code: paymentRef, name: selectedLedgerPatient.name, service: ledgerLinkedVisit ? `دفعة للزيارة ${ledgerLinkedVisit}` : "دفعة يدوية", amount, tgId, linkedVisit: ledgerLinkedVisit
         });
-
-        document.body.removeChild(tempDiv);
-      } catch(e) { console.warn("Failed to send manual receipt", e); }
-
+        await sendTelegramLedger(selectedLedgerPatient.name, selectedLedgerPatient.phone, fullPatientHistory);
+      }
       setLedgerModalOpen(false);
     }, 1000);
   };
@@ -1317,7 +1438,7 @@ export default function CashierPage() {
                         <div className="border-r border-border/50"></div>
                         <div><p className="text-[10px] text-muted-foreground font-bold mb-1">الباقي</p><p className="font-black text-red-500">{p.remaining.toLocaleString()}</p></div>
                       </div>
-                      <Button onClick={() => { setSelectedLedgerPatient(p); setLedgerAmount(String(p.remaining > 0 ? p.remaining : 0)); setLedgerLinkedVisit(""); setLedgerNotes(""); setLedgerModalOpen(true); }} className="bg-primary w-full sm:w-auto shadow-glow">فتح الدفتر</Button>
+                      <Button onClick={() => handleOpenLedger(p)} className="bg-primary w-full sm:w-auto shadow-glow">فتح الدفتر</Button>
                     </div>
                   ))}
                 </div>
@@ -1557,7 +1678,7 @@ export default function CashierPage() {
                 <table className="w-full text-sm text-right bg-card relative">
                   <thead className="bg-muted sticky top-0 z-10"><tr><th className="p-3 font-bold text-muted-foreground">الزيارات</th><th className="p-3 font-bold text-muted-foreground">التاريخ</th><th className="p-3 font-bold text-muted-foreground">نوع العمل</th><th className="p-3 font-bold text-muted-foreground">المبلغ</th><th className="p-3 font-bold text-muted-foreground">الواصل</th><th className="p-3 font-bold text-muted-foreground">الباقي</th></tr></thead>
                   <tbody className="divide-y divide-border">
-                    {selectedLedgerPatient?.visits.map((v: any, i: number) => (
+                    {fullPatientHistory?.visits.map((v: any, i: number) => (
                       <tr key={i} className="hover:bg-muted/50 transition">
                         <td className="p-3 font-mono text-xs">{v.code}</td><td className="p-3">{v.date}</td><td className="p-3">{v.service}{v.discount && <span className="block text-[10px] text-amber-600 font-bold">خصم: {v.discount}</span>}</td>
                         <td className="p-3 font-bold">{v.amount.toLocaleString()}</td><td className="p-3 font-bold text-emerald-600">{v.paid.toLocaleString()}</td><td className="p-3 font-bold text-red-500">{(v.amount - v.paid).toLocaleString()}</td>
@@ -1573,7 +1694,7 @@ export default function CashierPage() {
                 <table className="w-full text-sm text-right bg-card relative">
                   <thead className="bg-emerald-50/50 sticky top-0 z-10"><tr><th className="p-3 font-bold text-emerald-800">المرجع</th><th className="p-3 font-bold text-emerald-800">التاريخ</th><th className="p-3 font-bold text-emerald-800">المبلغ</th><th className="p-3 font-bold text-emerald-800">طريقة الدفع</th><th className="p-3 font-bold text-emerald-800">مرتبطة بزيارة</th></tr></thead>
                   <tbody className="divide-y divide-border">
-                    {selectedLedgerPatient?.payments.map((p: any, i: number) => (
+                    {fullPatientHistory?.payments.map((p: any, i: number) => (
                       <tr key={i} className="hover:bg-emerald-50/30 transition">
                         <td className="p-3 font-mono text-xs text-emerald-700 font-bold">{p.ref}</td><td className="p-3">{p.date}</td><td className="p-3 font-bold text-emerald-600">{p.amount.toLocaleString()}</td>
                         <td className="p-3">{p.method}</td><td className="p-3 font-mono text-xs">{p.linkedVisit ? <span className="bg-primary/10 text-primary px-2 py-0.5 rounded flex items-center w-fit gap-1"><LinkIcon className="w-3 h-3"/>{p.linkedVisit}</span> : "—"}</td>
@@ -1588,7 +1709,7 @@ export default function CashierPage() {
               <div className="grid grid-cols-1 md:grid-cols-4 gap-3">
                 <div><label className="text-xs font-semibold text-muted-foreground block mb-1">المبلغ</label><Input type="number" value={ledgerAmount} onChange={(e) => setLedgerAmount(e.target.value)} placeholder="المبلغ" className="font-bold text-lg" /></div>
                 <div><label className="text-xs font-semibold text-muted-foreground block mb-1">طريقة الدفع</label><select value={ledgerMethod} onChange={(e) => setLedgerMethod(e.target.value)} className="h-10 rounded-md border border-input bg-background px-3 text-sm w-full"><option value="نقدي">نقدي</option><option value="تحويل">تحويل</option><option value="بطاقة">بطاقة</option></select></div>
-                <div><label className="text-xs font-semibold text-muted-foreground block mb-1">ربط بزيارة (اختياري)</label><select value={ledgerLinkedVisit} onChange={(e) => setLedgerLinkedVisit(e.target.value)} className="h-10 rounded-md border border-input bg-background px-3 text-sm w-full"><option value="">بدون ربط</option>{selectedLedgerPatient?.visits.filter((v: any) => v.amount > v.paid).map((v: any) => (<option key={v.code} value={v.code}>{v.code} - متبقي: {v.amount - v.paid}</option>))}</select></div>
+                <div><label className="text-xs font-semibold text-muted-foreground block mb-1">ربط بزيارة (اختياري)</label><select value={ledgerLinkedVisit} onChange={(e) => setLedgerLinkedVisit(e.target.value)} className="h-10 rounded-md border border-input bg-background px-3 text-sm w-full"><option value="">بدون ربط</option>{fullPatientHistory?.visits.filter((v: any) => v.amount > v.paid).map((v: any) => (<option key={v.code} value={v.code}>{v.code} - متبقي: {v.amount - v.paid}</option>))}</select></div>
                 <div><label className="text-xs font-semibold text-muted-foreground block mb-1">ملاحظات</label><Input value={ledgerNotes} onChange={(e) => setLedgerNotes(e.target.value)} placeholder="اختياري" /></div>
               </div>
               <Button onClick={handleAddLedgerPayment} className="w-full bg-emerald-600 hover:bg-emerald-700 text-white font-bold mt-2"><CheckCircle className="w-4 h-4 ml-1" />تسجيل الدفعة</Button>
@@ -1596,75 +1717,6 @@ export default function CashierPage() {
           </div>
         </DialogContent>
       </Dialog>
-
-      {/* ✨ حاوية مخفية لتصدير دفتر الحساب إلى التليجرام (تصميم احترافي كامل) */}
-      {selectedLedgerPatient && (
-        <div className="absolute -left-[9999px] top-0">
-          <div id="ledger-export-container" className="p-8 bg-gray-50 w-[800px] text-right" dir="rtl" style={{ fontFamily: 'system-ui, -apple-system, sans-serif' }}>
-            {/* الهيدر */}
-            <div style={{ background: "linear-gradient(135deg, #059669 0%, #0d9488 50%, #0891b2 100%)", padding: "30px", color: "white", borderRadius: "16px", marginBottom: "24px", display: "flex", justifyContent: "space-between", alignItems: "center" }}>
-              <div>
-                <h1 className="text-2xl font-bold mb-2">{clinic?.name} - كشف حساب</h1>
-                <p className="text-sm opacity-90">المريض: {selectedLedgerPatient.name} | {selectedLedgerPatient.phone}</p>
-                <p className="text-sm opacity-90">التاريخ: {format(new Date(), "yyyy/MM/dd")}</p>
-              </div>
-              {clinic?.logo_url && <img src={clinic.logo_url} alt="logo" className="w-20 h-20 rounded-xl object-cover bg-white p-1" />}
-            </div>
-
-            {/* الإحصائيات */}
-            <div className="flex justify-between items-center bg-emerald-50 p-6 rounded-xl border border-emerald-200 mb-6 text-emerald-900">
-              <div className="text-center flex-1"><p className="text-xs text-emerald-600 font-bold mb-1">الإجمالي</p><p className="font-black text-2xl">{selectedLedgerPatient.total.toLocaleString()}</p></div>
-              <div className="w-px h-12 bg-emerald-200"></div>
-              <div className="text-center flex-1"><p className="text-xs text-emerald-600 font-bold mb-1">الواصل</p><p className="font-black text-2xl">{selectedLedgerPatient.paid.toLocaleString()}</p></div>
-              <div className="w-px h-12 bg-emerald-200"></div>
-              <div className="text-center flex-1"><p className="text-xs text-red-600 font-bold mb-1">المتبقي</p><p className="font-black text-2xl text-red-500">{selectedLedgerPatient.remaining.toLocaleString()}</p></div>
-            </div>
-
-            {/* جدول الزيارات */}
-            <div className="mb-6">
-              <h3 className="font-bold text-gray-700 mb-2">سجل الزيارات</h3>
-              <table className="w-full text-sm text-right bg-white rounded-xl overflow-hidden shadow-sm border border-gray-200">
-                <thead className="bg-gray-100 text-gray-600 font-bold"><tr><th className="p-3">الزيارة</th><th className="p-3">التاريخ</th><th className="p-3">الخدمة</th><th className="p-3">المبلغ</th><th className="p-3">الواصل</th><th className="p-3">الباقي</th></tr></thead>
-                <tbody className="divide-y divide-gray-100">
-                  {selectedLedgerPatient.visits.map((v: any, i: number) => (
-                    <tr key={i}>
-                      <td className="p-3 font-mono text-xs">{v.code}</td>
-                      <td className="p-3">{v.date}</td>
-                      <td className="p-3">{v.service} {v.discount && <span className="text-[10px] text-amber-600 block">خصم: {v.discount}</span>}</td>
-                      <td className="p-3 font-bold">{v.amount.toLocaleString()}</td>
-                      <td className="p-3 font-bold text-emerald-600">{v.paid.toLocaleString()}</td>
-                      <td className="p-3 font-bold text-red-500">{(v.amount - v.paid).toLocaleString()}</td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
-
-            {/* جدول الدفعات */}
-            {selectedLedgerPatient.payments.length > 0 && (
-              <div>
-                <h3 className="font-bold text-gray-700 mb-2">سجل الدفعات (السندات)</h3>
-                <table className="w-full text-sm text-right bg-white rounded-xl overflow-hidden shadow-sm border border-gray-200">
-                  <thead className="bg-emerald-50 text-emerald-800 font-bold"><tr><th className="p-3">المرجع</th><th className="p-3">التاريخ</th><th className="p-3">المبلغ</th><th className="p-3">طريقة الدفع</th><th className="p-3">مرتبطة بزيارة</th></tr></thead>
-                  <tbody className="divide-y divide-gray-100">
-                    {selectedLedgerPatient.payments.map((p: any, i: number) => (
-                      <tr key={i}>
-                        <td className="p-3 font-mono text-xs text-emerald-700">{p.ref}</td>
-                        <td className="p-3">{p.date}</td>
-                        <td className="p-3 font-bold text-emerald-600">{p.amount.toLocaleString()}</td>
-                        <td className="p-3">{p.method}</td>
-                        <td className="p-3 text-xs">{p.linkedVisit ? p.linkedVisit : "—"}</td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
-            )}
-
-            <p className="text-center text-xs text-gray-400 mt-8 border-t border-gray-200 pt-4">معتمد إلكترونياً - {clinic?.name}</p>
-          </div>
-        </div>
-      )}
 
       <Dialog open={walkInOpen} onOpenChange={setWalkInOpen}>
         <DialogContent dir="rtl" className="max-w-md" onInteractOutside={(e) => e.preventDefault()}>
