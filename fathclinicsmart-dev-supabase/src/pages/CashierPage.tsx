@@ -93,7 +93,7 @@ type Invoice = {
 };
 
 // ============================================================
-// Constants & Helpers
+// Helpers
 // ============================================================
 const QR_CAMERA_ELEMENT_ID = "qr-camera-container-cashier";
 const QR_FILE_ELEMENT_ID = "qr-hidden-file-reader-cashier";
@@ -159,7 +159,6 @@ const extractCleanInfo = (a: Appointment) => {
   return { cleanName, cleanPhone };
 };
 
-// ✨ دالة حساب الخصم (تعتمد على الإجمالي قبل الخصم)
 const calcDiscountAmount = (baseAmount: number, value: number, type: string | null | undefined): number => {
   if (!value || value <= 0 || !baseAmount || baseAmount <= 0) return 0;
   if (type === "percentage") return round2(baseAmount * (value / 100));
@@ -325,7 +324,7 @@ export default function CashierPage() {
           .from("appointments")
           .select("id,patient_id,date,time,status,reservation_code,arrived_at,payment_status,paid_amount,discount_amount,discount_applied,discount_type,is_walk_in,notes,customer_telegram_id,is_promo,promo_code,promotion_id,original_price,final_price,payment_method,payment_time,created_at,patients(id,name,phone,telegram_user_id),services(name,price)")
           .eq("clinic_id", clinic.id)
-          .in("payment_status", ["paid", "partial", "unpaid"])
+          .in("payment_status", ["paid", "partial"])
           .gte("date", invoicesFrom)
           .lte("date", invoicesTo)
           .order("date", { ascending: false })
@@ -1009,7 +1008,8 @@ export default function CashierPage() {
   const modalRawDiscount = round2(parseFloat(discountInput) || 0);
   const modalDiscType = selectedAppointment?.discount_type || (selectedAppointment?.is_promo ? "percentage" : "fixed");
   const modalDiscountCash = calcDiscountAmount(parseFloat(totalCostInput) || 0, modalRawDiscount, modalDiscType);
-  const modalNetCollected = round2(Math.max(0, modalRawAmount - modalDiscountCash));
+  // ✨ الإصلاح: الصافي هو ما دفعه الكاشير، لا نطرح الخصم منه مرة أخرى
+  const modalNetCollected = modalRawAmount; 
 
   // ============================================================
   // LEDGER
@@ -1021,6 +1021,7 @@ export default function CashierPage() {
 
     const map = new Map<string, Patient>();
     
+    // 1. حساب الزيارات
     invoiceAppointments.forEach(a => {
       const { cleanName, cleanPhone } = extractCleanInfo(a);
       const key = cleanPhone !== "بدون رقم" ? cleanPhone : cleanName;
@@ -1042,6 +1043,7 @@ export default function CashierPage() {
       p.paid = round2(p.paid + paid);
     });
 
+    // 2. إضافة الدفعات اليدوية أو الفواتير
     invoicesList.forEach(inv => {
       const name = inv.patient_name || "غير محدد";
       const phone = inv.patient_phone || "بدون رقم";
@@ -1070,6 +1072,7 @@ export default function CashierPage() {
     setLedgerLinkedVisit(""); 
     setLedgerNotes("");
     
+    // ✨ الإصلاح: جلب الزيارات بناءً على رقم الهاتف لضمان جلب كل شيء
     const { data: appts } = await supabase.from("appointments").select("reservation_code, date, final_price, paid_amount, services(name)").eq("clinic_id", clinic?.id).ilike("patients.phone", `%${patient.phone}%`);
     
     const visits = (appts || []).map(a => ({
