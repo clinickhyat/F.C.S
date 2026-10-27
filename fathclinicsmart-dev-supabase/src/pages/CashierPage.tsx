@@ -589,7 +589,7 @@ export default function CashierPage() {
   // محرك التوليد والإرسال التلقائي (Zero-Touch)
   // ============================================================
   const autoSendToTelegram = async (payload: {
-    type: "paid" | "partial" | "promo" | "manual" | "previous";
+    type: "paid" | "partial" | "promo" | "manual" | "previous" | "invoice";
     code: string;
     name: string;
     service: string;
@@ -599,11 +599,12 @@ export default function CashierPage() {
     original?: number;
     discount?: number;
     discountType?: string;
+    items?: any[];
+    date?: string;
   }) => {
     if (!payload.tgId) return;
     setSendingTelegram(true);
     try {
-      // 1. بناء قالب السند كـ HTML ديناميكي
       let bgColor = "#059669"; 
       let title = "OFFICIAL RECEIPT";
       let status = "مدفوع ✓";
@@ -614,6 +615,14 @@ export default function CashierPage() {
       if (payload.type === "partial") { bgColor = "#ea580c"; title = "PARTIAL RECEIPT"; colorCode = "#fff7ed"; textColor = "#9a3412"; status = "دفع جزئي"; }
       if (payload.type === "manual") { bgColor = "#e11d48"; title = "MANUAL RECEIPT"; colorCode = "#fff1f2"; textColor = "#9f1239"; status = "دفعة يدوية"; }
       if (payload.type === "previous") { bgColor = "#0284c7"; title = "PREVIOUS PAYMENT"; colorCode = "#f0f9ff"; textColor = "#075985"; status = "سداد سابق"; }
+      if (payload.type === "invoice") { bgColor = "#0ea5e9"; title = "OFFICIAL INVOICE"; colorCode = "#f0f9ff"; textColor = "#0369a1"; status = "فاتورة"; }
+
+      const itemsHtml = payload.items ? payload.items.map((it: any) => `
+        <div style="display:flex; justify-content:space-between; background:#f9fafb; padding:8px 12px; border-radius:6px; margin-bottom:4px;">
+          <span style="font-size:12px; color:#4b5563;">${it.name} × ${it.qty}</span>
+          <span style="font-size:12px; font-weight:bold; color:#111;">${(Number(it.qty) * Number(it.price)).toLocaleString()}</span>
+        </div>
+      `).join("") : '';
 
       const receiptHtml = `
         <div style="width:380px; background:#fff; padding:0; direction:rtl; font-family:'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; border-radius:16px; overflow:hidden; border:1px solid #e5e7eb; box-shadow: 0 10px 25px -5px rgba(0,0,0,0.1);">
@@ -632,6 +641,12 @@ export default function CashierPage() {
             <div style="display:flex; justify-content:space-between;"><span>الخدمة:</span><b style="color:#111;">${payload.service}</b></div>
             ${payload.linkedVisit ? `<div style="display:flex; justify-content:space-between;"><span>مرتبطة بزيارة:</span><b style="color:${bgColor}; background:${colorCode}; padding:2px 6px; border-radius:4px; font-size:11px;">${payload.linkedVisit}</b></div>` : ''}
             
+            ${payload.items && payload.items.length > 0 ? `
+              <div style="border-top:1px dashed #e5e7eb; margin:10px 0;"></div>
+              <p style="font-size:10px; font-weight:bold; color:#6b7280; margin-bottom:6px;">البنود:</p>
+              ${itemsHtml}
+            ` : ''}
+
             ${payload.type === "promo" && payload.original ? `
               <div style="border-top:1px dashed #e5e7eb; margin:10px 0;"></div>
               <div style="background:${colorCode}; border:1px solid ${bgColor}40; padding:12px; border-radius:10px; display:flex; flex-direction:column; gap:6px;">
@@ -685,8 +700,7 @@ export default function CashierPage() {
     }
   };
 
-  const sendTelegramLedger = async (patientName: string, phone: string, history: any) => {
-    if (!history) return;
+  const sendTelegramLedger = async (patientName: string, phone: string, patientId: string) => {
     setSendingTelegram(true);
     try {
       let tgId = "";
@@ -694,18 +708,33 @@ export default function CashierPage() {
       if (pVisits) tgId = pVisits.customer_telegram_id || pVisits.patients?.telegram_user_id || "";
       if (!tgId) { setSendingTelegram(false); return; }
 
-      const visitsHtml = history.visits.map((v: any) => `
+      // جلب الزيارات المحدثة مباشرة من الداتابيز لضمان الدقة
+      const { data: appts } = await supabase.from("appointments").select("reservation_code, date, final_price, paid_amount, services(name)").eq("patient_id", patientId);
+      
+      const visits = (appts || []).map(a => ({
+          code: a.reservation_code, date: a.date, service: a.services?.name || "فحص", amount: round2(a.final_price || 0), paid: round2(a.paid_amount || 0)
+      })).sort((a,b) => new Date(b.date).getTime() - new Date(a.date).getTime());
+      
+      const payments = invoicesList.filter(i => isPaymentRecord(i) && (i.patient_phone === phone || i.patient_name === patientName)).map(i => ({
+          ref: i.invoice_number, date: i.created_at.split('T')[0], amount: round2(i.total_amount), method: i.payment_method, linkedVisit: extractLinkedVisit(i)
+      })).sort((a,b) => new Date(b.date).getTime() - new Date(a.date).getTime());
+
+      const total = visits.reduce((s, v) => s + v.amount, 0);
+      const paid = visits.reduce((s, v) => s + v.paid, 0);
+      const remaining = Math.max(0, total - paid);
+
+      const visitsHtml = visits.map((v: any) => `
         <tr>
           <td style="padding:10px; border-bottom:1px solid #f3f4f6; font-family:monospace; font-size:12px;">${v.code}</td>
           <td style="padding:10px; border-bottom:1px solid #f3f4f6; font-size:12px;">${v.date}</td>
-          <td style="padding:10px; border-bottom:1px solid #f3f4f6; font-size:12px;">${v.service} ${v.discount ? `<br><span style="font-size:10px; color:#d97706;">خصم: ${v.discount}</span>` : ''}</td>
+          <td style="padding:10px; border-bottom:1px solid #f3f4f6; font-size:12px;">${v.service}</td>
           <td style="padding:10px; border-bottom:1px solid #f3f4f6; font-weight:bold; font-size:12px;">${v.amount.toLocaleString()}</td>
           <td style="padding:10px; border-bottom:1px solid #f3f4f6; font-weight:bold; color:#059669; font-size:12px;">${v.paid.toLocaleString()}</td>
           <td style="padding:10px; border-bottom:1px solid #f3f4f6; font-weight:bold; color:#dc2626; font-size:12px;">${(v.amount - v.paid).toLocaleString()}</td>
         </tr>
       `).join("");
 
-      const paymentsHtml = history.payments.map((p: any) => `
+      const paymentsHtml = payments.map((p: any) => `
         <tr>
           <td style="padding:10px; border-bottom:1px solid #f3f4f6; font-family:monospace; font-size:12px; color:#059669;">${p.ref}</td>
           <td style="padding:10px; border-bottom:1px solid #f3f4f6; font-size:12px;">${p.date}</td>
@@ -726,11 +755,11 @@ export default function CashierPage() {
             ${clinic?.logo_url ? `<img src="${clinic.logo_url}" style="width:80px; height:80px; border-radius:12px; object-fit:cover; background:white; padding:4px;" />` : ''}
           </div>
           <div style="display:flex; justify-content:space-between; align-items:center; background:#fff1f2; padding:24px; border-radius:12px; border:1px solid #fecdd3; margin-bottom:24px;">
-            <div style="text-align:center; flex:1;"><p style="font-size:12px; color:#9f1239; font-weight:bold; margin:0 0 4px;">الإجمالي</p><p style="font-size:24px; font-weight:900; margin:0;">${history.total.toLocaleString()}</p></div>
+            <div style="text-align:center; flex:1;"><p style="font-size:12px; color:#9f1239; font-weight:bold; margin:0 0 4px;">الإجمالي</p><p style="font-size:24px; font-weight:900; margin:0;">${total.toLocaleString()}</p></div>
             <div style="width:1px; height:40px; background:#fecdd3;"></div>
-            <div style="text-align:center; flex:1;"><p style="font-size:12px; color:#9f1239; font-weight:bold; margin:0 0 4px;">الواصل</p><p style="font-size:24px; font-weight:900; margin:0; color:#be123c;">${history.paid.toLocaleString()}</p></div>
+            <div style="text-align:center; flex:1;"><p style="font-size:12px; color:#9f1239; font-weight:bold; margin:0 0 4px;">الواصل</p><p style="font-size:24px; font-weight:900; margin:0; color:#be123c;">${paid.toLocaleString()}</p></div>
             <div style="width:1px; height:40px; background:#fecdd3;"></div>
-            <div style="text-align:center; flex:1;"><p style="font-size:12px; color:#be123c; font-weight:bold; margin:0 0 4px;">المتبقي</p><p style="font-size:24px; font-weight:900; margin:0; color:#e11d48;">${history.remaining.toLocaleString()}</p></div>
+            <div style="text-align:center; flex:1;"><p style="font-size:12px; color:#be123c; font-weight:bold; margin:0 0 4px;">المتبقي</p><p style="font-size:24px; font-weight:900; margin:0; color:#e11d48;">${remaining.toLocaleString()}</p></div>
           </div>
           <div style="margin-bottom:24px;">
             <h3 style="font-size:16px; color:#374151; margin:0 0 12px;">سجل الزيارات</h3>
@@ -739,7 +768,7 @@ export default function CashierPage() {
               <tbody>${visitsHtml}</tbody>
             </table>
           </div>
-          ${history.payments.length > 0 ? `
+          ${payments.length > 0 ? `
           <div>
             <h3 style="font-size:16px; color:#374151; margin:0 0 12px;">سجل الدفعات (السندات)</h3>
             <table style="width:100%; text-align:right; background:white; border-radius:12px; overflow:hidden; border:1px solid #e5e7eb; border-collapse:collapse;">
@@ -794,13 +823,12 @@ export default function CashierPage() {
     const discountCash = calcDiscountAmount(totalCost, discountValue, discType);
     const finalPrice = round2(Math.max(0, totalCost - discountCash));
     
-    // ✨ حماية محاسبية: المدفوع لا يمكن أن يكون أكبر من الصافي
     if (paidNow > finalPrice && visitType !== "link") {
       paidNow = finalPrice; 
     }
 
     const netCollected = paidNow; 
-    const patientId = selectedAppointment.patients?.id || selectedAppointment.patient_id;
+    const patientId = selectedAppointment.patients?.id || selectedAppointment.patient_id || "";
     const tgId = selectedAppointment.customer_telegram_id || selectedAppointment.patients?.telegram_user_id || "";
 
     if (patientId && (editPatientName.trim() || editPatientPhone.trim())) {
@@ -810,7 +838,8 @@ export default function CashierPage() {
       await supabase.from("patients").update(updateData).eq("id", patientId);
     }
 
-    // 1. حالة الربط بزيارة سابقة
+    let typeToSend: "paid" | "partial" | "promo" | "manual" | "previous" | "invoice" = "paid";
+
     if (visitType === "link" && linkedVisitCode) {
       const paymentRef = generatePaymentReference(editPatientPhone || "0000");
       const notes = `تسديد دفعة للزيارة ${linkedVisitCode} [LINKED_VISIT:${linkedVisitCode}]`;
@@ -837,19 +866,13 @@ export default function CashierPage() {
       }
 
       toast({ title: "✅ تم تسجيل الدفعة للسابق", description: `المرجع: ${paymentRef}` });
-      
-      setSelectedInvoice({
-        id: "temp", clinic_id: clinic.id, patient_name: editPatientName.trim(), patient_phone: editPatientPhone.trim(), invoice_number: paymentRef,
-        items: [{ name: "تسديد دفعة سابقة", qty: 1, price: netCollected }], subtotal: netCollected, discount_type: "fixed", discount_value: 0, discount_amount: 0, total_amount: netCollected, paid_status: "paid", paid_amount: netCollected, payment_method: paymentMethodInput, notes, created_at: new Date().toISOString(), linked_visit_code: linkedVisitCode
-      });
-      
+      typeToSend = "previous";
       setSelectedAppointment(null);
 
-    } 
-    // 2. حالة الدفع العادي
-    else {
+    } else {
       const totalPaidNow = round2((selectedAppointment.paid_amount || 0) + netCollected);
       const isFullyPaid = totalPaidNow >= finalPrice || visitType === "followup";
+      typeToSend = selectedAppointment.is_promo ? "promo" : (isFullyPaid ? "paid" : "partial");
 
       const updatePayload: any = {
         payment_status: isFullyPaid ? "paid" : "partial",
@@ -893,23 +916,23 @@ export default function CashierPage() {
     fetchAppointments();
     fetchInvoices();
     
-    // ✨ تصوير السند وإرساله
     setTimeout(async () => {
        await autoSendToTelegram({
-         type: selectedAppointment.is_promo ? "promo" : (selectedAppointment.payment_status === "partial" ? "partial" : "paid"),
+         type: typeToSend,
          code: linkedVisitCode || selectedAppointment.reservation_code,
          name: editPatientName,
          service: selectedAppointment.services?.name || "فحص طبي",
          amount: netCollected,
-         tgId: selectedAppointment.customer_telegram_id || selectedAppointment.patients?.telegram_user_id || "",
+         tgId: tgId,
          linkedVisit: linkedVisitCode || undefined,
          original: totalCost,
          discount: discountValue,
          discountType: discType
        });
        
-       // إرسال كشف الحساب المحدث بعد الدفع
-       await sendTelegramLedger(editPatientName, editPatientPhone, fullPatientHistory);
+       if (patientId) {
+         await sendTelegramLedger(editPatientName, editPatientPhone, patientId);
+       }
     }, 1000);
   };
 
@@ -979,8 +1002,11 @@ export default function CashierPage() {
     if (!selectedAppointment) return;
     const tgUserId = selectedAppointment.customer_telegram_id || selectedAppointment.patients?.telegram_user_id;
     if (!tgUserId) { toast({ title: "❌ المريض غير مسجل عبر تلجرام", variant: "destructive" }); return; }
+    
+    const typeToSend = selectedAppointment.is_promo ? "promo" : (selectedAppointment.payment_status === "partial" ? "partial" : "paid");
+    
     await autoSendToTelegram({
-      type: selectedAppointment.is_promo ? "promo" : (selectedAppointment.payment_status === "partial" ? "partial" : "paid"),
+      type: typeToSend,
       code: selectedAppointment.reservation_code,
       name: editPatientName,
       service: selectedAppointment.services?.name || "فحص طبي",
@@ -1012,23 +1038,37 @@ export default function CashierPage() {
     try {
       const discountAmount = calcInvoiceDiscount(subtotal);
       const totalAmount = round2(Math.max(0, subtotal - discountAmount));
-      // ✨ إصلاح مشكلة التكرار: استخدام رقم عشوائي بدلاً من الوقت فقط
-      const invoiceNumber = `INV-${Date.now().toString().slice(-6)}${Math.floor(Math.random() * 100)}`;
+      const invoiceNumber = `INV-${Date.now().toString().slice(-8)}`;
       
       const newInvoiceData = { clinic_id: clinic.id, patient_name: invPatientName.trim() || null, patient_phone: invPatientPhone.trim() || null, invoice_number: invoiceNumber, items: invItems.filter(it => it.name.trim() && Number(it.price) > 0), subtotal, discount_type: invDiscountType, discount_value: parseFloat(invDiscountValue) || 0, discount_amount: discountAmount, total_amount: totalAmount, paid_status: "paid", paid_amount: totalAmount, payment_method: invPaymentMethod, notes: invNotes.trim() || null, paid_at: new Date().toISOString() };
 
       const { data: inserted, error } = await supabase.from("invoices").insert(newInvoiceData).select().single();
       if (error) throw error;
       
-      try {
-        const tgMsg = `🧾 *فاتورة جديدة* - ${clinic?.name || "العيادة"}\n━━━━━━━━━━━━━━━\n👤 المريض: ${invPatientName || "غير محدد"}\n🔖 رقم الفاتورة: ${invoiceNumber}\n💰 الإجمالي: ${totalAmount.toLocaleString()}\n💳 طريقة الدفع: ${invPaymentMethod}`;
-        await supabase.functions.invoke("telegram-bot", { body: { action: "send_text", clinic_id: clinic.id, chat_id: invPatientPhone || "0", text: tgMsg } });
-      } catch(e) { console.warn("Telegram invoice auto-send failed", e); }
-
       toast({ title: "✅ تم إنشاء الفاتورة", description: invoiceNumber });
       setCreateInvoiceOpen(false);
       
-      if (inserted) { setSelectedInvoice({ ...inserted, payment_reference: undefined, linked_visit_code: null } as Invoice); }
+      if (inserted) { 
+        setSelectedInvoice({ ...inserted, payment_reference: undefined, linked_visit_code: null } as Invoice); 
+        
+        // ✨ إرسال الفاتورة إلى التليجرام إذا كان الرقم موجوداً
+        if (invPatientPhone.trim()) {
+          const tgIdMatch = invoiceAppointments.find(a => extractCleanInfo(a).cleanPhone === invPatientPhone.trim());
+          const tgId = tgMatch ? tgMatch.customer_telegram_id || tgMatch.patients?.telegram_user_id : null;
+          
+          if (tgId) {
+            await autoSendToTelegram({
+              type: "invoice",
+              code: invoiceNumber,
+              name: invPatientName.trim() || "غير محدد",
+              service: "فاتورة جديدة",
+              amount: totalAmount,
+              tgId: tgId,
+              items: newInvoiceData.items
+            });
+          }
+        }
+      }
       fetchInvoices();
     } catch (e: any) { toast({ title: "خطأ", description: e.message, variant: "destructive" }); } finally { setInvSaving(false); }
   };
@@ -1071,7 +1111,6 @@ export default function CashierPage() {
   const modalRawDiscount = round2(parseFloat(discountInput) || 0);
   const modalDiscType = selectedAppointment?.discount_type || (selectedAppointment?.is_promo ? "percentage" : "fixed");
   const modalDiscountCash = calcDiscountAmount(parseFloat(totalCostInput) || 0, modalRawDiscount, modalDiscType);
-  // ✨ الإصلاح: الصافي هو ما دفعه الكاشير، لا نطرح الخصم منه مرة أخرى
   const modalNetCollected = modalRawAmount; 
 
   // ============================================================
@@ -1084,7 +1123,6 @@ export default function CashierPage() {
 
     const map = new Map<string, Patient>();
     
-    // 1. حساب الزيارات
     invoiceAppointments.forEach(a => {
       const { cleanName, cleanPhone } = extractCleanInfo(a);
       const key = cleanPhone !== "بدون رقم" ? cleanPhone : cleanName;
@@ -1106,7 +1144,6 @@ export default function CashierPage() {
       p.paid = round2(p.paid + paid);
     });
 
-    // 2. إضافة الدفعات اليدوية أو الفواتير
     invoicesList.forEach(inv => {
       const name = inv.patient_name || "غير محدد";
       const phone = inv.patient_phone || "بدون رقم";
@@ -1126,7 +1163,12 @@ export default function CashierPage() {
       }
     });
 
-    return Array.from(map.values()).map(p => ({ ...p, remaining: round2(Math.max(0, p.total - p.paid)) })).filter(p => p.total > 0);
+    return Array.from(map.values()).map(p => ({ 
+      ...p, 
+      remaining: round2(Math.max(0, p.total - p.paid)),
+      visits: p.visits.sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime()),
+      payments: p.payments.sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime())
+    })).filter(p => p.total > 0);
   }, [invoiceAppointments, invoicesList]);
 
   const handleOpenLedger = async (patient: any) => {
@@ -1135,7 +1177,6 @@ export default function CashierPage() {
     setLedgerLinkedVisit(""); 
     setLedgerNotes("");
     
-    // ✨ الإصلاح: جلب الـ ID أولاً ثم جلب الزيارات
     const { data: patientData } = await supabase.from("patients").select("id").eq("clinic_id", clinic?.id).eq("phone", patient.phone).single();
     
     let visits: any[] = [];
@@ -1143,12 +1184,12 @@ export default function CashierPage() {
       const { data: appts } = await supabase.from("appointments").select("reservation_code, date, final_price, paid_amount, services(name)").eq("patient_id", patientData.id);
       visits = (appts || []).map(a => ({
           code: a.reservation_code, date: a.date, service: a.services?.name || "فحص", amount: round2(a.final_price || 0), paid: round2(a.paid_amount || 0)
-      }));
+      })).sort((a,b) => new Date(b.date).getTime() - new Date(a.date).getTime());
     }
     
     const payments = invoicesList.filter(i => isPaymentRecord(i) && (i.patient_phone === patient.phone || i.patient_name === patient.name)).map(i => ({
         ref: i.invoice_number, date: i.created_at.split('T')[0], amount: round2(i.total_amount), method: i.payment_method, linkedVisit: extractLinkedVisit(i)
-    }));
+    })).sort((a,b) => new Date(b.date).getTime() - new Date(a.date).getTime());
     
     setFullPatientHistory({
         visits, payments,
@@ -1193,7 +1234,7 @@ export default function CashierPage() {
     
     await fetchInvoices(); 
     await fetchAppointments();
-    await handleOpenLedger(selectedLedgerPatient); // تحديث السجل
+    await handleOpenLedger(selectedLedgerPatient); 
 
     setTimeout(async () => {
        let tgId = "";
@@ -1204,7 +1245,7 @@ export default function CashierPage() {
           await autoSendToTelegram({
             type: "manual", code: paymentRef, name: selectedLedgerPatient.name, service: ledgerLinkedVisit ? `دفعة للزيارة ${ledgerLinkedVisit}` : "دفعة يدوية", amount, tgId, linkedVisit: ledgerLinkedVisit || undefined
           });
-          await sendTelegramLedger(selectedLedgerPatient.name, selectedLedgerPatient.phone, fullPatientHistory);
+          await sendTelegramLedger(selectedLedgerPatient.name, selectedLedgerPatient.phone, selectedLedgerPatient.id || "");
        }
        setLedgerModalOpen(false);
     }, 1000);
@@ -1395,7 +1436,7 @@ export default function CashierPage() {
                       </div>
                       <div className="flex flex-col items-end gap-1 shrink-0">
                         <p className={`text-2xl font-black ${isPayment ? "text-violet-700" : "text-sky-700"}`}>{Number(inv.total_amount || 0).toLocaleString()}</p>
-                        <Button variant="outline" size="sm" className="text-xs gap-1" onClick={() => setSelectedInvoice(inv)}><Receipt className="w-3.5 h-3.5" />عرض</Button>
+                        <Button variant="outline" size="sm" className="text-xs gap-1" onClick={() => setSelectedInvoice(inv)}><Receipt className="w-3.5 h-3.5" />عرض السند</Button>
                       </div>
                     </div>
                   );
@@ -1591,6 +1632,94 @@ export default function CashierPage() {
                   <Button variant="ghost" className="w-full text-xs mt-1" onClick={() => { setSelectedAppointment(null); setShowReceipt(false); }}>إغلاق</Button>
               </div>
             )}
+          </div>
+        </div>
+      )}
+
+      {/* ✨ مودال إنشاء فاتورة */}
+      <Dialog open={createInvoiceOpen} onOpenChange={setCreateInvoiceOpen}>
+        <DialogContent dir="rtl" className="max-w-2xl max-h-[92vh] overflow-y-auto" onInteractOutside={(e) => e.preventDefault()} onEscapeKeyDown={(e) => e.preventDefault()}>
+          <DialogHeader><DialogTitle className="flex items-center gap-2"><FileText className="w-5 h-5 text-sky-600" />إنشاء فاتورة جديدة</DialogTitle></DialogHeader>
+          <div className="space-y-4 pt-2">
+            <div className="grid grid-cols-2 gap-3">
+              <div><label className="text-xs font-semibold text-muted-foreground block mb-1">اسم المريض</label><Input value={invPatientName} onChange={(e) => setInvPatientName(e.target.value)} placeholder="اسم المريض" onKeyDown={(e) => e.key === 'Enter' && e.preventDefault()} /></div>
+              <div><label className="text-xs font-semibold text-muted-foreground block mb-1">رقم الهاتف</label><Input value={invPatientPhone} onChange={(e) => setInvPatientPhone(e.target.value)} dir="ltr" onKeyDown={(e) => e.key === 'Enter' && e.preventDefault()} /></div>
+            </div>
+            <div>
+              <div className="flex items-center justify-between mb-2"><label className="text-sm font-bold text-foreground">البنود</label><Button size="sm" variant="outline" onClick={addInvoiceItem} className="gap-1"><Plus className="w-3.5 h-3.5" />إضافة بند</Button></div>
+              <div className="space-y-2">
+                {invItems.map((it, idx) => (
+                  <div key={idx} className="grid grid-cols-[1fr_70px_90px_40px] gap-2 items-center">
+                    <Input value={it.name} onChange={(e) => updateInvoiceItem(idx, { name: e.target.value })} placeholder="اسم الخدمة" className="text-sm" onKeyDown={(e) => e.key === 'Enter' && e.preventDefault()} />
+                    <Input type="number" value={it.qty} onChange={(e) => updateInvoiceItem(idx, { qty: parseInt(e.target.value) || 0 })} placeholder="الكمية" className="text-sm text-center" min={1} onKeyDown={(e) => e.key === 'Enter' && e.preventDefault()} />
+                    <Input type="number" value={it.price} onChange={(e) => updateInvoiceItem(idx, { price: parseFloat(e.target.value) || 0 })} placeholder="السعر" className="text-sm" min={0} onKeyDown={(e) => e.key === 'Enter' && e.preventDefault()} />
+                    <Button size="sm" variant="ghost" onClick={() => removeInvoiceItem(idx)} disabled={invItems.length === 1} className="text-red-600 hover:text-red-700 p-0 h-9"><Trash2 className="w-4 h-4" /></Button>
+                  </div>
+                ))}
+              </div>
+            </div>
+            <div className="bg-muted/30 rounded-xl p-3 space-y-2">
+              <div className="flex justify-between text-sm"><span className="text-muted-foreground">المجموع الفرعي:</span><span className="font-bold">{calcInvoiceSubtotal().toLocaleString()}</span></div>
+              <div className="grid grid-cols-[110px_1fr_auto] gap-2 items-center">
+                <select value={invDiscountType} onChange={(e) => setInvDiscountType(e.target.value as any)} className="h-10 rounded-md border border-input bg-background px-3 text-sm"><option value="fixed">مبلغ ثابت</option><option value="percentage">نسبة %</option></select>
+                <Input type="number" value={invDiscountValue} onChange={(e) => setInvDiscountValue(e.target.value)} placeholder="0" min={0} onKeyDown={(e) => e.key === 'Enter' && e.preventDefault()} />
+                <span className="text-sm font-bold text-red-500 whitespace-nowrap">-{calcInvoiceDiscount(calcInvoiceSubtotal()).toLocaleString()}</span>
+              </div>
+              <div className="flex justify-between items-center pt-2 border-t border-border/60"><span className="font-bold text-foreground">الإجمالي:</span><span className="font-black text-emerald-600 text-xl">{Math.max(0, calcInvoiceSubtotal() - calcInvoiceDiscount(calcInvoiceSubtotal())).toLocaleString()}</span></div>
+            </div>
+            <div className="grid grid-cols-2 gap-3">
+              <div>
+                <label className="text-xs font-semibold text-muted-foreground block mb-1">طريقة الدفع</label>
+                <div className="grid grid-cols-3 gap-1">{["نقدي", "تحويل", "بطاقة"].map(m => (<button key={m} onClick={() => setInvPaymentMethod(m)} className={`px-2 py-2 rounded-lg text-xs font-bold border transition ${invPaymentMethod === m ? "bg-primary text-white border-primary" : "bg-background border-border"}`}>{m}</button>))}</div>
+              </div>
+              <div><label className="text-xs font-semibold text-muted-foreground block mb-1">ملاحظات</label><Input value={invNotes} onChange={(e) => setInvNotes(e.target.value)} placeholder="اختياري" onKeyDown={(e) => e.key === 'Enter' && e.preventDefault()} /></div>
+            </div>
+            <div className="flex gap-2 pt-2">
+              <Button variant="outline" onClick={() => setCreateInvoiceOpen(false)} className="flex-1">إلغاء</Button>
+              <Button onClick={handleSaveInvoice} disabled={invSaving} className="flex-1 bg-sky-600 hover:bg-sky-700 text-white font-bold">{invSaving ? <Loader2 className="w-4 h-4 animate-spin ml-1" /> : <CheckCircle className="w-4 h-4 ml-1" />}حفظ</Button>
+            </div>
+          </div>
+        </DialogContent>
+      </Dialog>
+
+      {/* ✨ مودال عرض الفاتورة اليدوية */}
+      {selectedInvoice && (
+        <div className="fixed inset-0 z-50 bg-black/80 backdrop-blur-md flex items-center justify-center p-4 overflow-y-auto">
+          <div className="bg-background rounded-3xl max-w-md w-full shadow-2xl p-6 relative border border-border my-8">
+            <button onClick={() => setSelectedInvoice(null)} className="absolute top-4 right-4 z-10 p-2 rounded-full bg-muted hover:bg-muted/80 text-foreground transition"><X className="w-5 h-5" /></button>
+            <div id="invoice-card-container" className="bg-white text-gray-900 rounded-2xl border border-gray-200 shadow-xl overflow-hidden" style={{ direction: 'rtl' }}>
+              <div style={{ background: "linear-gradient(135deg, #059669 0%, #0d9488 50%, #0891b2 100%)", padding: "20px 24px", color: "white", display: "flex", alignItems: "center", gap: "14px" }}>
+                <div style={{ width: "48px", height: "48px", background: "rgba(255,255,255,0.2)", borderRadius: "12px", display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0, border: "1.5px solid rgba(255,255,255,0.3)" }}>{clinic?.logo_url ? <img src={clinic.logo_url} alt="logo" style={{ width: "36px", height: "36px", borderRadius: "8px", objectFit: "cover" }} /> : <span style={{ fontSize: "22px" }}>🏥</span>}</div>
+                <div style={{ flex: 1 }}><p style={{ fontSize: "9px", opacity: 0.8, marginBottom: "3px", letterSpacing: "1.5px" }}>{isPaymentRecord(selectedInvoice) ? "PAYMENT RECEIPT" : "OFFICIAL INVOICE"}</p><h2 style={{ fontSize: "17px", fontWeight: 900, margin: 0, lineHeight: 1.2 }}>{clinic?.name || "العيادة"}</h2><p style={{ fontSize: "10px", opacity: 0.85, marginTop: "3px" }}>{isPaymentRecord(selectedInvoice) ? "سند استلام دفعة" : "فاتورة رسمية"}</p></div>
+              </div>
+              <div className="p-5 space-y-2 text-xs">
+                <div className="flex justify-between"><span className="text-gray-600">الرقم:</span><span className="font-mono font-bold bg-gray-100 px-2 rounded">{selectedInvoice.invoice_number}</span></div>
+                <div className="flex justify-between"><span className="text-gray-600">التاريخ:</span><span className="font-medium">{format(new Date(selectedInvoice.created_at), "yyyy/MM/dd - HH:mm")}</span></div>
+                <div className="flex justify-between"><span className="text-gray-600">المريض:</span><span className="font-bold">{selectedInvoice.patient_name || "—"}</span></div>
+                <div className="flex justify-between"><span className="text-gray-600">الهاتف:</span><span className="font-medium" dir="ltr">{selectedInvoice.patient_phone || "—"}</span></div>
+                <div className="flex justify-between"><span className="text-gray-600">طريقة الدفع:</span><span className="font-bold">{selectedInvoice.payment_method || "—"}</span></div>
+                {selectedInvoice.linked_visit_code && (<div className="flex justify-between"><span className="text-gray-600">مرتبطة بزيارة:</span><span className="font-bold text-emerald-700">{selectedInvoice.linked_visit_code}</span></div>)}
+                <div className="my-3 border-t border-dashed border-gray-200" />
+                <div className="space-y-1.5"><p className="text-[10px] font-bold text-gray-700 uppercase">البنود:</p>{selectedInvoice.items.map((it, i) => (<div key={i} className="flex justify-between items-center bg-gray-50 rounded-lg px-3 py-2"><span className="font-medium">{it.name} × {it.qty}</span><span className="font-bold">{(Number(it.qty) * Number(it.price)).toLocaleString()}</span></div>))}</div>
+                <div className="my-3 border-t border-dashed border-gray-200" />
+                <div className="flex justify-between"><span className="text-gray-600">المجموع الفرعي:</span><span className="font-bold">{Number(selectedInvoice.subtotal).toLocaleString()}</span></div>
+                {selectedInvoice.discount_amount > 0 && (<div className="flex justify-between text-red-600"><span>الخصم {selectedInvoice.discount_type === "percentage" ? `(${selectedInvoice.discount_value}%)` : ""}:</span><span className="font-bold">-{Number(selectedInvoice.discount_amount).toLocaleString()}</span></div>)}
+                <div className="flex justify-between items-center bg-emerald-50 rounded-lg p-3 border border-emerald-100 mt-2"><span className="font-bold text-emerald-900 text-sm">الإجمالي:</span><span className="font-black text-emerald-700 text-xl">{Number(selectedInvoice.total_amount).toLocaleString()}</span></div>
+                <div className="mt-4 pt-3 border-t border-gray-100 flex items-center justify-between">
+                  <div><p className="text-[10px] font-bold text-gray-700">رمز التحقق:</p><p className="text-[9px] font-mono text-gray-400">{selectedInvoice.invoice_number}</p></div>
+                  <div className="flex flex-col items-center gap-1"><img src={`https://api.qrserver.com/v1/create-qr-code/?size=120x100&data=${encodeURIComponent(selectedInvoice.invoice_number)}`} alt="QR" className="w-12 h-12" crossOrigin="anonymous" /><img src={`https://barcode.tec-it.com/barcode.ashx?data=${selectedInvoice.invoice_number}&code=Code128&dpi=96`} alt="barcode" style={{ height: "24px", width: "80px", objectFit: "contain" }} crossOrigin="anonymous" /></div>
+                </div>
+              </div>
+            </div>
+            <div className="grid grid-cols-2 gap-2 pt-3">
+              <Button variant="outline" size="sm" className="text-xs gap-1" onClick={async () => {
+                try { const el = document.getElementById("invoice-card-container"); if (!el) return; const canvas = await html2canvas(el, { scale: 3, useCORS: true, backgroundColor: "#ffffff" }); const link = document.createElement("a"); link.href = canvas.toDataURL("image/png"); link.download = `سند_${selectedInvoice.invoice_number}.png`; link.click(); } catch { toast({ title: "خطأ", variant: "destructive" }); }
+              }}><Download className="w-3.5 h-3.5" />تنزيل</Button>
+              <Button variant="outline" size="sm" className="text-xs gap-1" onClick={async () => {
+                try { const el = document.getElementById("invoice-card-container"); if (!el) return; const canvas = await html2canvas(el, { scale: 3, useCORS: true, backgroundColor: "#ffffff" }); const imgData = canvas.toDataURL("image/png"); const win = window.open("", "_blank"); if (win) { win.document.write(`<html><head><title>طباعة</title></head><body style="margin:0;display:flex;align-items:center;justify-content:center;min-height:100vh;background:#f4f4f5;"><img src="${imgData}" style="max-width:100%;height:auto;" onload="window.print();window.close();" /></body></html>`); win.document.close(); } } catch { toast({ title: "خطأ", variant: "destructive" }); }
+              }}><Printer className="w-3.5 h-3.5" />طباعة</Button>
+            </div>
+            <Button variant="ghost" className="w-full text-xs mt-2" onClick={() => setSelectedInvoice(null)}>إغلاق</Button>
           </div>
         </div>
       )}
