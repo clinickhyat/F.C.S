@@ -586,7 +586,7 @@ export default function CashierPage() {
   };
 
   // ============================================================
-  // محرك التوليد والإرسال التلقائي
+  // محرك التوليد والإرسال التلقائي (Zero-Touch)
   // ============================================================
   const autoSendToTelegram = async (payload: {
     type: "paid" | "partial" | "promo" | "manual" | "previous";
@@ -596,15 +596,73 @@ export default function CashierPage() {
     amount: number;
     tgId: string;
     linkedVisit?: string;
+    original?: number;
+    discount?: number;
+    discountType?: string;
   }) => {
     if (!payload.tgId) return;
     setSendingTelegram(true);
     try {
-      const el = document.getElementById("receipt-export-container");
-      if (!el) return;
+      // 1. بناء قالب السند كـ HTML ديناميكي
+      let bgColor = "#059669"; 
+      let title = "OFFICIAL RECEIPT";
+      let status = "مدفوع ✓";
+      let colorCode = "#ecfdf5";
+      let textColor = "#065f46";
 
-      const canvas = await html2canvas(el, { scale: 3, useCORS: true, backgroundColor: "#ffffff" });
+      if (payload.type === "promo") { bgColor = "#7c3aed"; title = "PROMO RECEIPT"; colorCode = "#f5f3ff"; textColor = "#5b21b6"; }
+      if (payload.type === "partial") { bgColor = "#ea580c"; title = "PARTIAL RECEIPT"; colorCode = "#fff7ed"; textColor = "#9a3412"; status = "دفع جزئي"; }
+      if (payload.type === "manual") { bgColor = "#e11d48"; title = "MANUAL RECEIPT"; colorCode = "#fff1f2"; textColor = "#9f1239"; status = "دفعة يدوية"; }
+      if (payload.type === "previous") { bgColor = "#0284c7"; title = "PREVIOUS PAYMENT"; colorCode = "#f0f9ff"; textColor = "#075985"; status = "سداد سابق"; }
+
+      const receiptHtml = `
+        <div style="width:380px; background:#fff; padding:0; direction:rtl; font-family:'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; border-radius:16px; overflow:hidden; border:1px solid #e5e7eb; box-shadow: 0 10px 25px -5px rgba(0,0,0,0.1);">
+          <div style="background:linear-gradient(135deg, ${bgColor} 0%, ${bgColor}cc 100%); padding:24px; color:white; display:flex; justify-content:space-between; align-items:center;">
+            <div>
+              <p style="font-size:10px; opacity:0.9; margin:0 0 4px; letter-spacing:2px; font-weight:600;">${title}</p>
+              <h2 style="font-size:20px; font-weight:900; margin:0; line-height:1.2;">${clinic?.name || "العيادة"}</h2>
+              <p style="font-size:11px; opacity:0.9; margin:4px 0 0;">سند استلام مبلغ</p>
+            </div>
+            ${clinic?.logo_url ? `<img src="${clinic.logo_url}" style="width:48px; height:48px; border-radius:10px; object-fit:cover; background:white; padding:2px;" />` : `<div style="width:48px; height:48px; background:rgba(255,255,255,0.2); border-radius:10px; display:flex; align-items:center; justify-content:center; font-size:20px;">🏥</div>`}
+          </div>
+          <div style="padding:24px; font-size:13px; color:#374151; display:flex; flex-direction:column; gap:10px;">
+            <div style="display:flex; justify-content:space-between;"><span>رقم المستند:</span><b style="color:#111; font-family:monospace;">${payload.code}</b></div>
+            <div style="display:flex; justify-content:space-between;"><span>التاريخ:</span><b style="color:#111;">${format(new Date(), "yyyy/MM/dd - hh:mm a")}</b></div>
+            <div style="display:flex; justify-content:space-between;"><span>المريض:</span><b style="color:#111;">${payload.name}</b></div>
+            <div style="display:flex; justify-content:space-between;"><span>الخدمة:</span><b style="color:#111;">${payload.service}</b></div>
+            ${payload.linkedVisit ? `<div style="display:flex; justify-content:space-between;"><span>مرتبطة بزيارة:</span><b style="color:${bgColor}; background:${colorCode}; padding:2px 6px; border-radius:4px; font-size:11px;">${payload.linkedVisit}</b></div>` : ''}
+            
+            ${payload.type === "promo" && payload.original ? `
+              <div style="border-top:1px dashed #e5e7eb; margin:10px 0;"></div>
+              <div style="background:${colorCode}; border:1px solid ${bgColor}40; padding:12px; border-radius:10px; display:flex; flex-direction:column; gap:6px;">
+                <div style="display:flex; justify-content:space-between; color:${textColor};"><span>السعر الأصلي:</span><s>${payload.original}</s></div>
+                <div style="display:flex; justify-content:space-between; color:${textColor};"><span>الخصم (${payload.discountType === 'percentage' ? payload.discount + '%' : 'مبلغ'}):</span><span style="color:#dc2626; font-weight:bold;">-${payload.discountType === 'percentage' ? calcDiscountAmount(payload.original, payload.discount || 0, 'percentage') : payload.discount}</span></div>
+              </div>
+            ` : ''}
+
+            <div style="border-top:1px dashed #e5e7eb; margin:10px 0;"></div>
+            <div style="background:${colorCode}; border:1px solid ${bgColor}40; padding:16px; border-radius:12px; display:flex; justify-content:space-between; align-items:center;">
+              <span style="font-weight:bold; color:${textColor};">المبلغ المستلم:</span>
+              <span style="font-size:24px; font-weight:900; color:${bgColor};">${payload.amount.toLocaleString()}</span>
+            </div>
+            <div style="display:flex; justify-content:space-between; align-items:center; margin-top:10px; border-top:1px solid #f3f4f6; padding-top:10px;">
+              <div><p style="font-size:9px; color:#9ca3af; margin:0;">رمز التحقق:</p><p style="font-size:9px; font-family:monospace; color:#9ca3af; margin:0;">PAY-VERIFIED|${payload.code}</p></div>
+              <img src="https://api.qrserver.com/v1/create-qr-code/?size=80x80&data=${encodeURIComponent("PAY-VERIFIED|" + payload.code)}" style="width:40px; height:40px;" />
+            </div>
+            <p style="text-align:center; font-size:10px; color:#9ca3af; margin-top:12px;">معتمد إلكترونياً - ${clinic?.name}</p>
+          </div>
+        </div>
+      `;
+
+      const tempDiv = document.createElement("div");
+      tempDiv.style.position = "absolute";
+      tempDiv.style.left = "-9999px";
+      tempDiv.innerHTML = receiptHtml;
+      document.body.appendChild(tempDiv);
+
+      const canvas = await html2canvas(tempDiv.firstElementChild as HTMLElement, { scale: 3, useCORS: true, backgroundColor: "#ffffff" });
       const imgData = canvas.toDataURL("image/png");
+      document.body.removeChild(tempDiv);
 
       await supabase.functions.invoke("telegram-bot", {
         body: {
@@ -736,6 +794,7 @@ export default function CashierPage() {
     const discountCash = calcDiscountAmount(totalCost, discountValue, discType);
     const finalPrice = round2(Math.max(0, totalCost - discountCash));
     
+    // ✨ حماية محاسبية: المدفوع لا يمكن أن يكون أكبر من الصافي
     if (paidNow > finalPrice && visitType !== "link") {
       paidNow = finalPrice; 
     }
@@ -843,7 +902,10 @@ export default function CashierPage() {
          service: selectedAppointment.services?.name || "فحص طبي",
          amount: netCollected,
          tgId: selectedAppointment.customer_telegram_id || selectedAppointment.patients?.telegram_user_id || "",
-         linkedVisit: linkedVisitCode || undefined
+         linkedVisit: linkedVisitCode || undefined,
+         original: totalCost,
+         discount: discountValue,
+         discountType: discType
        });
        
        // إرسال كشف الحساب المحدث بعد الدفع
@@ -950,7 +1012,8 @@ export default function CashierPage() {
     try {
       const discountAmount = calcInvoiceDiscount(subtotal);
       const totalAmount = round2(Math.max(0, subtotal - discountAmount));
-      const invoiceNumber = `INV-${Date.now().toString().slice(-8)}`;
+      // ✨ إصلاح مشكلة التكرار: استخدام رقم عشوائي بدلاً من الوقت فقط
+      const invoiceNumber = `INV-${Date.now().toString().slice(-6)}${Math.floor(Math.random() * 100)}`;
       
       const newInvoiceData = { clinic_id: clinic.id, patient_name: invPatientName.trim() || null, patient_phone: invPatientPhone.trim() || null, invoice_number: invoiceNumber, items: invItems.filter(it => it.name.trim() && Number(it.price) > 0), subtotal, discount_type: invDiscountType, discount_value: parseFloat(invDiscountValue) || 0, discount_amount: discountAmount, total_amount: totalAmount, paid_status: "paid", paid_amount: totalAmount, payment_method: invPaymentMethod, notes: invNotes.trim() || null, paid_at: new Date().toISOString() };
 
@@ -1072,12 +1135,16 @@ export default function CashierPage() {
     setLedgerLinkedVisit(""); 
     setLedgerNotes("");
     
-    // ✨ الإصلاح: جلب الزيارات بناءً على رقم الهاتف لضمان جلب كل شيء
-    const { data: appts } = await supabase.from("appointments").select("reservation_code, date, final_price, paid_amount, services(name)").eq("clinic_id", clinic?.id).ilike("patients.phone", `%${patient.phone}%`);
+    // ✨ الإصلاح: جلب الـ ID أولاً ثم جلب الزيارات
+    const { data: patientData } = await supabase.from("patients").select("id").eq("clinic_id", clinic?.id).eq("phone", patient.phone).single();
     
-    const visits = (appts || []).map(a => ({
-        code: a.reservation_code, date: a.date, service: a.services?.name || "فحص", amount: round2(a.final_price || 0), paid: round2(a.paid_amount || 0)
-    }));
+    let visits: any[] = [];
+    if (patientData) {
+      const { data: appts } = await supabase.from("appointments").select("reservation_code, date, final_price, paid_amount, services(name)").eq("patient_id", patientData.id);
+      visits = (appts || []).map(a => ({
+          code: a.reservation_code, date: a.date, service: a.services?.name || "فحص", amount: round2(a.final_price || 0), paid: round2(a.paid_amount || 0)
+      }));
+    }
     
     const payments = invoicesList.filter(i => isPaymentRecord(i) && (i.patient_phone === patient.phone || i.patient_name === patient.name)).map(i => ({
         ref: i.invoice_number, date: i.created_at.split('T')[0], amount: round2(i.total_amount), method: i.payment_method, linkedVisit: extractLinkedVisit(i)
