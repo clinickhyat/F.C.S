@@ -568,7 +568,6 @@ export default function CashierPage() {
     const final = appointment.final_price ?? (original - discountAmt);
     
     setTotalCostInput(String(original));
-    // ✨ هنا السحر: وضع السعر النهائي (بعد الخصم) في خانة المدفوع
     setPaidAmountInput(String(final > 0 ? final : original)); 
     setDiscountInput(String(discountValue));
     setPaymentMethodInput(appointment.payment_method || "نقدي");
@@ -615,7 +614,7 @@ export default function CashierPage() {
       if (payload.type === "partial") { bgColor = "#ea580c"; title = "PARTIAL RECEIPT"; colorCode = "#fff7ed"; textColor = "#9a3412"; status = "دفع جزئي"; }
       if (payload.type === "manual") { bgColor = "#e11d48"; title = "MANUAL RECEIPT"; colorCode = "#fff1f2"; textColor = "#9f1239"; status = "دفعة يدوية"; }
       if (payload.type === "previous") { bgColor = "#0284c7"; title = "PREVIOUS PAYMENT"; colorCode = "#f0f9ff"; textColor = "#075985"; status = "سداد سابق"; }
-      if (payload.type === "invoice") { bgColor = "#0ea5e9"; title = "OFFICIAL INVOICE"; colorCode = "#f0f9ff"; textColor = "#0369a1"; status = "فاتورة"; }
+      if (payload.type === "invoice") { bgColor = "#ec4899"; title = "OFFICIAL INVOICE"; colorCode = "#fdf2f8"; textColor = "#9d174d"; status = "فاتورة"; }
 
       const itemsHtml = payload.items ? payload.items.map((it: any) => `
         <div style="display:flex; justify-content:space-between; background:#f9fafb; padding:8px 12px; border-radius:6px; margin-bottom:4px;">
@@ -700,21 +699,33 @@ export default function CashierPage() {
     }
   };
 
-  const sendTelegramLedger = async (patientName: string, phone: string, patientId: string) => {
+  const sendTelegramLedger = async (patientName: string, phone: string, patientId?: string) => {
     setSendingTelegram(true);
     try {
       let tgId = "";
-      const pVisits = invoiceAppointments.find(a => extractCleanInfo(a).cleanPhone === phone || extractCleanInfo(a).cleanName === patientName);
-      if (pVisits) tgId = pVisits.customer_telegram_id || pVisits.patients?.telegram_user_id || "";
+      const { data: pData } = await supabase.from("patients").select("id, telegram_user_id").eq("clinic_id", clinic?.id).eq("phone", phone).maybeSingle();
+      
+      if (pData?.telegram_user_id) tgId = pData.telegram_user_id;
+      else {
+         const pVisits = invoiceAppointments.find(a => extractCleanInfo(a).cleanPhone === phone || extractCleanInfo(a).cleanName === patientName);
+         if (pVisits) tgId = pVisits.customer_telegram_id || pVisits.patients?.telegram_user_id || "";
+      }
+
       if (!tgId) { setSendingTelegram(false); return; }
 
-      // جلب الزيارات المحدثة مباشرة من الداتابيز لضمان الدقة
-      const { data: appts } = await supabase.from("appointments").select("reservation_code, date, final_price, paid_amount, services(name)").eq("patient_id", patientId);
-      
-      const visits = (appts || []).map(a => ({
+      let appts: any[] = [];
+      if (pData?.id) {
+          const { data } = await supabase.from("appointments").select("reservation_code, date, final_price, paid_amount, services(name)").eq("patient_id", pData.id);
+          appts = data || [];
+      } else {
+          const { data } = await supabase.from("appointments").select("reservation_code, date, final_price, paid_amount, services(name), patients!inner(phone)").eq("patients.phone", phone);
+          appts = data || [];
+      }
+
+      const visits = appts.map(a => ({
           code: a.reservation_code, date: a.date, service: a.services?.name || "فحص", amount: round2(a.final_price || 0), paid: round2(a.paid_amount || 0)
       })).sort((a,b) => new Date(b.date).getTime() - new Date(a.date).getTime());
-      
+
       const payments = invoicesList.filter(i => isPaymentRecord(i) && (i.patient_phone === phone || i.patient_name === patientName)).map(i => ({
           ref: i.invoice_number, date: i.created_at.split('T')[0], amount: round2(i.total_amount), method: i.payment_method, linkedVisit: extractLinkedVisit(i)
       })).sort((a,b) => new Date(b.date).getTime() - new Date(a.date).getTime());
@@ -930,9 +941,7 @@ export default function CashierPage() {
          discountType: discType
        });
        
-       if (patientId) {
-         await sendTelegramLedger(editPatientName, editPatientPhone, patientId);
-       }
+       await sendTelegramLedger(editPatientName, editPatientPhone, patientId);
     }, 1000);
   };
 
@@ -1051,10 +1060,10 @@ export default function CashierPage() {
       if (inserted) { 
         setSelectedInvoice({ ...inserted, payment_reference: undefined, linked_visit_code: null } as Invoice); 
         
-        // ✨ إرسال الفاتورة إلى التليجرام إذا كان الرقم موجوداً
+        // ✨ إرسال الفاتورة إلى التليجرام (اللون الزهري) إذا كان الرقم موجوداً
         if (invPatientPhone.trim()) {
-          const tgIdMatch = invoiceAppointments.find(a => extractCleanInfo(a).cleanPhone === invPatientPhone.trim());
-          const tgId = tgMatch ? tgMatch.customer_telegram_id || tgMatch.patients?.telegram_user_id : null;
+          const { data: p } = await supabase.from("patients").select("telegram_user_id").eq("phone", invPatientPhone.trim()).maybeSingle();
+          const tgId = p?.telegram_user_id || invPatientPhone.trim().replace(/\D/g, ""); 
           
           if (tgId) {
             await autoSendToTelegram({
@@ -1177,25 +1186,12 @@ export default function CashierPage() {
     setLedgerLinkedVisit(""); 
     setLedgerNotes("");
     
-    const { data: patientData } = await supabase.from("patients").select("id").eq("clinic_id", clinic?.id).eq("phone", patient.phone).single();
-    
-    let visits: any[] = [];
-    if (patientData) {
-      const { data: appts } = await supabase.from("appointments").select("reservation_code, date, final_price, paid_amount, services(name)").eq("patient_id", patientData.id);
-      visits = (appts || []).map(a => ({
-          code: a.reservation_code, date: a.date, service: a.services?.name || "فحص", amount: round2(a.final_price || 0), paid: round2(a.paid_amount || 0)
-      })).sort((a,b) => new Date(b.date).getTime() - new Date(a.date).getTime());
-    }
-    
-    const payments = invoicesList.filter(i => isPaymentRecord(i) && (i.patient_phone === patient.phone || i.patient_name === patient.name)).map(i => ({
-        ref: i.invoice_number, date: i.created_at.split('T')[0], amount: round2(i.total_amount), method: i.payment_method, linkedVisit: extractLinkedVisit(i)
-    })).sort((a,b) => new Date(b.date).getTime() - new Date(a.date).getTime());
-    
     setFullPatientHistory({
-        visits, payments,
-        total: visits.reduce((s, v) => s + v.amount, 0),
-        paid: visits.reduce((s, v) => s + v.paid, 0),
-        remaining: visits.reduce((s, v) => s + (v.amount - v.paid), 0)
+        visits: patient.visits,
+        payments: patient.payments,
+        total: patient.total,
+        paid: patient.paid,
+        remaining: patient.remaining
     });
     
     setLedgerModalOpen(true);
@@ -1234,18 +1230,34 @@ export default function CashierPage() {
     
     await fetchInvoices(); 
     await fetchAppointments();
-    await handleOpenLedger(selectedLedgerPatient); 
+    
+    // إعادة جلب السجل المحدث
+    const refreshed = ledgerPatients.find(p => p.phone === selectedLedgerPatient.phone || p.name === selectedLedgerPatient.name);
+    if (refreshed) {
+       setSelectedLedgerPatient(refreshed);
+       setFullPatientHistory({
+           visits: refreshed.visits,
+           payments: refreshed.payments,
+           total: refreshed.total,
+           paid: refreshed.paid,
+           remaining: refreshed.remaining
+       });
+    }
 
     setTimeout(async () => {
        let tgId = "";
-       const pVisits = invoiceAppointments.find(a => extractCleanInfo(a).cleanPhone === selectedLedgerPatient.phone || extractCleanInfo(a).cleanName === selectedLedgerPatient.name);
-       if (pVisits) tgId = pVisits.customer_telegram_id || pVisits.patients?.telegram_user_id || "";
+       const { data: p } = await supabase.from("patients").select("telegram_user_id").eq("phone", selectedLedgerPatient.phone).maybeSingle();
+       if (p?.telegram_user_id) tgId = p.telegram_user_id;
+       else {
+          const pVisits = invoiceAppointments.find(a => extractCleanInfo(a).cleanPhone === selectedLedgerPatient.phone || extractCleanInfo(a).cleanName === selectedLedgerPatient.name);
+          if (pVisits) tgId = pVisits.customer_telegram_id || pVisits.patients?.telegram_user_id || "";
+       }
 
        if (tgId) {
           await autoSendToTelegram({
             type: "manual", code: paymentRef, name: selectedLedgerPatient.name, service: ledgerLinkedVisit ? `دفعة للزيارة ${ledgerLinkedVisit}` : "دفعة يدوية", amount, tgId, linkedVisit: ledgerLinkedVisit || undefined
           });
-          await sendTelegramLedger(selectedLedgerPatient.name, selectedLedgerPatient.phone, selectedLedgerPatient.id || "");
+          await sendTelegramLedger(selectedLedgerPatient.name, selectedLedgerPatient.phone, refreshed?.id || "");
        }
        setLedgerModalOpen(false);
     }, 1000);
