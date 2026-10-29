@@ -547,6 +547,47 @@ function getTwoHeroImages(theme: any, promo: Promotion, items: string[]): [strin
   return [img1, img2];
 }
 
+// ============================================================
+// IMAGE COMPRESSION UTILITY (To fix Canvas Logo Loading)
+// ============================================================
+const compressImage = (file: File, maxW = 500, maxH = 500): Promise<File> => {
+  return new Promise((resolve) => {
+    if (!file.type.startsWith("image/")) return resolve(file);
+    const reader = new FileReader();
+    reader.readAsDataURL(file);
+    reader.onload = (e) => {
+      const img = new window.Image();
+      img.src = e.target?.result as string;
+      img.onload = () => {
+        const canvas = document.createElement("canvas");
+        let width = img.width;
+        let height = img.height;
+
+        if (width > height) {
+          if (width > maxW) { height *= maxW / width; width = maxW; }
+        } else {
+          if (height > maxH) { width *= maxH / height; height = maxH; }
+        }
+        canvas.width = width;
+        canvas.height = height;
+        const ctx = canvas.getContext("2d");
+        ctx?.drawImage(img, 0, 0, width, height);
+        
+        const isPng = file.type === "image/png";
+        canvas.toBlob((blob) => {
+          if (blob) {
+            resolve(new File([blob], file.name, { type: isPng ? "image/png" : "image/jpeg" }));
+          } else {
+            resolve(file);
+          }
+        }, isPng ? "image/png" : "image/jpeg", 0.9);
+      };
+      img.onerror = () => resolve(file);
+    };
+    reader.onerror = () => resolve(file);
+  });
+};
+
 export default function SettingsPage() {
   const navigate = useNavigate();
   const { user, signOut, loading: authLoading } = useAuth();
@@ -867,8 +908,8 @@ export default function SettingsPage() {
         if (isEmailChange) {
           toast({ 
             title: "تم إرسال رابط التأكيد ✓", 
-            description: "يرجى مراجعة بريدك الجديد والقديم لتأكيد التغيير. سيتم تسجيل خروجك الآن لتسجيل الدخول بالبريد الجديد.", 
-            duration: 8000 
+            description: "هام جداً: يرجى فتح بريدك القديم والجديد والضغط على رابط التأكيد في كلا الرسالتين. سيتم تسجيل خروجك الآن.", 
+            duration: 10000 
           });
           setOwnerPassword("");
           // إجبار المستخدم على تسجيل الخروج بعد 3 ثوانٍ لتجنب مشاكل الجلسة
@@ -936,32 +977,44 @@ export default function SettingsPage() {
   };
 
   const handleLogoUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (!file || !user || !clinic) return;
+    const rawFile = e.target.files?.[0];
+    if (!rawFile || !user || !clinic) return;
+    
     setUploadingLogo(true);
-    const fileExt = file.name.split(".").pop();
-    const filePath = `${user.id}/logo.${fileExt}`;
-    const { error: uploadError } = await supabase.storage
-      .from("clinic-logos")
-      .upload(filePath, file, { upsert: true });
-    if (uploadError) {
-      toast({ title: "خطأ", description: "فشل في رفع الشعار", variant: "destructive" });
+    try {
+      // ضغط الصورة قبل الرفع لضمان ظهورها في التصاميم (Canvas)
+      const file = await compressImage(rawFile, 500, 500);
+      const fileExt = file.name.split(".").pop();
+      const filePath = `${user.id}/logo.${fileExt}`;
+      
+      const { error: uploadError } = await supabase.storage
+        .from("clinic-logos")
+        .upload(filePath, file, { upsert: true });
+        
+      if (uploadError) {
+        toast({ title: "خطأ", description: "فشل في رفع الشعار", variant: "destructive" });
+        setUploadingLogo(false);
+        return;
+      }
+      
+      const { data: { publicUrl } } = supabase.storage.from("clinic-logos").getPublicUrl(filePath);
+      const { error: updateError } = await supabase
+        .from("clinics")
+        .update({ logo_url: publicUrl })
+        .eq("id", clinic.id)
+        .eq("owner_id", user.id);
+        
+      if (updateError) {
+        toast({ title: "خطأ", description: "فشل في حفظ رابط الشعار", variant: "destructive" });
+      } else {
+        setLogoUrl(publicUrl);
+        toast({ title: "تم الرفع ✓", description: "تم رفع شعار العيادة بنجاح" });
+      }
+    } catch (err) {
+      toast({ title: "خطأ", description: "فشل معالجة الصورة", variant: "destructive" });
+    } finally {
       setUploadingLogo(false);
-      return;
     }
-    const { data: { publicUrl } } = supabase.storage.from("clinic-logos").getPublicUrl(filePath);
-    const { error: updateError } = await supabase
-      .from("clinics")
-      .update({ logo_url: publicUrl })
-      .eq("id", clinic.id)
-      .eq("owner_id", user.id);
-    if (updateError) {
-      toast({ title: "خطأ", description: "فشل في حفظ رابط الشعار", variant: "destructive" });
-    } else {
-      setLogoUrl(publicUrl);
-      toast({ title: "تم الرفع ✓", description: "تم رفع شعار العيادة بنجاح" });
-    }
-    setUploadingLogo(false);
   };
 
   const handleAddService = async () => {
@@ -1321,14 +1374,22 @@ export default function SettingsPage() {
     setPromoDialogOpen(true);
   };
 
-  const handlePromoImageSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (!file) return;
-    setPromoImageFile(file);
-    const reader = new FileReader();
-    reader.onload = (ev) => setPromoImagePreview(ev.target?.result as string);
-    reader.onerror = () => toast({ title: "خطأ", description: "فشل قراءة الصورة", variant: "destructive" });
-    reader.readAsDataURL(file);
+  const handlePromoImageSelect = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const rawFile = e.target.files?.[0];
+    if (!rawFile) return;
+    
+    try {
+      // ضغط الصورة قبل العرض والرفع
+      const compressedFile = await compressImage(rawFile, 1000, 1000);
+      setPromoImageFile(compressedFile);
+      const reader = new FileReader();
+      reader.onload = (ev) => setPromoImagePreview(ev.target?.result as string);
+      reader.onerror = () => toast({ title: "خطأ", description: "فشل قراءة الصورة", variant: "destructive" });
+      reader.readAsDataURL(compressedFile);
+    } catch (err) {
+      toast({ title: "خطأ", description: "فشل معالجة الصورة", variant: "destructive" });
+    }
+    
     if (promoImageInputRef.current) promoImageInputRef.current.value = "";
   };
 
@@ -2231,7 +2292,7 @@ export default function SettingsPage() {
                         {uploadingLogo ? "جاري الرفع..." : "رفع شعار"}
                       </Button>
                     </label>
-                    <p className="text-xs text-muted-foreground mt-1">يُفضل صورة مربعة بحجم 200x200 بكسل أو أكبر</p>
+                    <p className="text-xs text-muted-foreground mt-1">يُفضل صورة مربعة (سيتم ضغطها تلقائياً للحفاظ على الجودة)</p>
                   </div>
                 </div>
               </div>
@@ -2405,7 +2466,7 @@ export default function SettingsPage() {
               تحديث الحساب
             </Button>
             <p className="text-xs text-muted-foreground mt-2">
-              ملاحظة: تغيير البريد الإلكتروني يتطلب تأكيداً من البريد الجديد والقديم.
+              ملاحظة هامة: تغيير البريد الإلكتروني يتطلب تأكيداً من البريد الجديد والقديم (سيتم تسجيل خروجك).
             </p>
           </section>
 
