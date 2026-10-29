@@ -130,12 +130,12 @@ interface Promotion {
 }
 
 // ============================================================
-// EXTENDED SPECIALTY THEMES (LUXURY & PREMIUM)
+// EXTENDED SPECIALTY THEMES (LUXURY LIGHT)
 // ============================================================
 const SPECIALTY_THEMES: Record<string, any> = {
   dental: {
-    bg1: "#E0F2FE", bg2: "#BAE6FD", bg3: "#0369A1",
-    darkColor: "#0C4A6E", textColor: "#FFFFFF",
+    bg1: "#F8FAFC", bg2: "#F1F5F9", bg3: "#E2E8F0",
+    darkColor: "#0F172A", textColor: "#FFFFFF",
     accent: "#F59E0B", accentDark: "#B45309",
     glassBg: "rgba(255, 255, 255, 0.85)",
     chipBg: "#FFFFFF", chipBorder: "#3B82F6", chipText: "#1E3A8A",
@@ -146,7 +146,7 @@ const SPECIALTY_THEMES: Record<string, any> = {
     ],
   },
   lab: {
-    bg1: "#F0F9FF", bg2: "#E0F2FE", bg3: "#38BDF8",
+    bg1: "#F0F9FF", bg2: "#E0F2FE", bg3: "#BAE6FD",
     darkColor: "#0C4A6E", textColor: "#FFFFFF",
     accent: "#10B981", accentDark: "#047857",
     glassBg: "rgba(255, 255, 255, 0.9)",
@@ -158,9 +158,9 @@ const SPECIALTY_THEMES: Record<string, any> = {
     ],
   },
   general: {
-    bg1: "#ECFDF5", bg2: "#D1FAE5", bg3: "#047857",
-    darkColor: "#064E3B", textColor: "#FFFFFF",
-    accent: "#FDE68A", accentDark: "#D97706",
+    bg1: "#F8FAFC", bg2: "#F1F5F9", bg3: "#E2E8F0",
+    darkColor: "#0F172A", textColor: "#FFFFFF",
+    accent: "#F59E0B", accentDark: "#B45309",
     glassBg: "rgba(255, 255, 255, 0.9)",
     chipBg: "#FFFFFF", chipBorder: "#059669", chipText: "#064E3B",
     icon: "🏥", label: "الطب العام", labelEn: "General Medicine",
@@ -170,132 +170,180 @@ const SPECIALTY_THEMES: Record<string, any> = {
     ],
   },
   dermatology: {
-    bg1: "#FDF2F8", bg2: "#FCE7F3", bg3: "#BE185D",
+    bg1: "#FDF2F8", bg2: "#FCE7F3", bg3: "#FBCFE8",
     darkColor: "#831843", textColor: "#FFFFFF", accent: "#FDE68A", accentDark: "#D97706",
     glassBg: "rgba(255, 255, 255, 0.9)",
     chipBg: "#FFFFFF", chipBorder: "#DB2777", chipText: "#831843",
     icon: "✨", label: "الجلدية والتجميل", labelEn: "Dermatology",
-    heroImages: ["https://images.unsplash.com/photo-1570172619644-dfd03ed5d881?w=1200&q=85&auto=format&fit=crop"],
+    heroImages: [
+      "https://images.unsplash.com/photo-1570172619644-dfd03ed5d881?w=1200&q=85&auto=format&fit=crop",
+      "https://images.unsplash.com/photo-1616394584738-fc6e612e71b9?w=1200&q=85&auto=format&fit=crop",
+    ],
   },
   gynecology: {
-    bg1: "#FDF2F8", bg2: "#FBCFE8", bg3: "#9F1239",
+    bg1: "#FDF2F8", bg2: "#FBCFE8", bg3: "#F9A8D4",
     darkColor: "#500724", textColor: "#FFFFFF", accent: "#FDE68A", accentDark: "#D97706",
     glassBg: "rgba(255, 255, 255, 0.9)",
     chipBg: "#FFFFFF", chipBorder: "#BE185D", chipText: "#500724",
     icon: "🌸", label: "النساء والولادة", labelEn: "Gynecology",
-    heroImages: ["https://images.unsplash.com/photo-1584515933487-779824d29309?w=1200&q=85&auto=format&fit=crop"],
+    heroImages: [
+      "https://images.unsplash.com/photo-1584515933487-779824d29309?w=1200&q=85&auto=format&fit=crop",
+      "https://images.unsplash.com/photo-1519494026892-80bbd2d6fd0d?w=1200&q=85&auto=format&fit=crop",
+    ],
   },
   ophthalmology: {
-    bg1: "#ECFEFF", bg2: "#CFFAFE", bg3: "#0E7490",
+    bg1: "#ECFEFF", bg2: "#CFFAFE", bg3: "#A5F3FC",
     darkColor: "#164E63", textColor: "#FFFFFF", accent: "#FDE68A", accentDark: "#D97706",
     glassBg: "rgba(255, 255, 255, 0.9)",
     chipBg: "#FFFFFF", chipBorder: "#0891B2", chipText: "#164E63",
     icon: "👁️", label: "طب العيون", labelEn: "Ophthalmology",
-    heroImages: ["https://images.unsplash.com/photo-1587613757226-c22d09e4bd23?w=1200&q=85&auto=format&fit=crop"],
+    heroImages: [
+      "https://images.unsplash.com/photo-1587613757226-c22d09e4bd23?w=1200&q=85&auto=format&fit=crop",
+      "https://images.unsplash.com/photo-1574258495973-f010dfbb5371?w=1200&q=85&auto=format&fit=crop",
+    ],
   },
   orthopedics: {
-    bg1: "#F8FAFC", bg2: "#F1F5F9", bg3: "#475569",
+    bg1: "#F8FAFC", bg2: "#F1F5F9", bg3: "#E2E8F0",
     darkColor: "#0F172A", textColor: "#FFFFFF", accent: "#F59E0B", accentDark: "#B45309",
     glassBg: "rgba(255, 255, 255, 0.9)",
     chipBg: "#FFFFFF", chipBorder: "#64748B", chipText: "#0F172A",
     icon: "🦴", label: "العظام والمفاصل", labelEn: "Orthopedics",
-    heroImages: ["https://images.unsplash.com/photo-1595003500447-88ce9a901a9c?w=1200&q=85&auto=format&fit=crop"],
+    heroImages: [
+      "https://images.unsplash.com/photo-1595003500447-88ce9a901a9c?w=1200&q=85&auto=format&fit=crop",
+      "https://images.unsplash.com/photo-1576091160399-112ba8d25d1d?w=1200&q=85&auto=format&fit=crop",
+    ],
   },
   pediatrics: {
-    bg1: "#FFFBEB", bg2: "#FEF3C7", bg3: "#D97706",
+    bg1: "#FFFBEB", bg2: "#FEF3C7", bg3: "#FDE68A",
     darkColor: "#78350F", textColor: "#FFFFFF", accent: "#10B981", accentDark: "#047857",
     glassBg: "rgba(255, 255, 255, 0.9)",
     chipBg: "#FFFFFF", chipBorder: "#F59E0B", chipText: "#78350F",
     icon: "🧸", label: "طب الأطفال", labelEn: "Pediatrics",
-    heroImages: ["https://images.unsplash.com/photo-1502740479091-635887520276?w=1200&q=85&auto=format&fit=crop"],
+    heroImages: [
+      "https://images.unsplash.com/photo-1502740479091-635887520276?w=1200&q=85&auto=format&fit=crop",
+      "https://images.unsplash.com/photo-1519494026892-80bbd2d6fd0d?w=1200&q=85&auto=format&fit=crop",
+    ],
   },
   internal: {
-    bg1: "#EEF2FF", bg2: "#E0E7FF", bg3: "#4338CA",
+    bg1: "#EEF2FF", bg2: "#E0E7FF", bg3: "#C7D2FE",
     darkColor: "#312E81", textColor: "#FFFFFF", accent: "#F59E0B", accentDark: "#B45309",
     glassBg: "rgba(255, 255, 255, 0.9)",
     chipBg: "#FFFFFF", chipBorder: "#6366F1", chipText: "#312E81",
     icon: "🩺", label: "الباطنية", labelEn: "Internal Medicine",
-    heroImages: ["https://images.unsplash.com/photo-1579684385127-1ef15d508118?w=1200&q=85&auto=format&fit=crop"],
+    heroImages: [
+      "https://images.unsplash.com/photo-1579684385127-1ef15d508118?w=1200&q=85&auto=format&fit=crop",
+      "https://images.unsplash.com/photo-1519494026892-80bbd2d6fd0d?w=1200&q=85&auto=format&fit=crop",
+    ],
   },
   surgery: {
-    bg1: "#FEF2F2", bg2: "#FEE2E2", bg3: "#DC2626",
+    bg1: "#FEF2F2", bg2: "#FEE2E2", bg3: "#FECACA",
     darkColor: "#7F1D1D", textColor: "#FFFFFF", accent: "#F59E0B", accentDark: "#B45309",
     glassBg: "rgba(255, 255, 255, 0.9)",
     chipBg: "#FFFFFF", chipBorder: "#EF4444", chipText: "#7F1D1D",
     icon: "🔪", label: "الجراحة العامة", labelEn: "General Surgery",
-    heroImages: ["https://images.unsplash.com/photo-1551076805-e1869033e561?w=1200&q=85&auto=format&fit=crop"],
+    heroImages: [
+      "https://images.unsplash.com/photo-1551076805-e1869033e561?w=1200&q=85&auto=format&fit=crop",
+      "https://images.unsplash.com/photo-1519494026892-80bbd2d6fd0d?w=1200&q=85&auto=format&fit=crop",
+    ],
   },
   cardiology: {
-    bg1: "#FEF2F2", bg2: "#FEE2E2", bg3: "#B91C1C",
+    bg1: "#FEF2F2", bg2: "#FEE2E2", bg3: "#FECACA",
     darkColor: "#7F1D1D", textColor: "#FFFFFF", accent: "#FDE68A", accentDark: "#D97706",
     glassBg: "rgba(255, 255, 255, 0.9)",
     chipBg: "#FFFFFF", chipBorder: "#DC2626", chipText: "#7F1D1D",
     icon: "💔", label: "أمراض القلب", labelEn: "Cardiology",
-    heroImages: ["https://images.unsplash.com/photo-1628348068343-c6a848d2b6dd?w=1200&q=85&auto=format&fit=crop"],
+    heroImages: [
+      "https://images.unsplash.com/photo-1628348068343-c6a848d2b6dd?w=1200&q=85&auto=format&fit=crop",
+      "https://images.unsplash.com/photo-1519494026892-80bbd2d6fd0d?w=1200&q=85&auto=format&fit=crop",
+    ],
   },
   neurology: {
-    bg1: "#FAF5FF", bg2: "#F3E8FF", bg3: "#7E22CE",
+    bg1: "#FAF5FF", bg2: "#F3E8FF", bg3: "#E9D5FF",
     darkColor: "#4C1D95", textColor: "#FFFFFF", accent: "#F59E0B", accentDark: "#B45309",
     glassBg: "rgba(255, 255, 255, 0.9)",
     chipBg: "#FFFFFF", chipBorder: "#9333EA", chipText: "#4C1D95",
     icon: "🧠", label: "المخ والأعصاب", labelEn: "Neurology",
-    heroImages: ["https://images.unsplash.com/photo-1559757175-5700dde675bc?w=1200&q=85&auto=format&fit=crop"],
+    heroImages: [
+      "https://images.unsplash.com/photo-1559757175-5700dde675bc?w=1200&q=85&auto=format&fit=crop",
+      "https://images.unsplash.com/photo-1519494026892-80bbd2d6fd0d?w=1200&q=85&auto=format&fit=crop",
+    ],
   },
   ent: {
-    bg1: "#FFFBEB", bg2: "#FEF3C7", bg3: "#D97706",
+    bg1: "#FFFBEB", bg2: "#FEF3C7", bg3: "#FDE68A",
     darkColor: "#78350F", textColor: "#FFFFFF", accent: "#10B981", accentDark: "#047857",
     glassBg: "rgba(255, 255, 255, 0.9)",
     chipBg: "#FFFFFF", chipBorder: "#F59E0B", chipText: "#78350F",
     icon: "👂", label: "أنف وأذن وحنجرة", labelEn: "ENT",
-    heroImages: ["https://images.unsplash.com/photo-1519494026892-80bbd2d6fd0d?w=1200&q=85&auto=format&fit=crop"],
+    heroImages: [
+      "https://images.unsplash.com/photo-1519494026892-80bbd2d6fd0d?w=1200&q=85&auto=format&fit=crop",
+      "https://images.unsplash.com/photo-1579684385127-1ef15d508118?w=1200&q=85&auto=format&fit=crop",
+    ],
   },
   pharmacy: {
-    bg1: "#F0FDF4", bg2: "#DCFCE7", bg3: "#16A34A",
+    bg1: "#F0FDF4", bg2: "#DCFCE7", bg3: "#BBF7D0",
     darkColor: "#14532D", textColor: "#FFFFFF", accent: "#F59E0B", accentDark: "#B45309",
     glassBg: "rgba(255, 255, 255, 0.9)",
     chipBg: "#FFFFFF", chipBorder: "#22C55E", chipText: "#14532D",
     icon: "💊", label: "الصيدلية", labelEn: "Pharmacy",
-    heroImages: ["https://images.unsplash.com/photo-1587854692152-cbe660dbde88?w=1200&q=85&auto=format&fit=crop"],
+    heroImages: [
+      "https://images.unsplash.com/photo-1587854692152-cbe660dbde88?w=1200&q=85&auto=format&fit=crop",
+      "https://images.unsplash.com/photo-1519494026892-80bbd2d6fd0d?w=1200&q=85&auto=format&fit=crop",
+    ],
   },
   radiology: {
-    bg1: "#F9FAFB", bg2: "#F3F4F6", bg3: "#4B5563",
+    bg1: "#F9FAFB", bg2: "#F3F4F6", bg3: "#E5E7EB",
     darkColor: "#1F2937", textColor: "#FFFFFF", accent: "#F59E0B", accentDark: "#B45309",
     glassBg: "rgba(255, 255, 255, 0.9)",
     chipBg: "#FFFFFF", chipBorder: "#6B7280", chipText: "#1F2937",
     icon: "🩻", label: "الأشعة", labelEn: "Radiology",
-    heroImages: ["https://images.unsplash.com/photo-1516069677018-378515003435?w=1200&q=85&auto=format&fit=crop"],
+    heroImages: [
+      "https://images.unsplash.com/photo-1516069677018-378515003435?w=1200&q=85&auto=format&fit=crop",
+      "https://images.unsplash.com/photo-1519494026892-80bbd2d6fd0d?w=1200&q=85&auto=format&fit=crop",
+    ],
   },
   physiotherapy: {
-    bg1: "#F0F9FF", bg2: "#E0F2FE", bg3: "#0284C7",
+    bg1: "#F0F9FF", bg2: "#E0F2FE", bg3: "#BAE6FD",
     darkColor: "#0C4A6E", textColor: "#FFFFFF", accent: "#F59E0B", accentDark: "#B45309",
     glassBg: "rgba(255, 255, 255, 0.9)",
     chipBg: "#FFFFFF", chipBorder: "#38BDF8", chipText: "#0C4A6E",
     icon: "🦵", label: "العلاج الطبيعي", labelEn: "Physiotherapy",
-    heroImages: ["https://images.unsplash.com/photo-1576091160399-112ba8d25d1d?w=1200&q=85&auto=format&fit=crop"],
+    heroImages: [
+      "https://images.unsplash.com/photo-1576091160399-112ba8d25d1d?w=1200&q=85&auto=format&fit=crop",
+      "https://images.unsplash.com/photo-1519494026892-80bbd2d6fd0d?w=1200&q=85&auto=format&fit=crop",
+    ],
   },
   nutrition: {
-    bg1: "#FFFBEB", bg2: "#FEF3C7", bg3: "#D97706",
+    bg1: "#FFFBEB", bg2: "#FEF3C7", bg3: "#FDE68A",
     darkColor: "#78350F", textColor: "#FFFFFF", accent: "#10B981", accentDark: "#047857",
     glassBg: "rgba(255, 255, 255, 0.9)",
     chipBg: "#FFFFFF", chipBorder: "#F59E0B", chipText: "#78350F",
     icon: "🥗", label: "التغذية", labelEn: "Nutrition",
-    heroImages: ["https://images.unsplash.com/photo-1512621776951-a57141f2eefd?w=1200&q=85&auto=format&fit=crop"],
+    heroImages: [
+      "https://images.unsplash.com/photo-1512621776951-a57141f2eefd?w=1200&q=85&auto=format&fit=crop",
+      "https://images.unsplash.com/photo-1519494026892-80bbd2d6fd0d?w=1200&q=85&auto=format&fit=crop",
+    ],
   },
   psychiatry: {
-    bg1: "#FAF5FF", bg2: "#F3E8FF", bg3: "#9333EA",
+    bg1: "#FAF5FF", bg2: "#F3E8FF", bg3: "#E9D5FF",
     darkColor: "#4C1D95", textColor: "#FFFFFF", accent: "#F59E0B", accentDark: "#B45309",
     glassBg: "rgba(255, 255, 255, 0.9)",
     chipBg: "#FFFFFF", chipBorder: "#A855F7", chipText: "#4C1D95",
     icon: "🧘", label: "الطب النفسي", labelEn: "Psychiatry",
-    heroImages: ["https://images.unsplash.com/photo-1559757148-5c350d0d3c56?w=1200&q=85&auto=format&fit=crop"],
+    heroImages: [
+      "https://images.unsplash.com/photo-1559757148-5c350d0d3c56?w=1200&q=85&auto=format&fit=crop",
+      "https://images.unsplash.com/photo-1519494026892-80bbd2d6fd0d?w=1200&q=85&auto=format&fit=crop",
+    ],
   },
   other: {
-    bg1: "#F9FAFB", bg2: "#F3F4F6", bg3: "#6B7280",
-    darkColor: "#1F2937", textColor: "#FFFFFF", accent: "#F59E0B", accentDark: "#B45309",
+    bg1: "#F8FAFC", bg2: "#F1F5F9", bg3: "#E2E8F0",
+    darkColor: "#0F172A", textColor: "#FFFFFF", accent: "#F59E0B", accentDark: "#B45309",
     glassBg: "rgba(255, 255, 255, 0.9)",
-    chipBg: "#FFFFFF", chipBorder: "#9CA3AF", chipText: "#1F2937",
+    chipBg: "#FFFFFF", chipBorder: "#9CA3AF", chipText: "#0F172A",
     icon: "🏥", label: "عيادة", labelEn: "Clinic",
-    heroImages: ["https://images.unsplash.com/photo-1519494026892-80bbd2d6fd0d?w=1200&q=85&auto=format&fit=crop"],
+    heroImages: [
+      "https://images.unsplash.com/photo-1519494026892-80bbd2d6fd0d?w=1200&q=85&auto=format&fit=crop",
+      "https://images.unsplash.com/photo-1579684385127-1ef15d508118?w=1200&q=85&auto=format&fit=crop",
+    ],
   },
 };
 
@@ -325,7 +373,7 @@ const PROMO_TEMPLATES: Record<string, { title: string; description: string; item
 };
 
 // ============================================================
-// V44: PREMIUM 3D MEDICAL ICONS
+// PREMIUM 3D MEDICAL ICONS (RELIABLE LINKS)
 // ============================================================
 const SERVICE_THUMBNAILS: Record<string, string> = {
   sugar: "https://cdn-icons-png.flaticon.com/512/3063/3063822.png",
@@ -450,26 +498,53 @@ const SERVICE_KEYWORD_IMAGES: Array<{ keywords: string[]; images: string[] }> = 
   },
 ];
 
-function pickHeroImage(theme: any, promo: Promotion, items: string[]): string {
-  const randomSeed = Math.floor(Math.random() * 100000).toString();
-  const seed = (promo.id || "") + randomSeed;
+// ============================================================
+// HIGH-END IMAGE SELECTION LOGIC (SPLIT SCREEN)
+// ============================================================
+function getTwoHeroImages(theme: any, promo: Promotion, items: string[]): [string, string] {
+  const searchText = `${promo.title} ${promo.description || ""} ${items.join(" ")}`.toLowerCase();
+  let matchedImages: string[] = [];
   
+  for (const entry of SERVICE_KEYWORD_IMAGES) {
+    if (entry.keywords.some(kw => searchText.includes(kw.toLowerCase()))) {
+      matchedImages = [...entry.images];
+      break;
+    }
+  }
+
+  // Fallback to theme images if no keyword match
+  if (matchedImages.length === 0) {
+    matchedImages = [...(theme.heroImages || [])];
+  }
+
+  // Ensure we have at least 2 images by adding fallbacks
+  if (matchedImages.length === 1) {
+    matchedImages.push("https://images.unsplash.com/photo-1606811971618-4486d14f3f99?w=1200&q=85&auto=format&fit=crop");
+  } else if (matchedImages.length === 0) {
+    matchedImages = [
+      "https://images.unsplash.com/photo-1519494026892-80bbd2d6fd0d?w=1200&q=85&auto=format&fit=crop",
+      "https://images.unsplash.com/photo-1579684385127-1ef15d508118?w=1200&q=85&auto=format&fit=crop"
+    ];
+  }
+
+  // Shuffle based on promo ID to keep it unique per promo but stable
   let hash = 0;
+  const seed = promo.id || "seed";
   for (let i = 0; i < seed.length; i++) {
     hash = ((hash << 5) - hash) + seed.charCodeAt(i);
     hash |= 0;
   }
   hash = Math.abs(hash);
 
-  const searchText = `${promo.title} ${promo.description || ""} ${items.join(" ")}`.toLowerCase();
-  for (const entry of SERVICE_KEYWORD_IMAGES) {
-    if (entry.keywords.some(kw => searchText.includes(kw.toLowerCase()))) {
-      return entry.images[hash % entry.images.length];
-    }
+  const img1 = matchedImages[hash % matchedImages.length];
+  let img2 = matchedImages[(hash + 1) % matchedImages.length];
+  
+  // Ensure they are different if possible
+  if (img1 === img2 && matchedImages.length > 1) {
+    img2 = matchedImages[(hash + 2) % matchedImages.length];
   }
-  const heros = theme.heroImages || [];
-  if (heros.length === 0) return "";
-  return heros[hash % heros.length];
+
+  return [img1, img2];
 }
 
 export default function SettingsPage() {
@@ -780,12 +855,31 @@ export default function SettingsPage() {
         return;
       }
 
-      const { error } = await supabase.auth.updateUser(updates);
+      const isEmailChange = !!updates.email;
+
+      const { error } = await supabase.auth.updateUser(updates, {
+        emailRedirectTo: `${window.location.origin}/auth`,
+      });
+
       if (error) {
         toast({ title: "خطأ", description: error.message, variant: "destructive" });
       } else {
-        toast({ title: "تم التحديث ✓", description: "تم تحديث بيانات الحساب بنجاح. يرجى مراجعة بريدك إذا غيرت الإيميل." });
-        setOwnerPassword("");
+        if (isEmailChange) {
+          toast({ 
+            title: "تم إرسال رابط التأكيد ✓", 
+            description: "يرجى مراجعة بريدك الجديد والقديم لتأكيد التغيير. سيتم تسجيل خروجك الآن لتسجيل الدخول بالبريد الجديد.", 
+            duration: 8000 
+          });
+          setOwnerPassword("");
+          // إجبار المستخدم على تسجيل الخروج بعد 3 ثوانٍ لتجنب مشاكل الجلسة
+          setTimeout(async () => {
+            await signOut();
+            navigate("/auth");
+          }, 3000);
+        } else {
+          toast({ title: "تم التحديث ✓", description: "تم تحديث كلمة المرور بنجاح." });
+          setOwnerPassword("");
+        }
       }
     } catch (e: any) {
       toast({ title: "خطأ", description: e.message || "فشل تحديث الحساب", variant: "destructive" });
@@ -1329,7 +1423,7 @@ export default function SettingsPage() {
   };
 
   // ============================================================
-  // V45: LUXURY GLASSMORPHISM PROMO IMAGE GENERATOR
+  // V47: ULTIMATE LUXURY LIGHT GLASSMORPHISM PROMO GENERATOR
   // ============================================================
   const generatePromoImage = async (promo: Promotion, forceRegenerate: boolean = false) => {
     if (!clinic) {
@@ -1401,26 +1495,26 @@ export default function SettingsPage() {
         ctx.closePath();
       };
 
-      // 1. Premium Dark Mesh Background
+      // 1. Premium Light Background (Mesh Gradient)
       const bgGrad = ctx.createLinearGradient(0, 0, W, H);
-      bgGrad.addColorStop(0, "#0B1F3A"); // Deep Navy
-      bgGrad.addColorStop(0.5, "#1E3A8A"); // Royal Blue
-      bgGrad.addColorStop(1, "#0B1F3A");
+      bgGrad.addColorStop(0, theme.bg1); 
+      bgGrad.addColorStop(0.5, theme.bg2); 
+      bgGrad.addColorStop(1, theme.bg3); 
       ctx.fillStyle = bgGrad;
       ctx.fillRect(0, 0, W, H);
 
-      // Add glowing Orbs for Mesh effect
+      // Glowing Orbs for depth
       const drawOrb = (x: number, y: number, r: number, color: string) => {
         const radGrad = ctx.createRadialGradient(x, y, 0, x, y, r);
         radGrad.addColorStop(0, color);
-        radGrad.addColorStop(1, "rgba(0,0,0,0)");
+        radGrad.addColorStop(1, "rgba(255,255,255,0)");
         ctx.fillStyle = radGrad;
         ctx.beginPath();
         ctx.arc(x, y, r, 0, Math.PI * 2);
         ctx.fill();
       };
-      drawOrb(W * 0.8, H * 0.1, 400, "rgba(212, 175, 55, 0.15)"); // Gold glow top right
-      drawOrb(W * 0.2, H * 0.9, 500, "rgba(56, 189, 248, 0.15)"); // Cyan glow bottom left
+      drawOrb(W * 0.85, H * 0.15, 400, "rgba(59, 130, 246, 0.15)"); 
+      drawOrb(W * 0.15, H * 0.85, 500, "rgba(212, 175, 55, 0.15)"); 
 
       // 2. Top Badges (Glassmorphism Pills)
       const badgeY = 50;
@@ -1430,16 +1524,16 @@ export default function SettingsPage() {
         ctx.save();
         const badgeW = 220;
         const badgeX = 40;
-        ctx.fillStyle = "rgba(255, 255, 255, 0.1)";
+        ctx.fillStyle = "rgba(255, 255, 255, 0.7)";
         roundRect(badgeX, badgeY, badgeW, badgeH, 20);
         ctx.fill();
-        ctx.strokeStyle = "rgba(255, 255, 255, 0.3)";
+        ctx.strokeStyle = "rgba(0, 0, 0, 0.1)";
         ctx.lineWidth = 1;
         roundRect(badgeX, badgeY, badgeW, badgeH, 20);
         ctx.stroke();
         
         ctx.font = "bold 18px 'Cairo', Arial";
-        ctx.fillStyle = "#FFFFFF";
+        ctx.fillStyle = theme.darkColor;
         ctx.textAlign = "center";
         ctx.textBaseline = "middle";
         ctx.direction = "rtl";
@@ -1451,16 +1545,16 @@ export default function SettingsPage() {
         ctx.save();
         const locW = 240;
         const locX = W - 40 - locW;
-        ctx.fillStyle = "rgba(255, 255, 255, 0.1)";
+        ctx.fillStyle = "rgba(255, 255, 255, 0.7)";
         roundRect(locX, badgeY, locW, badgeH, 20);
         ctx.fill();
-        ctx.strokeStyle = "rgba(255, 255, 255, 0.3)";
+        ctx.strokeStyle = "rgba(0, 0, 0, 0.1)";
         ctx.lineWidth = 1;
         roundRect(locX, badgeY, locW, badgeH, 20);
         ctx.stroke();
         
         ctx.font = "bold 18px 'Cairo', Arial";
-        ctx.fillStyle = "#FFFFFF";
+        ctx.fillStyle = theme.darkColor;
         ctx.textAlign = "center";
         ctx.textBaseline = "middle";
         ctx.direction = "rtl";
@@ -1475,13 +1569,13 @@ export default function SettingsPage() {
       
       // Glass Logo Frame
       ctx.save();
-      ctx.shadowColor = "rgba(0,0,0,0.3)";
+      ctx.shadowColor = "rgba(0,0,0,0.1)";
       ctx.shadowBlur = 20;
-      ctx.fillStyle = "rgba(255, 255, 255, 0.1)";
+      ctx.fillStyle = "rgba(255, 255, 255, 0.9)";
       roundRect(logoX - 15, logoY - 15, logoSize + 30, logoSize + 30, 25);
       ctx.fill();
-      ctx.strokeStyle = "#D4AF37"; // Gold Border
-      ctx.lineWidth = 3;
+      ctx.strokeStyle = theme.accent; 
+      ctx.lineWidth = 2;
       roundRect(logoX - 15, logoY - 15, logoSize + 30, logoSize + 30, 25);
       ctx.stroke();
       ctx.restore();
@@ -1500,12 +1594,12 @@ export default function SettingsPage() {
       } else {
         ctx.save();
         roundRect(logoX, logoY, logoSize, logoSize, 15);
-        ctx.fillStyle = "#D4AF37";
+        ctx.fillStyle = theme.accent;
         ctx.fill();
         ctx.font = "bold 50px 'Cairo', Arial";
         ctx.textAlign = "center";
         ctx.textBaseline = "middle";
-        ctx.fillStyle = "#0B1F3A";
+        ctx.fillStyle = "#FFFFFF";
         ctx.fillText((clinic.name || "ع").charAt(0), logoX + logoSize/2, logoY + logoSize/2 + 5);
         ctx.restore();
       }
@@ -1514,8 +1608,8 @@ export default function SettingsPage() {
       const clinicNameY = logoY + logoSize + 40;
       ctx.save();
       ctx.font = "900 52px 'Cairo', 'Tajawal', Arial";
-      ctx.fillStyle = "#FFFFFF";
-      ctx.shadowColor = "rgba(0,0,0,0.5)";
+      ctx.fillStyle = theme.darkColor; 
+      ctx.shadowColor = "rgba(255,255,255,0.8)";
       ctx.shadowBlur = 10;
       ctx.textAlign = "center";
       ctx.textBaseline = "top";
@@ -1527,7 +1621,7 @@ export default function SettingsPage() {
       const specY = clinicNameY + 75;
       ctx.save();
       ctx.font = "600 24px 'Cairo', Arial";
-      ctx.fillStyle = "#D4AF37";
+      ctx.fillStyle = theme.accentDark;
       ctx.textAlign = "center";
       ctx.textBaseline = "top";
       ctx.direction = "rtl";
@@ -1535,112 +1629,115 @@ export default function SettingsPage() {
       ctx.fillText(specLabel, W / 2, specY);
       ctx.restore();
 
-      // 4. Hero Image (Premium Glass Frame)
+      // 4. Hero Image (Split Screen - Professional Design)
       const heroW = W - 160;
-      const heroH = 380;
+      const heroH = 400;
       const heroX = 80;
       const heroY = specY + 70;
 
-      // Frame Shadow & Background
+      // Frame
       ctx.save();
-      ctx.shadowColor = "rgba(0,0,0,0.4)";
-      ctx.shadowBlur = 30;
-      ctx.shadowOffsetY = 15;
-      ctx.fillStyle = "rgba(255, 255, 255, 0.05)";
+      ctx.shadowColor = "rgba(0,0,0,0.15)";
+      ctx.shadowBlur = 40;
+      ctx.shadowOffsetY = 20;
+      ctx.fillStyle = "rgba(255, 255, 255, 0.5)";
       roundRect(heroX - 10, heroY - 10, heroW + 20, heroH + 20, 35);
       ctx.fill();
-      ctx.strokeStyle = "rgba(212, 175, 55, 0.5)";
-      ctx.lineWidth = 2;
+      ctx.strokeStyle = "rgba(212, 175, 55, 0.8)";
+      ctx.lineWidth = 3;
       roundRect(heroX - 10, heroY - 10, heroW + 20, heroH + 20, 35);
       ctx.stroke();
       ctx.restore();
 
-      const heroImgUrl = pickHeroImage(theme, promo, itemsList);
-      const heroImg = await loadImage(heroImgUrl);
+      // Fetch TWO distinct images dynamically
+      const [heroImg1Url, heroImg2Url] = getTwoHeroImages(theme, promo, itemsList);
+      const [heroImg1, heroImg2] = await Promise.all([
+        loadImage(heroImg1Url),
+        loadImage(heroImg2Url)
+      ]);
 
-      if (heroImg) {
+      // Draw Left Image
+      if (heroImg1) {
         ctx.save();
-        roundRect(heroX, heroY, heroW, heroH, 25);
+        roundRect(heroX, heroY, heroW/2 + 20, heroH, 25);
         ctx.clip();
-        // Draw image covering the area
-        const imgRatio = heroImg.width / heroImg.height;
-        const boxRatio = heroW / heroH;
-        let drawW, drawH, drawX, drawY;
-        if (imgRatio > boxRatio) {
-          drawH = heroH;
-          drawW = heroH * imgRatio;
-          drawX = heroX - (drawW - heroW) / 2;
-          drawY = heroY;
-        } else {
-          drawW = heroW;
-          drawH = heroW / imgRatio;
-          drawX = heroX;
-          drawY = heroY - (drawH - heroH) / 2;
-        }
-        ctx.drawImage(heroImg, drawX, drawY, drawW, drawH);
-        ctx.restore();
-      } else {
-        ctx.save();
-        roundRect(heroX, heroY, heroW, heroH, 25);
-        const fallGrad = ctx.createLinearGradient(heroX, heroY, heroX, heroY + heroH);
-        fallGrad.addColorStop(0, "#1E3A8A");
-        fallGrad.addColorStop(1, "#0B1F3A");
-        ctx.fillStyle = fallGrad;
-        ctx.fill();
-        ctx.font = "120px 'Segoe UI Emoji', Arial";
-        ctx.textAlign = "center";
-        ctx.textBaseline = "middle";
-        ctx.fillStyle = "rgba(255,255,255,0.3)";
-        ctx.fillText(theme.icon, heroX + heroW/2, heroY + heroH/2);
+        const imgRatio = heroImg1.width / heroImg1.height;
+        const boxRatio = (heroW/2 + 20) / heroH;
+        let dw, dh, dx, dy;
+        if (imgRatio > boxRatio) { dh = heroH; dw = heroH * imgRatio; dx = heroX - (dw - (heroW/2 + 20)) / 2; dy = heroY; } 
+        else { dw = heroW/2 + 20; dh = (heroW/2 + 20) / imgRatio; dx = heroX; dy = heroY - (dh - heroH) / 2; }
+        ctx.drawImage(heroImg1, dx, dy, dw, dh);
         ctx.restore();
       }
 
-      // 5. Premium 3D Gold Discount Badge
-      const discountW = 300;
-      const discountH = 90;
-      const discountX = W/2 - discountW/2;
-      const discountY = heroY + heroH - discountH/2;
+      // Draw Right Image
+      if (heroImg2) {
+        ctx.save();
+        roundRect(heroX + heroW/2 - 20, heroY, heroW/2 + 20, heroH, 25);
+        ctx.clip();
+        const imgRatio = heroImg2.width / heroImg2.height;
+        const boxRatio = (heroW/2 + 20) / heroH;
+        let dw, dh, dx, dy;
+        if (imgRatio > boxRatio) { dh = heroH; dw = heroH * imgRatio; dx = (heroX + heroW/2 - 20) - (dw - (heroW/2 + 20)) / 2; dy = heroY; } 
+        else { dw = heroW/2 + 20; dh = (heroW/2 + 20) / imgRatio; dx = heroX + heroW/2 - 20; dy = heroY - (dh - heroH) / 2; }
+        ctx.drawImage(heroImg2, dx, dy, dw, dh);
+        ctx.restore();
+      }
+
+      // Center Overlay Gradient (Blends the two images)
+      const centerGrad = ctx.createLinearGradient(heroX + heroW/2 - 50, 0, heroX + heroW/2 + 50, 0);
+      centerGrad.addColorStop(0, "rgba(0,0,0,0)");
+      centerGrad.addColorStop(0.5, "rgba(255,255,255,0.4)");
+      centerGrad.addColorStop(1, "rgba(0,0,0,0)");
+      ctx.fillStyle = centerGrad;
+      ctx.fillRect(heroX + heroW/2 - 50, heroY, 100, heroH);
+
+      // 5. Premium 3D Gold Diamond Discount Badge (Centered)
+      const diamondSize = 130;
+      const dx = W/2;
+      const dy = heroY + heroH - 15;
 
       ctx.save();
-      ctx.shadowColor = "rgba(0,0,0,0.5)";
+      ctx.translate(dx, dy);
+      ctx.rotate(Math.PI / 4); 
+
+      ctx.shadowColor = "rgba(0,0,0,0.4)";
       ctx.shadowBlur = 25;
-      ctx.shadowOffsetY = 10;
+      ctx.shadowOffsetY = 15;
       
-      // Gold Metallic Gradient
-      const discountGrad = ctx.createLinearGradient(discountX, discountY, discountX, discountY + discountH);
-      discountGrad.addColorStop(0, "#FDE68A"); // Light Gold
-      discountGrad.addColorStop(0.3, "#F59E0B"); // Mid Gold
-      discountGrad.addColorStop(1, "#B45309"); // Dark Bronze
+      const discountGrad = ctx.createLinearGradient(-diamondSize/2, -diamondSize/2, diamondSize/2, diamondSize/2);
+      discountGrad.addColorStop(0, "#FDE68A"); 
+      discountGrad.addColorStop(0.5, "#F59E0B"); 
+      discountGrad.addColorStop(1, "#B45309"); 
       
       ctx.fillStyle = discountGrad;
-      roundRect(discountX, discountY, discountW, discountH, 45);
+      roundRect(-diamondSize/2, -diamondSize/2, diamondSize, diamondSize, 20);
       ctx.fill();
       
-      // Inner Border for 3D effect
-      ctx.strokeStyle = "rgba(255,255,255,0.7)";
+      // Inner Border
+      ctx.strokeStyle = "rgba(255,255,255,0.8)";
       ctx.lineWidth = 4;
-      roundRect(discountX + 6, discountY + 6, discountW - 12, discountH - 12, 40);
+      roundRect(-diamondSize/2 + 8, -diamondSize/2 + 8, diamondSize - 16, diamondSize - 16, 12);
       ctx.stroke();
-      ctx.restore();
+      
+      ctx.restore(); 
 
-      // Discount Text
+      // Badge Text
       ctx.save();
-      ctx.font = "900 46px 'Cairo', Arial";
-      ctx.fillStyle = "#4A1500"; // Dark Brown for contrast
+      ctx.font = "900 42px 'Cairo', Arial";
+      ctx.fillStyle = "#4A1500";
       ctx.textAlign = "center";
       ctx.textBaseline = "middle";
       ctx.direction = "rtl";
-      const discountText = promo.discount_type === "percentage" ? `خصم ${promo.discount_value}%` : `خصم ${promo.discount_value} ريال`;
-      ctx.fillText(discountText, W/2, discountY + discountH/2 + 2);
+      const discountText = promo.discount_type === "percentage" ? `خصم ${promo.discount_value}%` : `خصم ${promo.discount_value} ر.س`;
+      ctx.fillText(discountText, dx, dy);
       ctx.restore();
 
       // 6. Title & Description
-      const titleY = discountY + discountH + 40;
+      const titleY = dy + diamondSize/2 + 30;
       ctx.save();
       ctx.font = "900 46px 'Cairo', Arial";
-      ctx.fillStyle = "#FFFFFF";
-      ctx.shadowColor = "rgba(0,0,0,0.5)";
-      ctx.shadowBlur = 8;
+      ctx.fillStyle = theme.darkColor;
       ctx.textAlign = "center";
       ctx.textBaseline = "top";
       ctx.direction = "rtl";
@@ -1655,7 +1752,7 @@ export default function SettingsPage() {
       if (promo.description) {
         ctx.save();
         ctx.font = "600 24px 'Cairo', Arial";
-        ctx.fillStyle = "rgba(255, 255, 255, 0.8)";
+        ctx.fillStyle = "#475569"; 
         ctx.textAlign = "center";
         ctx.textBaseline = "top";
         ctx.direction = "rtl";
@@ -1671,7 +1768,7 @@ export default function SettingsPage() {
       if (itemsList.length > 0) {
         ctx.save();
         ctx.font = "bold 22px 'Cairo', Arial";
-        ctx.fillStyle = "#FDE68A"; // Light gold text
+        ctx.fillStyle = theme.accentDark;
         ctx.textAlign = "center";
         ctx.textBaseline = "top";
         ctx.direction = "rtl";
@@ -1689,7 +1786,7 @@ export default function SettingsPage() {
         ctx.restore();
       }
 
-      // 8. Services Grid (Luxury Glass Cards)
+      // 8. Services Grid (Luxury White Glass Cards)
       const servicesStartY = currentY + 20;
       const servicesPerRow = 2;
       const gridGap = 25;
@@ -1713,12 +1810,12 @@ export default function SettingsPage() {
           
           const cy = servicesStartY + row * (cardH + gridGap);
           
-          // Glass Card Background
+          // Card Background (White Glass)
           ctx.save();
-          ctx.shadowColor = "rgba(0,0,0,0.3)";
+          ctx.shadowColor = "rgba(0,0,0,0.05)";
           ctx.shadowBlur = 20;
           ctx.shadowOffsetY = 10;
-          ctx.fillStyle = "rgba(255, 255, 255, 0.1)"; // True Glassmorphism
+          ctx.fillStyle = "rgba(255, 255, 255, 0.85)"; 
           roundRect(cx, cy, cardW, cardH, 25);
           ctx.fill();
           
@@ -1730,85 +1827,86 @@ export default function SettingsPage() {
           ctx.restore();
           
           // 3D Icon (Image)
-          const thumbSize = 110;
-          const thumbX = cx + 20;
+          const thumbSize = 100;
+          const thumbX = cx + 25;
           const thumbY = cy + (cardH - thumbSize)/2;
           
           const cat = getServiceCategory(svc.name);
           const thumbUrl = SERVICE_THUMBNAILS[cat];
           const thumbImg = await loadImage(thumbUrl);
           
+          // Solid white background for icon to ensure visibility
+          ctx.save();
+          ctx.fillStyle = "#FFFFFF";
+          ctx.beginPath();
+          ctx.arc(thumbX + thumbSize/2, thumbY + thumbSize/2, thumbSize/2 + 5, 0, Math.PI*2);
+          ctx.fill();
+          ctx.shadowColor = "rgba(0,0,0,0.1)";
+          ctx.shadowBlur = 10;
+          ctx.stroke();
+          ctx.restore();
+
           if (thumbImg) {
             ctx.save();
-            // Draw white circular background for contrast
-            ctx.fillStyle = "rgba(255, 255, 255, 0.9)";
-            ctx.beginPath();
-            ctx.arc(thumbX + thumbSize/2, thumbY + thumbSize/2, thumbSize/2, 0, Math.PI*2);
-            ctx.fill();
-            
-            // Clip to circle and draw icon
             ctx.beginPath();
             ctx.arc(thumbX + thumbSize/2, thumbY + thumbSize/2, thumbSize/2, 0, Math.PI*2);
             ctx.clip();
-            ctx.drawImage(thumbImg, thumbX + 10, thumbY + 10, thumbSize - 20, thumbSize - 20);
+            ctx.drawImage(thumbImg, thumbX, thumbY, thumbSize, thumbSize);
             ctx.restore();
           } else {
+            // Fallback: Large clear emoji
             ctx.save();
-            ctx.fillStyle = "rgba(255, 255, 255, 0.2)";
-            ctx.beginPath();
-            ctx.arc(thumbX + thumbSize/2, thumbY + thumbSize/2, thumbSize/2, 0, Math.PI*2);
-            ctx.fill();
-            ctx.font = "60px 'Segoe UI Emoji', Arial";
+            ctx.font = "60px Arial";
             ctx.textAlign = "center";
             ctx.textBaseline = "middle";
             ctx.fillText(getServiceIcon(svc.name), thumbX + thumbSize/2, thumbY + thumbSize/2 + 5);
             ctx.restore();
           }
           
-          // Text
+          // Text (Dark Slate)
           ctx.save();
           ctx.textAlign = "right";
           ctx.textBaseline = "top";
           ctx.direction = "rtl";
           
-          ctx.font = "900 26px 'Cairo', Arial";
-          ctx.fillStyle = "#FFFFFF";
+          ctx.font = "900 24px 'Cairo', Arial";
+          ctx.fillStyle = theme.darkColor;
           const nameText = truncateText(ctx, svc.name, cardW - 150);
-          ctx.fillText(nameText, cx + cardW - 20, cy + 25);
+          ctx.fillText(nameText, cx + cardW - 20, cy + 30);
           
-          ctx.font = "600 18px 'Cairo', Arial";
-          ctx.fillStyle = "rgba(255, 255, 255, 0.7)";
+          ctx.font = "600 16px 'Cairo', Arial";
+          ctx.fillStyle = "#475569";
           const desc = getServiceDescription(svc.name);
           const descLines = wrapText(ctx, desc, cardW - 150);
           descLines.slice(0, 1).forEach((line, idx) => {
-            ctx.fillText(line, cx + cardW - 20, cy + 65);
+            ctx.fillText(line, cx + cardW - 20, cy + 70);
           });
           
           if (svc.price) {
             const finalPrice = calcFinalPrice(svc.price, promo.discount_value, promo.discount_type);
             if (finalPrice !== null && finalPrice < svc.price) {
-              ctx.font = "900 24px 'Cairo', Arial";
-              ctx.fillStyle = "#FDE68A"; // Gold price
-              ctx.fillText(`${finalPrice} ريال`, cx + cardW - 20, cy + 100);
+              ctx.font = "900 22px 'Cairo', Arial";
+              ctx.fillStyle = theme.accentDark;
+              ctx.fillText(`${finalPrice} ريال`, cx + cardW - 20, cy + 105);
               
-              ctx.font = "16px 'Cairo', Arial";
-              ctx.fillStyle = "rgba(255, 255, 255, 0.5)";
+              ctx.font = "14px 'Cairo', Arial";
+              ctx.fillStyle = "#94A3B8";
               const origText = `${svc.price}`;
               const origX = cx + cardW - 20 - ctx.measureText(`${finalPrice} ريال`).width - 10;
-              ctx.fillText(origText, origX, cy + 105);
+              ctx.fillText(origText, origX, cy + 110);
               
               // Strikethrough
               const origW = ctx.measureText(origText).width;
-              ctx.strokeStyle = "rgba(255, 255, 255, 0.5)";
+              ctx.strokeStyle = "#94A3B8";
               ctx.lineWidth = 1.5;
               ctx.beginPath();
-              ctx.moveTo(origX, cy + 115);
-              ctx.lineTo(origX - origW, cy + 115);
+              ctx.moveTo(origX, cy + 118);
+              ctx.lineTo(origX - origW, cy + 118);
               ctx.stroke();
             } else {
-              ctx.font = "900 24px 'Cairo', Arial";
-              ctx.fillStyle = "#FDE68A";
-              ctx.fillText(`${svc.price} ريال`, cx + cardW - 20, cy + 100);
+              ctx.font = "900 22px 'Cairo', Arial";
+              ctx.fillStyle = theme.accentDark;
+              ctx.fillText(`${svc.price} ريال`, cx + cardW - 20, cy + 105);
             }
           }
           ctx.restore();
@@ -1818,7 +1916,7 @@ export default function SettingsPage() {
       // 9. Footer (QR + Phone + CTA)
       const footerY = H - 140;
       
-      // QR Code in Footer (Glass Box)
+      // QR Code
       const tgLink = `https://t.me/${botUsername || "SmartClinc_bot"}?start=clinic_${clinic.id}`;
       const qrApi = `https://api.qrserver.com/v1/create-qr-code/?size=120x120&data=${encodeURIComponent(tgLink)}&color=0B1F3A&bgcolor=FFFFFF&margin=0&qzone=1`;
       const qrImg = await loadImage(qrApi);
@@ -1829,7 +1927,7 @@ export default function SettingsPage() {
         const qrX = 60;
         const qrY = footerY + 10;
         
-        ctx.shadowColor = "rgba(0,0,0,0.4)";
+        ctx.shadowColor = "rgba(0,0,0,0.1)";
         ctx.shadowBlur = 15;
         ctx.fillStyle = "#FFFFFF";
         roundRect(qrX, qrY, qrBoxSize, qrBoxSize, 16);
@@ -1858,7 +1956,7 @@ export default function SettingsPage() {
         ctx.fillText("📞", phoneCircleX, footerY + 27);
         
         ctx.font = "900 34px 'Cairo', Arial";
-        ctx.fillStyle = "#FFFFFF";
+        ctx.fillStyle = theme.darkColor;
         ctx.textAlign = "left";
         ctx.textBaseline = "middle";
         ctx.direction = "ltr";
@@ -1866,14 +1964,14 @@ export default function SettingsPage() {
         ctx.restore();
       }
       
-      // CTA Button (Luxury Gold Gradient)
+      // CTA Button (Gold Pill)
       ctx.save();
       const ctaW = 340;
       const ctaH = 70;
       const ctaX = W/2 - ctaW/2;
       const ctaY = H - 70;
       
-      ctx.shadowColor = "rgba(0,0,0,0.5)";
+      ctx.shadowColor = "rgba(0,0,0,0.2)";
       ctx.shadowBlur = 20;
       ctx.shadowOffsetY = 8;
       const ctaGrad = ctx.createLinearGradient(0, ctaY, 0, ctaY + ctaH);
@@ -1890,7 +1988,7 @@ export default function SettingsPage() {
       ctx.stroke();
       
       ctx.font = "900 28px 'Cairo', Arial";
-      ctx.fillStyle = "#4A1500"; // Dark text on gold
+      ctx.fillStyle = "#4A1500"; 
       ctx.textAlign = "center";
       ctx.textBaseline = "middle";
       ctx.direction = "rtl";
@@ -1898,7 +1996,7 @@ export default function SettingsPage() {
       ctx.restore();
 
       // Upload logic
-      const imageDataUrl = canvas.toDataURL("image/jpeg", 0.9); 
+      const imageDataUrl = canvas.toDataURL("image/jpeg", 0.92); 
       const base64Data = imageDataUrl.split(",")[1];
       const binaryString = atob(base64Data);
       const bytes = new Uint8Array(binaryString.length);
@@ -2307,7 +2405,7 @@ export default function SettingsPage() {
               تحديث الحساب
             </Button>
             <p className="text-xs text-muted-foreground mt-2">
-              ملاحظة: تغيير البريد الإلكتروني يتطلب تأكيداً من البريد الجديد.
+              ملاحظة: تغيير البريد الإلكتروني يتطلب تأكيداً من البريد الجديد والقديم.
             </p>
           </section>
 
