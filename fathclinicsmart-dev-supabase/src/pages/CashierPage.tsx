@@ -104,8 +104,17 @@ const round2 = (num: number): number => {
 
 const parseQRText = (text: string) => {
   let code = "", name = "", phone = "", service = "", date = "", time = "";
-  const codeMatch = text.match(/RE-[A-Za-z0-9]+/i) || text.match(/WI-[A-Za-z0-9]+/i) || text.match(/INV-[A-Za-z0-9]+/i) || text.match(/PAY-[A-Za-z0-9-]+/i) || text.match(/PAY-VERIFIED\|([A-Za-z0-9-]+)/i);
-  if (codeMatch) code = codeMatch[1] || codeMatch[0];
+
+  const verifiedMatch = text.match(/PAY-VERIFIED\|([^\n\r|]+)/i);
+  const searchText = verifiedMatch ? verifiedMatch[1].trim() : text;
+
+  const codeMatch =
+    searchText.match(/RE-[A-Za-z0-9]+/i) ||
+    searchText.match(/WI-[A-Za-z0-9]+/i) ||
+    searchText.match(/INV-[A-Za-z0-9]+/i) ||
+    searchText.match(/PAY-[A-Za-z0-9]+(?:-[A-Za-z0-9]+)*/i);
+  if (codeMatch) code = codeMatch[0];
+
   const nameMatch = text.match(/المريض:\s*([^\n\r]+)/);
   if (nameMatch) name = nameMatch[1].replace(/👤/g, "").replace(/@\w+/g, "").trim();
   const phoneMatch = text.match(/الهاتف:\s*([^\n\r]+)/);
@@ -415,21 +424,30 @@ export default function CashierPage() {
       const qrParsed = parseQRText(rawText);
       const targetCode = qrParsed.code || rawText.trim();
 
-      // البحث المباشر في قاعدة البيانات بدون فلترة تاريخ
-      const { data: inv } = await supabase.from("invoices").select("*").eq("invoice_number", targetCode).maybeSingle();
-      if (inv) {
-        const isPayment = isPaymentRecord(inv);
-        setVerifyResult({ status: "valid", message: `✅ ${isPayment ? "سند دفعة صحيح" : "فاتورة صحيحة"}\nرقم: ${inv.invoice_number}\nالمريض: ${inv.patient_name}\nالمبلغ: ${Number(inv.total_amount).toLocaleString()}` });
-        setScannerOpen(false); stopScanner(); return;
+      if (targetCode) {
+        const { data: inv } = await supabase.from("invoices").select("*").eq("invoice_number", targetCode).maybeSingle();
+        if (inv) {
+          const isPayment = isPaymentRecord(inv);
+          const invAmount = Number(inv.total_amount || 0);
+          setVerifyResult({
+            status: "valid",
+            message: `✅ ${isPayment ? "سند دفعة صحيح" : "فاتورة صحيحة"}\nرقم: ${inv.invoice_number}\nالمريض: ${inv.patient_name || "—"}\nالمبلغ: ${invAmount.toLocaleString()}`
+          });
+          setScannerOpen(false); stopScanner(); return;
+        }
+
+        const { data: appt } = await supabase.from("appointments").select("*, patients(name)").eq("reservation_code", targetCode).maybeSingle();
+        if (appt) {
+          const visitPaid = Number(appt.paid_amount || 0);
+          setVerifyResult({
+            status: "valid",
+            message: `✅ سند دفع صحيح\nكود: ${appt.reservation_code}\nالمريض: ${appt.patients?.name || appt.notes || 'غير محدد'}\nالمبلغ المدفوع: ${visitPaid.toLocaleString()}`
+          });
+          setScannerOpen(false); stopScanner(); return;
+        }
       }
 
-      const { data: appt } = await supabase.from("appointments").select("*, patients(name)").eq("reservation_code", targetCode).maybeSingle();
-      if (appt) {
-        setVerifyResult({ status: "valid", message: `✅ سند دفع صحيح\nكود: ${appt.reservation_code}\nالمريض: ${appt.patients?.name || appt.notes || 'غير محدد'}\nالمبلغ المدفوع: ${Number(appt.paid_amount || 0).toLocaleString()}` });
-        setScannerOpen(false); stopScanner(); return;
-      }
-
-      setVerifyResult({ status: "invalid", message: `❌ تحذير: هذا السند غير صحيح أو لا ينتمي لهذه العيادة!\nالكود: ${targetCode}` });
+      setVerifyResult({ status: "invalid", message: `❌ تحذير: هذا السند غير صحيح أو لا ينتمي لهذه العيادة!\nالكود: ${targetCode || "—"}` });
       setScannerOpen(false); stopScanner(); return;
     }
 
@@ -496,7 +514,7 @@ export default function CashierPage() {
         scannerRef.current = scanner;
         await scanner.start(
           { facingMode },
-          { fps: 10, qrbox: (w, h) => ({ width: Math.floor(Math.min(w, h) * 0.8), height: Math.floor(Math.min(w, h) * 0.8) }), aspectRatio: 1.0 },
+          { fps: 10, qrbox: (w, h) => ({ width: Math.floor(Math.min(w, h) * 0.75), height: Math.floor(Math.min(w, h) * 0.75) }), aspectRatio: 1.0 },
           (text) => { stopScanner().then(() => handleScannedCode(text)); },
           () => {}
         );
@@ -567,9 +585,11 @@ export default function CashierPage() {
     const discountType = appointment.discount_type || (isPromo ? "percentage" : "fixed");
     const discountAmt = appointment.discount_applied ?? calcDiscountAmount(original, discountValue, discountType);
     const final = appointment.final_price ?? (original - discountAmt);
+    const alreadyPaid = round2(appointment.paid_amount || 0);
+    const remaining = round2(Math.max(0, final - alreadyPaid));
     
     setTotalCostInput(String(original));
-    setPaidAmountInput(String(final > 0 ? final : original)); 
+    setPaidAmountInput(String(remaining > 0 ? remaining : (final > 0 ? final : original)));
     setDiscountInput(String(discountValue));
     setPaymentMethodInput(appointment.payment_method || "نقدي");
     setShowReceipt(appointment.payment_status === "paid");
@@ -586,725 +606,815 @@ export default function CashierPage() {
   };
 
   // ============================================================
-  // محرك التوليد والإرسال التلقائي
-  // ============================================================
-  const autoSendToTelegram = async (payload: {
-    type: "paid" | "partial" | "promo" | "manual" | "previous" | "invoice";
-    code: string;
-    name: string;
-    service: string;
-    amount: number;
-    tgId: string;
-    linkedVisit?: string;
-    original?: number;
-    discount?: number;
-    discountType?: string;
-    items?: any[];
-    date?: string;
-  }) => {
-    if (!payload.tgId) return;
-    setSendingTelegram(true);
-    try {
-      let bgColor = "#059669"; 
-      let title = "OFFICIAL RECEIPT";
-      let status = "مدفوع ✓";
-      let colorCode = "#ecfdf5";
-      let textColor = "#065f46";
+// محرك التوليد والإرسال التلقائي
+// ============================================================
+const autoSendToTelegram = async (payload: {
+  type: "paid" | "partial" | "promo" | "manual" | "previous" | "invoice";
+  code: string;
+  name: string;
+  service: string;
+  amount: number;
+  tgId: string;
+  linkedVisit?: string;
+  original?: number;
+  discount?: number;
+  discountType?: string;
+  items?: any[];
+  date?: string;
+}) => {
+  if (!payload.tgId) {
+    console.warn("[AUTO-RECEIPT] تم تجاهل الإرسال: لا يوجد telegram chat_id للمستلم.");
+    return;
+  }
+  setSendingTelegram(true);
+  try {
+    let bgColor = "#059669"; 
+    let title = "OFFICIAL RECEIPT";
+    let status = "مدفوع ✓";
+    let colorCode = "#ecfdf5";
+    let textColor = "#065f46";
 
-      if (payload.type === "promo") { bgColor = "#7c3aed"; title = "PROMO RECEIPT"; colorCode = "#f5f3ff"; textColor = "#5b21b6"; }
-      if (payload.type === "partial") { bgColor = "#ea580c"; title = "PARTIAL RECEIPT"; colorCode = "#fff7ed"; textColor = "#9a3412"; status = "دفع جزئي"; }
-      if (payload.type === "manual") { bgColor = "#e11d48"; title = "MANUAL RECEIPT"; colorCode = "#fff1f2"; textColor = "#9f1239"; status = "دفعة يدوية"; }
-      if (payload.type === "previous") { bgColor = "#0284c7"; title = "PREVIOUS PAYMENT"; colorCode = "#f0f9ff"; textColor = "#075985"; status = "سداد سابق"; }
-      if (payload.type === "invoice") { bgColor = "#ec4899"; title = "OFFICIAL INVOICE"; colorCode = "#fdf2f8"; textColor = "#9d174d"; status = "فاتورة"; }
+    if (payload.type === "promo") { bgColor = "#7c3aed"; title = "PROMO RECEIPT"; colorCode = "#f5f3ff"; textColor = "#5b21b6"; }
+    if (payload.type === "partial") { bgColor = "#ea580c"; title = "PARTIAL RECEIPT"; colorCode = "#fff7ed"; textColor = "#9a3412"; status = "دفع جزئي"; }
+    if (payload.type === "manual") { bgColor = "#e11d48"; title = "MANUAL RECEIPT"; colorCode = "#fff1f2"; textColor = "#9f1239"; status = "دفعة يدوية"; }
+    if (payload.type === "previous") { bgColor = "#0284c7"; title = "PREVIOUS PAYMENT"; colorCode = "#f0f9ff"; textColor = "#075985"; status = "سداد سابق"; }
+    if (payload.type === "invoice") { bgColor = "#ec4899"; title = "OFFICIAL INVOICE"; colorCode = "#fdf2f8"; textColor = "#9d174d"; status = "فاتورة"; }
 
-      const itemsHtml = payload.items ? payload.items.map((it: any) => `
-        <div style="display:flex; justify-content:space-between; background:#f9fafb; padding:8px 12px; border-radius:6px; margin-bottom:4px;">
-          <span style="font-size:12px; color:#4b5563;">${it.name} × ${it.qty}</span>
-          <span style="font-size:12px; font-weight:bold; color:#111;">${(Number(it.qty) * Number(it.price)).toLocaleString()}</span>
-        </div>
-      `).join("") : '';
+    const itemsHtml = payload.items ? payload.items.map((it: any) => `
+      <div style="display:flex; justify-content:space-between; background:#f9fafb; padding:8px 12px; border-radius:6px; margin-bottom:4px;">
+        <span style="font-size:12px; color:#4b5563;">${it.name} × ${it.qty}</span>
+        <span style="font-size:12px; font-weight:bold; color:#111;">${(Number(it.qty) * Number(it.price)).toLocaleString()}</span>
+      </div>
+    `).join("") : '';
 
-      const receiptHtml = `
-        <div style="width:380px; background:#fff; padding:0; direction:rtl; font-family:'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; border-radius:16px; overflow:hidden; border:1px solid #e5e7eb; box-shadow: 0 10px 25px -5px rgba(0,0,0,0.1);">
-          <div style="background:linear-gradient(135deg, ${bgColor} 0%, ${bgColor}cc 100%); padding:24px; color:white; display:flex; justify-content:space-between; align-items:center;">
-            <div>
-              <p style="font-size:10px; opacity:0.9; margin:0 0 4px; letter-spacing:2px; font-weight:600;">${title}</p>
-              <h2 style="font-size:20px; font-weight:900; margin:0; line-height:1.2;">${clinic?.name || "العيادة"}</h2>
-              <p style="font-size:11px; opacity:0.9; margin:4px 0 0;">سند استلام مبلغ</p>
-            </div>
-            ${clinic?.logo_url ? `<img src="${clinic.logo_url}" style="width:48px; height:48px; border-radius:10px; object-fit:cover; background:white; padding:2px;" />` : `<div style="width:48px; height:48px; background:rgba(255,255,255,0.2); border-radius:10px; display:flex; align-items:center; justify-content:center; font-size:20px;">🏥</div>`}
-          </div>
-          <div style="padding:24px; font-size:13px; color:#374151; display:flex; flex-direction:column; gap:10px;">
-            <div style="display:flex; justify-content:space-between;"><span>رقم المستند:</span><b style="color:#111; font-family:monospace;">${payload.code}</b></div>
-            <div style="display:flex; justify-content:space-between;"><span>التاريخ:</span><b style="color:#111;">${format(new Date(), "yyyy/MM/dd - hh:mm a")}</b></div>
-            <div style="display:flex; justify-content:space-between;"><span>المريض:</span><b style="color:#111;">${payload.name}</b></div>
-            <div style="display:flex; justify-content:space-between;"><span>الخدمة:</span><b style="color:#111;">${payload.service}</b></div>
-            ${payload.linkedVisit ? `<div style="display:flex; justify-content:space-between;"><span>مرتبطة بزيارة:</span><b style="color:${bgColor}; background:${colorCode}; padding:2px 6px; border-radius:4px; font-size:11px;">${payload.linkedVisit}</b></div>` : ''}
-            
-            ${payload.items && payload.items.length > 0 ? `
-              <div style="border-top:1px dashed #e5e7eb; margin:10px 0;"></div>
-              <p style="font-size:10px; font-weight:bold; color:#6b7280; margin-bottom:6px;">البنود:</p>
-              ${itemsHtml}
-            ` : ''}
-
-            ${payload.type === "promo" && payload.original ? `
-              <div style="border-top:1px dashed #e5e7eb; margin:10px 0;"></div>
-              <div style="background:${colorCode}; border:1px solid ${bgColor}40; padding:12px; border-radius:10px; display:flex; flex-direction:column; gap:6px;">
-                <div style="display:flex; justify-content:space-between; color:${textColor};"><span>السعر الأصلي:</span><s>${payload.original}</s></div>
-                <div style="display:flex; justify-content:space-between; color:${textColor};"><span>الخصم (${payload.discountType === 'percentage' ? payload.discount + '%' : 'مبلغ'}):</span><span style="color:#dc2626; font-weight:bold;">-${payload.discountType === 'percentage' ? calcDiscountAmount(payload.original, payload.discount || 0, 'percentage') : payload.discount}</span></div>
-              </div>
-            ` : ''}
-
-            <div style="border-top:1px dashed #e5e7eb; margin:10px 0;"></div>
-            <div style="background:${colorCode}; border:1px solid ${bgColor}40; padding:16px; border-radius:12px; display:flex; justify-content:space-between; align-items:center;">
-              <span style="font-weight:bold; color:${textColor};">المبلغ المستلم:</span>
-              <span style="font-size:24px; font-weight:900; color:${bgColor};">${Number(payload.amount).toLocaleString()}</span>
-            </div>
-            <div style="display:flex; justify-content:space-between; align-items:center; margin-top:10px; border-top:1px solid #f3f4f6; padding-top:10px;">
-              <div><p style="font-size:9px; color:#9ca3af; margin:0;">رمز التحقق:</p><p style="font-size:9px; font-family:monospace; color:#9ca3af; margin:0;">PAY-VERIFIED|${payload.code}</p></div>
-              <img src="https://api.qrserver.com/v1/create-qr-code/?size=80x80&data=${encodeURIComponent("PAY-VERIFIED|" + payload.code)}" style="width:40px; height:40px;" />
-            </div>
-            <p style="text-align:center; font-size:10px; color:#9ca3af; margin-top:12px;">معتمد إلكترونياً - ${clinic?.name}</p>
-          </div>
-        </div>
-      `;
-
-      const tempDiv = document.createElement("div");
-      tempDiv.style.position = "absolute";
-      tempDiv.style.left = "-9999px";
-      tempDiv.innerHTML = receiptHtml;
-      document.body.appendChild(tempDiv);
-
-      const canvas = await html2canvas(tempDiv.firstElementChild as HTMLElement, { scale: 3, useCORS: true, backgroundColor: "#ffffff" });
-      const imgData = canvas.toDataURL("image/png");
-      document.body.removeChild(tempDiv);
-
-      await supabase.functions.invoke("telegram-bot", {
-        body: {
-          action: "send_receipt",
-          clinic_id: clinic?.id,
-          chat_id: payload.tgId,
-          receipt_image: imgData,
-          reservation_code: payload.code,
-          patient_name: payload.name,
-          service_name: payload.service,
-          amount: payload.amount,
-          type: payload.type,
-          clinic_name: clinic?.name || "العيادة",
-        }
-      });
-    } catch (err) {
-      console.warn("[AUTO-RECEIPT] فشل إرسال السند:", err);
-    } finally {
-      setSendingTelegram(false);
-    }
-  };
-
-  const sendTelegramLedger = async (patientName: string, phone: string) => {
-    setSendingTelegram(true);
-    try {
-      let tgId = "";
-      const { data: pData } = await supabase.from("patients").select("id, telegram_user_id").eq("clinic_id", clinic?.id).eq("phone", phone).maybeSingle();
-      
-      if (pData?.telegram_user_id) tgId = pData.telegram_user_id;
-      else {
-         const pVisits = invoiceAppointments.find(a => extractCleanInfo(a).cleanPhone === phone || extractCleanInfo(a).cleanName === patientName);
-         if (pVisits) tgId = pVisits.customer_telegram_id || pVisits.patients?.telegram_user_id || "";
-      }
-
-      if (!tgId) { setSendingTelegram(false); return; }
-
-      let appts: any[] = [];
-      if (pData?.id) {
-          const { data } = await supabase.from("appointments").select("reservation_code, date, final_price, paid_amount, services(name), payment_status").eq("patient_id", pData.id);
-          appts = data || [];
-      } else {
-          const { data } = await supabase.from("appointments").select("reservation_code, date, final_price, paid_amount, services(name), payment_status, patients!inner(phone)").eq("patients.phone", phone);
-          appts = data || [];
-      }
-
-      const { data: invs } = await supabase.from("invoices").select("*").eq("clinic_id", clinic?.id).or(`patient_phone.eq.${phone},patient_name.eq.${patientName}`);
-
-      const validAppts = appts.filter(a => a.payment_status === "paid" || a.payment_status === "partial" || Number(a.paid_amount) > 0);
-
-      const visits = validAppts.map(a => ({
-          code: a.reservation_code, 
-          date: a.date, 
-          service: a.services?.name || "فحص", 
-          amount: round2(Number(a.final_price || 0)), 
-          paid: round2(Number(a.paid_amount || 0))
-      })).sort((a,b) => new Date(b.date).getTime() - new Date(a.date).getTime());
-
-      const payments = (invs || []).filter(i => isPaymentRecord(i)).map(i => ({
-          ref: i.invoice_number, 
-          date: i.created_at.split('T')[0], 
-          amount: round2(Number(i.total_amount || 0)), 
-          method: i.payment_method || "نقدي", 
-          linkedVisit: extractLinkedVisit(i) || "—"
-      })).sort((a,b) => new Date(b.date).getTime() - new Date(a.date).getTime());
-
-      const total = round2(visits.reduce((s, v) => s + v.amount, 0));
-      const paid = round2(visits.reduce((s, v) => s + v.paid, 0));
-      const remaining = round2(Math.max(0, total - paid));
-
-      const visitsHtml = visits.map((v: any) => `
-        <tr>
-          <td style="padding:10px; border-bottom:1px solid #f3f4f6; font-family:monospace; font-size:12px;">${v.code}</td>
-          <td style="padding:10px; border-bottom:1px solid #f3f4f6; font-size:12px;">${v.date}</td>
-          <td style="padding:10px; border-bottom:1px solid #f3f4f6; font-size:12px;">${v.service}</td>
-          <td style="padding:10px; border-bottom:1px solid #f3f4f6; font-weight:bold; font-size:12px;">${v.amount.toLocaleString()}</td>
-          <td style="padding:10px; border-bottom:1px solid #f3f4f6; font-weight:bold; color:#059669; font-size:12px;">${v.paid.toLocaleString()}</td>
-          <td style="padding:10px; border-bottom:1px solid #f3f4f6; font-weight:bold; color:#dc2626; font-size:12px;">${(v.amount - v.paid).toLocaleString()}</td>
-        </tr>
-      `).join("");
-
-      const paymentsHtml = payments.map((p: any) => `
-        <tr>
-          <td style="padding:10px; border-bottom:1px solid #f3f4f6; font-family:monospace; font-size:12px; color:#059669;">${p.ref}</td>
-          <td style="padding:10px; border-bottom:1px solid #f3f4f6; font-size:12px;">${p.date}</td>
-          <td style="padding:10px; border-bottom:1px solid #f3f4f6; font-weight:bold; color:#059669; font-size:12px;">${p.amount.toLocaleString()}</td>
-          <td style="padding:10px; border-bottom:1px solid #f3f4f6; font-size:12px;">${p.method}</td>
-          <td style="padding:10px; border-bottom:1px solid #f3f4f6; font-size:12px;">${p.linkedVisit || "—"}</td>
-        </tr>
-      `).join("");
-
-      const ledgerHtml = `
-        <div style="width:800px; background:#f9fafb; padding:40px; direction:rtl; font-family:'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;">
-          <div style="background:linear-gradient(135deg, #e11d48 0%, #be123c 100%); padding:30px; color:white; border-radius:16px; margin-bottom:24px; display:flex; justify-content:space-between; align-items:center;">
-            <div>
-              <h1 style="font-size:24px; font-weight:bold; margin:0 0 8px;">${clinic?.name} - كشف حساب شامل</h1>
-              <p style="margin:4px 0; font-size:14px; opacity:0.9;">المريض: ${patientName} | ${phone}</p>
-              <p style="margin:4px 0; font-size:14px; opacity:0.9;">التاريخ: ${format(new Date(), "yyyy/MM/dd")}</p>
-            </div>
-            ${clinic?.logo_url ? `<img src="${clinic.logo_url}" style="width:80px; height:80px; border-radius:12px; object-fit:cover; background:white; padding:4px;" />` : ''}
-          </div>
-          <div style="display:flex; justify-content:space-between; align-items:center; background:#fff1f2; padding:24px; border-radius:12px; border:1px solid #fecdd3; margin-bottom:24px;">
-            <div style="text-align:center; flex:1;"><p style="font-size:12px; color:#9f1239; font-weight:bold; margin:0 0 4px;">الإجمالي</p><p style="font-size:24px; font-weight:900; margin:0;">${total.toLocaleString()}</p></div>
-            <div style="width:1px; height:40px; background:#fecdd3;"></div>
-            <div style="text-align:center; flex:1;"><p style="font-size:12px; color:#9f1239; font-weight:bold; margin:0 0 4px;">الواصل</p><p style="font-size:24px; font-weight:900; margin:0; color:#be123c;">${paid.toLocaleString()}</p></div>
-            <div style="width:1px; height:40px; background:#fecdd3;"></div>
-            <div style="text-align:center; flex:1;"><p style="font-size:12px; color:#be123c; font-weight:bold; margin:0 0 4px;">المتبقي</p><p style="font-size:24px; font-weight:900; margin:0; color:#e11d48;">${remaining.toLocaleString()}</p></div>
-          </div>
-          <div style="margin-bottom:24px;">
-            <h3 style="font-size:16px; color:#374151; margin:0 0 12px;">سجل الزيارات</h3>
-            <table style="width:100%; text-align:right; background:white; border-radius:12px; overflow:hidden; border:1px solid #e5e7eb; border-collapse:collapse;">
-              <thead style="background:#f3f4f6; color:#4b5563;"><tr><th style="padding:12px; font-size:12px;">الزيارة</th><th style="padding:12px; font-size:12px;">التاريخ</th><th style="padding:12px; font-size:12px;">الخدمة</th><th style="padding:12px; font-size:12px;">المبلغ</th><th style="padding:12px; font-size:12px;">الواصل</th><th style="padding:12px; font-size:12px;">الباقي</th></tr></thead>
-              <tbody>${visitsHtml}</tbody>
-            </table>
-          </div>
-          ${payments.length > 0 ? `
+    const receiptHtml = `
+      <div style="width:380px; background:#fff; padding:0; direction:rtl; font-family:'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; border-radius:16px; overflow:hidden; border:1px solid #e5e7eb; box-shadow: 0 10px 25px -5px rgba(0,0,0,0.1);">
+        <div style="background:linear-gradient(135deg, ${bgColor} 0%, ${bgColor}cc 100%); padding:24px; color:white; display:flex; justify-content:space-between; align-items:center;">
           <div>
-            <h3 style="font-size:16px; color:#374151; margin:0 0 12px;">سجل الدفعات (السندات)</h3>
-            <table style="width:100%; text-align:right; background:white; border-radius:12px; overflow:hidden; border:1px solid #e5e7eb; border-collapse:collapse;">
-              <thead style="background:#fff1f2; color:#9f1239;"><tr><th style="padding:12px; font-size:12px;">المرجع</th><th style="padding:12px; font-size:12px;">التاريخ</th><th style="padding:12px; font-size:12px;">المبلغ</th><th style="padding:12px; font-size:12px;">طريقة الدفع</th><th style="padding:12px; font-size:12px;">مرتبطة بزيارة</th></tr></thead>
-              <tbody>${paymentsHtml}</tbody>
-            </table>
-          </div>` : ''}
-          <p style="text-align:center; font-size:12px; color:#9ca3af; margin-top:32px; border-top:1px solid #e5e7eb; padding-top:16px;">معتمد إلكترونياً - ${clinic?.name}</p>
+            <p style="font-size:10px; opacity:0.9; margin:0 0 4px; letter-spacing:2px; font-weight:600;">${title}</p>
+            <h2 style="font-size:20px; font-weight:900; margin:0; line-height:1.2;">${clinic?.name || "العيادة"}</h2>
+            <p style="font-size:11px; opacity:0.9; margin:4px 0 0;">سند استلام مبلغ</p>
+          </div>
+          ${clinic?.logo_url ? `<img src="${clinic.logo_url}" style="width:48px; height:48px; border-radius:10px; object-fit:cover; background:white; padding:2px;" />` : `<div style="width:48px; height:48px; background:rgba(255,255,255,0.2); border-radius:10px; display:flex; align-items:center; justify-content:center; font-size:20px;">🏥</div>`}
         </div>
-      `;
+        <div style="padding:24px; font-size:13px; color:#374151; display:flex; flex-direction:column; gap:10px;">
+          <div style="display:flex; justify-content:space-between;"><span>رقم المستند:</span><b style="color:#111; font-family:monospace;">${payload.code}</b></div>
+          <div style="display:flex; justify-content:space-between;"><span>التاريخ:</span><b style="color:#111;">${format(new Date(), "yyyy/MM/dd - hh:mm a")}</b></div>
+          <div style="display:flex; justify-content:space-between;"><span>المريض:</span><b style="color:#111;">${payload.name}</b></div>
+          <div style="display:flex; justify-content:space-between;"><span>الخدمة:</span><b style="color:#111;">${payload.service}</b></div>
+          ${payload.linkedVisit ? `<div style="display:flex; justify-content:space-between;"><span>مرتبطة بزيارة:</span><b style="color:${bgColor}; background:${colorCode}; padding:2px 6px; border-radius:4px; font-size:11px;">${payload.linkedVisit}</b></div>` : ''}
+          
+          ${payload.items && payload.items.length > 0 ? `
+            <div style="border-top:1px dashed #e5e7eb; margin:10px 0;"></div>
+            <p style="font-size:10px; font-weight:bold; color:#6b7280; margin-bottom:6px;">البنود:</p>
+            ${itemsHtml}
+          ` : ''}
 
-      const tempDiv = document.createElement("div");
-      tempDiv.style.position = "absolute";
-      tempDiv.style.left = "-9999px";
-      tempDiv.innerHTML = ledgerHtml;
-      document.body.appendChild(tempDiv);
+          ${payload.type === "promo" && payload.original ? `
+            <div style="border-top:1px dashed #e5e7eb; margin:10px 0;"></div>
+            <div style="background:${colorCode}; border:1px solid ${bgColor}40; padding:12px; border-radius:10px; display:flex; flex-direction:column; gap:6px;">
+              <div style="display:flex; justify-content:space-between; color:${textColor};"><span>السعر الأصلي:</span><s>${payload.original}</s></div>
+              <div style="display:flex; justify-content:space-between; color:${textColor};"><span>الخصم (${payload.discountType === 'percentage' ? payload.discount + '%' : 'مبلغ'}):</span><span style="color:#dc2626; font-weight:bold;">-${payload.discountType === 'percentage' ? calcDiscountAmount(payload.original, payload.discount || 0, 'percentage') : payload.discount}</span></div>
+            </div>
+          ` : ''}
 
-      const canvas = await html2canvas(tempDiv.firstElementChild as HTMLElement, { scale: 2, useCORS: true, backgroundColor: "#ffffff" });
-      const imgData = canvas.toDataURL("image/png");
-      document.body.removeChild(tempDiv);
+          <div style="border-top:1px dashed #e5e7eb; margin:10px 0;"></div>
+          <div style="background:${colorCode}; border:1px solid ${bgColor}40; padding:16px; border-radius:12px; display:flex; justify-content:space-between; align-items:center;">
+            <span style="font-weight:bold; color:${textColor};">المبلغ المستلم:</span>
+            <span style="font-size:24px; font-weight:900; color:${bgColor};">${Number(payload.amount).toLocaleString()}</span>
+          </div>
+          <div style="display:flex; justify-content:space-between; align-items:center; margin-top:10px; border-top:1px solid #f3f4f6; padding-top:10px;">
+            <div><p style="font-size:9px; color:#9ca3af; margin:0;">رمز التحقق:</p><p style="font-size:9px; font-family:monospace; color:#9ca3af; margin:0;">PAY-VERIFIED|${payload.code}</p></div>
+            <img src="https://api.qrserver.com/v1/create-qr-code/?size=80x80&data=${encodeURIComponent("PAY-VERIFIED|" + payload.code)}" style="width:40px; height:40px;" />
+          </div>
+          <p style="text-align:center; font-size:10px; color:#9ca3af; margin-top:12px;">معتمد إلكترونياً - ${clinic?.name}</p>
+        </div>
+      </div>
+    `;
 
-      await supabase.functions.invoke("telegram-bot", {
-        body: {
-          action: "send_receipt",
-          clinic_id: clinic?.id,
-          chat_id: tgId,
-          receipt_image: imgData,
-          reservation_code: "LEDGER",
-          patient_name: patientName,
-          service_name: "كشف حساب شامل",
-          amount: 0,
-          type: "ledger",
-          clinic_name: clinic?.name || "العيادة",
-        }
-      });
-    } catch (err) {
-      console.warn("[AUTO-LEDGER] فشل إرسال الكشف:", err);
-    } finally {
-      setSendingTelegram(false);
-    }
-  };
+    const tempDiv = document.createElement("div");
+    tempDiv.style.position = "absolute";
+    tempDiv.style.left = "-9999px";
+    tempDiv.innerHTML = receiptHtml;
+    document.body.appendChild(tempDiv);
 
-  const handlePayNow = async () => {
-    if (!selectedAppointment || !clinic) return;
-    setProcessingPayment(true);
+    const canvas = await html2canvas(tempDiv.firstElementChild as HTMLElement, { scale: 3, useCORS: true, backgroundColor: "#ffffff" });
+    const imgData = canvas.toDataURL("image/png");
+    document.body.removeChild(tempDiv);
 
-    const totalCost = round2(parseFloat(totalCostInput) || 0);
-    let paidNow = round2(parseFloat(paidAmountInput) || 0);
-    const discountValue = round2(parseFloat(discountInput) || 0);
-    const discType = selectedAppointment.discount_type || (selectedAppointment.is_promo ? "percentage" : "fixed");
-    
-    const discountCash = calcDiscountAmount(totalCost, discountValue, discType);
-    const finalPrice = round2(Math.max(0, totalCost - discountCash));
-    
-    if (paidNow > finalPrice && visitType !== "link") {
-      paidNow = finalPrice; 
-    }
-
-    const netCollected = paidNow; 
-    const patientId = selectedAppointment.patients?.id || selectedAppointment.patient_id || "";
-    const tgId = selectedAppointment.customer_telegram_id || selectedAppointment.patients?.telegram_user_id || "";
-
-    if (patientId && (editPatientName.trim() || editPatientPhone.trim())) {
-      const updateData: any = {};
-      if (editPatientName.trim()) updateData.name = editPatientName.trim();
-      if (editPatientPhone.trim() && !editPatientPhone.startsWith("tg:")) updateData.phone = editPatientPhone.trim();
-      await supabase.from("patients").update(updateData).eq("id", patientId);
-    }
-
-    let typeToSend: "paid" | "partial" | "promo" | "manual" | "previous" | "invoice" = "paid";
-
-    if (visitType === "link" && linkedVisitCode) {
-      const paymentRef = generatePaymentReference(editPatientPhone || "0000");
-      const notes = `تسديد دفعة للزيارة ${linkedVisitCode} [LINKED_VISIT:${linkedVisitCode}]`;
-
-      const { error: invError } = await supabase.from("invoices").insert({
-        clinic_id: clinic.id,
-        patient_name: editPatientName.trim() || "غير محدد",
-        patient_phone: editPatientPhone.trim() || "بدون رقم",
-        invoice_number: paymentRef,
-        items: [{ name: `تسديد دفعة (${linkedVisitCode})`, qty: 1, price: netCollected, linkedVisit: linkedVisitCode }],
-        subtotal: netCollected, discount_type: "fixed", discount_value: 0, discount_amount: 0, total_amount: netCollected, paid_status: "paid", paid_amount: netCollected, payment_method: paymentMethodInput, notes, paid_at: new Date(paymentDate).toISOString(),
-      });
-
-      if (invError) { toast({ title: "خطأ", description: invError.message, variant: "destructive" }); setProcessingPayment(false); return; }
-
-      const targetVisit = patientPreviousVisits.find(v => v.code === linkedVisitCode);
-      if (targetVisit) {
-        const { data: oldAppt } = await supabase.from("appointments").select("paid_amount, final_price").eq("reservation_code", linkedVisitCode).single();
-        if (oldAppt) {
-          const newPaid = round2((oldAppt.paid_amount || 0) + netCollected);
-          const isFullyPaid = newPaid >= (oldAppt.final_price || 0);
-          await supabase.from("appointments").update({ paid_amount: newPaid, payment_status: isFullyPaid ? "paid" : "partial" }).eq("reservation_code", linkedVisitCode);
-        }
+    await supabase.functions.invoke("telegram-bot", {
+      body: {
+        action: "send_receipt",
+        clinic_id: clinic?.id,
+        chat_id: payload.tgId,
+        receipt_image: imgData,
+        reservation_code: payload.code,
+        patient_name: payload.name,
+        service_name: payload.service,
+        amount: payload.amount,
+        type: payload.type,
+        clinic_name: clinic?.name || "العيادة",
       }
-
-      toast({ title: "✅ تم تسجيل الدفعة للسابق", description: `المرجع: ${paymentRef}` });
-      typeToSend = "previous";
-      setSelectedAppointment(null);
-
-    } else {
-      const totalPaidNow = round2((selectedAppointment.paid_amount || 0) + netCollected);
-      const isFullyPaid = totalPaidNow >= finalPrice || visitType === "followup";
-      typeToSend = selectedAppointment.is_promo ? "promo" : (isFullyPaid ? "paid" : "partial");
-
-      const updatePayload: any = {
-        payment_status: isFullyPaid ? "paid" : "partial",
-        status: "confirmed",
-        department: "صندوق",
-        paid_amount: totalPaidNow,
-        discount_amount: discountValue,
-        discount_applied: discountCash,
-        discount_type: discType,
-        payment_method: paymentMethodInput,
-        payment_time: new Date(paymentDate).toISOString(),
-        final_price: finalPrice,
-        original_price: totalCost
-      };
-
-      if (selectedAppointment.is_promo) {
-        updatePayload.is_promo = true;
-        updatePayload.promo_code = selectedAppointment.promo_code;
-      }
-
-      const { error } = await supabase.from("appointments").update(updatePayload).eq("id", selectedAppointment.id).eq("clinic_id", clinic.id);
-      if (error) {
-        toast({ title: "خطأ", description: "فشل تحديث حالة الدفع", variant: "destructive" });
-        setProcessingPayment(false);
-        return;
-      }
-
-      toast({ title: isFullyPaid ? "✅ تم سداد الزيارة بالكامل" : "✅ تم تسجيل دفعة جزئية", description: `الواصل الآن: ${totalPaidNow.toLocaleString()}` });
-
-      setSelectedAppointment({
-        ...selectedAppointment,
-        payment_status: isFullyPaid ? "paid" : "partial",
-        paid_amount: totalPaidNow,
-        final_price: finalPrice,
-        payment_method: paymentMethodInput,
-      });
-      setShowReceipt(true);
-    }
-
-    setProcessingPayment(false);
-    fetchAppointments();
-    fetchInvoices();
-    
-    setTimeout(async () => {
-       await autoSendToTelegram({
-         type: typeToSend,
-         code: linkedVisitCode || selectedAppointment.reservation_code,
-         name: editPatientName,
-         service: selectedAppointment.services?.name || "فحص طبي",
-         amount: netCollected,
-         tgId: tgId,
-         linkedVisit: linkedVisitCode || undefined,
-         original: totalCost,
-         discount: discountValue,
-         discountType: discType
-       });
-       
-       await sendTelegramLedger(editPatientName, editPatientPhone);
-    }, 1000);
-  };
-
-  const addWalkIn = async () => {
-    if (!clinic || !patientNameInput.trim()) return;
-    const { data: patient, error: patientError } = await supabase.from("patients").insert({ clinic_id: clinic.id, name: patientNameInput.trim(), phone: patientPhoneInput.trim() || "بدون هاتف" }).select("id").single();
-    if (patientError || !patient) { toast({ title: "خطأ", variant: "destructive" }); return; }
-    const code = `WI-${Math.floor(1000 + Math.random() * 9000)}`;
-    const { error } = await supabase.from("appointments").insert({ clinic_id: clinic.id, patient_id: patient.id, date: today, time: format(new Date(), "HH:mm"), status: "confirmed", reservation_code: code, arrived_at: new Date().toISOString(), payment_status: "paid", is_walk_in: true, department: "صندوق" });
-    if (error) toast({ title: "خطأ", variant: "destructive" });
-    else { toast({ title: "تمت الإضافة", description: code }); setWalkInOpen(false); setPatientNameInput(""); setPatientPhoneInput(""); fetchAppointments(); }
-  };
-
-  const handleAddExpense = async () => {
-    if (!clinic) return;
-    if (!expenseTitle.trim() || !expenseAmount || parseFloat(expenseAmount) <= 0) { toast({ title: "بيانات غير مكتملة", variant: "destructive" }); return; }
-    const { error } = await supabase.from("expenses").insert({ clinic_id: clinic.id, title: expenseTitle.trim(), amount: parseFloat(expenseAmount), category: expenseCategory, expense_date: expenseDate, expense_time: expenseTime + ":00" });
-    if (error) { toast({ title: "خطأ", description: "فشل حفظ المصروف", variant: "destructive" }); return; }
-    toast({ title: "✅ تم تسجيل المصروف" }); setExpenseTitle(""); setExpenseAmount(""); setExpenseModalOpen(false); fetchExpenses();
-  };
-
-  const generateReceiptCanvas = async (): Promise<HTMLCanvasElement> => {
-    const element = document.getElementById("receipt-export-container");
-    if (!element) throw new Error("عنصر السند غير متوفر");
-    return await html2canvas(element, { scale: 3, useCORS: true, backgroundColor: "#ffffff" });
-  };
-
-  const downloadReceipt = async () => {
-    try {
-      const canvas = await generateReceiptCanvas();
-      const link = document.createElement("a");
-      link.href = canvas.toDataURL("image/png");
-      link.download = `سند_${selectedAppointment?.reservation_code || "receipt"}.png`;
-      link.click();
-    } catch (_) { toast({ title: "خطأ", variant: "destructive" }); }
-  };
-
-  const printReceipt = async () => {
-    try {
-      const canvas = await generateReceiptCanvas();
-      const imgData = canvas.toDataURL("image/png");
-      const win = window.open("", "_blank");
-      if (win) { win.document.write(`<html><head><title>طباعة</title></head><body style="margin:0;display:flex;align-items:center;justify-content:center;min-height:100vh;background:#f4f4f5;"><img src="${imgData}" style="max-width:100%;height:auto;" onload="window.print();window.close();" /></body></html>`); win.document.close(); }
-    } catch (_) { toast({ title: "خطأ", variant: "destructive" }); }
-  };
-
-  const sendViaWhatsApp = async () => {
-    if (!selectedAppointment) return;
-    const rawPhone = editPatientPhone || selectedAppointment.extracted_patient_phone || selectedAppointment.patients?.phone || "";
-    const waPhone = cleanPhoneForWhatsApp(rawPhone);
-    if (!waPhone) { toast({ title: "❌ لا يوجد رقم صحيح", variant: "destructive" }); return; }
-    setSendingReceipt(true);
-    try {
-      const canvas = await generateReceiptCanvas();
-      const imgData = canvas.toDataURL("image/png");
-      const link = document.createElement("a"); link.href = imgData; link.download = `سند_${selectedAppointment.reservation_code}.png`; link.click();
-      const patientName = editPatientName || selectedAppointment.extracted_patient_name || "المريض";
-      const netAmt = selectedAppointment.paid_amount || 0;
-      const msg = encodeURIComponent(`🧾 سند دفع - ${clinic?.name || "العيادة"}\n━━━━━━━━━━━━━━━\n👤 ${patientName}\n🔖 ${selectedAppointment.reservation_code}\n💊 ${selectedAppointment.services?.name || "فحص طبي"}\n💰 ${netAmt.toLocaleString()}\n📅 ${format(new Date(), "yyyy/MM/dd - hh:mm a")}`);
-      setTimeout(() => { window.open(`https://wa.me/${waPhone}?text=${msg}`, "_blank"); }, 800);
-      toast({ title: "✅ تم حفظ السند وفتح الواتساب" });
-    } catch { toast({ title: "خطأ", variant: "destructive" }); }
-    finally { setSendingReceipt(false); }
-  };
-
-  const sendViaTelegram = async () => {
-    if (!selectedAppointment) return;
-    const tgUserId = selectedAppointment.customer_telegram_id || selectedAppointment.patients?.telegram_user_id;
-    if (!tgUserId) { toast({ title: "❌ المريض غير مسجل عبر تلجرام", variant: "destructive" }); return; }
-    
-    const typeToSend = selectedAppointment.is_promo ? "promo" : (selectedAppointment.payment_status === "partial" ? "partial" : "paid");
-    
-    await autoSendToTelegram({
-      type: typeToSend,
-      code: selectedAppointment.reservation_code,
-      name: editPatientName,
-      service: selectedAppointment.services?.name || "فحص طبي",
-      amount: selectedAppointment.paid_amount || 0,
-      tgId: tgUserId
     });
-  };
+  } catch (err) {
+    console.warn("[AUTO-RECEIPT] فشل إرسال السند:", err);
+  } finally {
+    setSendingTelegram(false);
+  }
+};
 
-  const getUniquePaymentToken = (appointment: Appointment) => {
-    const netPaid = appointment.paid_amount || 0;
-    return `PAY-VERIFIED|${appointment.reservation_code || "PAY"}|${netPaid}|${appointment.id.slice(0, 6).toUpperCase()}`;
-  };
+const sendTelegramLedger = async (patientName: string, phone: string): Promise<boolean> => {
+  setSendingTelegram(true);
+  try {
+    let tgId = "";
 
-  const openCreateInvoice = () => {
-    setInvPatientName(""); setInvPatientPhone(""); setInvItems([{ name: "", qty: 1, price: 0 }]); setInvDiscountType("fixed"); setInvDiscountValue("0"); setInvPaymentMethod("نقدي"); setInvNotes(""); setCreateInvoiceOpen(true);
-  };
+    if (phone && phone !== "بدون رقم") {
+      const { data: pData } = await supabase.from("patients")
+        .select("id, telegram_user_id")
+        .eq("clinic_id", clinic?.id)
+        .eq("phone", phone)
+        .maybeSingle();
+      if (pData?.telegram_user_id) tgId = pData.telegram_user_id;
+    }
 
-  const addInvoiceItem = () => setInvItems(prev => [...prev, { name: "", qty: 1, price: 0 }]);
-  const updateInvoiceItem = (index: number, patch: Partial<InvoiceItem>) => setInvItems(prev => prev.map((it, i) => i === index ? { ...it, ...patch } : it));
-  const removeInvoiceItem = (index: number) => setInvItems(prev => prev.filter((_, i) => i !== index));
-  const calcInvoiceSubtotal = (): number => round2(invItems.reduce((s, it) => s + (Number(it.qty) || 0) * (Number(it.price) || 0), 0));
-  const calcInvoiceDiscount = (subtotal: number): number => calcDiscountAmount(subtotal, parseFloat(invDiscountValue) || 0, invDiscountType);
+    if (!tgId) {
+      const pVisits = invoiceAppointments.find(a => {
+        const info = extractCleanInfo(a);
+        return (phone && phone !== "بدون رقم" && info.cleanPhone === phone) ||
+               (patientName && info.cleanName === patientName);
+      });
+      if (pVisits) tgId = pVisits.customer_telegram_id || pVisits.patients?.telegram_user_id || "";
+    }
 
-  const handleSaveInvoice = async () => {
-    if (!clinic) return;
-    const subtotal = calcInvoiceSubtotal();
-    if (subtotal <= 0) { toast({ title: "❌ أضف بنداً بسعر صحيح", variant: "destructive" }); return; }
-    setInvSaving(true);
-    try {
-      const discountAmount = calcInvoiceDiscount(subtotal);
-      const totalAmount = round2(Math.max(0, subtotal - discountAmount));
-      const invoiceNumber = `INV-${Date.now().toString().slice(-6)}${Math.floor(Math.random() * 100)}`;
+    if (!tgId && patientName) {
+      const { data: apptData } = await supabase.from("appointments")
+        .select("customer_telegram_id, patients!inner(name, telegram_user_id)")
+        .eq("clinic_id", clinic?.id)
+        .eq("patients.name", patientName)
+        .not("customer_telegram_id", "is", null)
+        .limit(1)
+        .maybeSingle();
+      if (apptData) tgId = apptData.customer_telegram_id || (apptData as any).patients?.telegram_user_id || "";
+    }
+
+    if (!tgId) { return false; }
+
+    let appts: any[] = [];
+    const { data: pData2 } = await supabase.from("patients")
+      .select("id")
+      .eq("clinic_id", clinic?.id)
+      .eq("phone", phone)
+      .maybeSingle();
+
+    if (pData2?.id) {
+      const { data } = await supabase.from("appointments")
+        .select("reservation_code, date, final_price, paid_amount, services(name), payment_status")
+        .eq("clinic_id", clinic?.id)
+        .eq("patient_id", pData2.id);
+      appts = data || [];
+    } else if (phone && phone !== "بدون رقم") {
+      const { data } = await supabase.from("appointments")
+        .select("reservation_code, date, final_price, paid_amount, services(name), payment_status, patients!inner(phone)")
+        .eq("clinic_id", clinic?.id)
+        .eq("patients.phone", phone);
+      appts = data || [];
+    }
+
+    const filters: string[] = [];
+    if (phone && phone !== "بدون رقم") filters.push(`patient_phone.eq.${phone}`);
+    if (patientName) filters.push(`patient_name.eq.${patientName}`);
+    const orFilter = filters.length ? filters.join(",") : "id.eq.00000000-0000-0000-0000-000000000000";
+
+    const { data: invs } = await supabase.from("invoices")
+      .select("*")
+      .eq("clinic_id", clinic?.id)
+      .or(orFilter);
+
+    const validAppts = appts.filter(a => a.payment_status === "paid" || a.payment_status === "partial" || Number(a.paid_amount) > 0);
+
+    const visits = validAppts.map(a => ({
+        code: a.reservation_code,
+        date: a.date,
+        service: a.services?.name || "فحص",
+        amount: round2(Number(a.final_price || 0)),
+        paid: round2(Number(a.paid_amount || 0))
+    })).sort((a,b) => new Date(b.date).getTime() - new Date(a.date).getTime());
+
+    const payments = (invs || []).filter(i => isPaymentRecord(i as any)).map(i => ({
+        ref: i.invoice_number,
+        date: i.created_at.split('T')[0],
+        amount: round2(Number(i.total_amount || 0)),
+        method: i.payment_method || "—",
+        linkedVisit: extractLinkedVisit(i as any) || "—"
+    })).sort((a,b) => new Date(b.date).getTime() - new Date(a.date).getTime());
+
+    const total = round2(visits.reduce((s, v) => s + v.amount, 0));
+    const paid = round2(visits.reduce((s, v) => s + v.paid, 0));
+    const remaining = round2(Math.max(0, total - paid));
+
+    const visitsHtml = visits.map((v: any) => `
+      <tr>
+        <td style="padding:10px; border-bottom:1px solid #f3f4f6; font-family:monospace; font-size:12px;">${v.code || "—"}</td>
+        <td style="padding:10px; border-bottom:1px solid #f3f4f6; font-size:12px;">${v.date || "—"}</td>
+        <td style="padding:10px; border-bottom:1px solid #f3f4f6; font-size:12px;">${v.service || "—"}</td>
+        <td style="padding:10px; border-bottom:1px solid #f3f4f6; font-weight:bold; font-size:12px;">${v.amount.toLocaleString()}</td>
+        <td style="padding:10px; border-bottom:1px solid #f3f4f6; font-weight:bold; color:#059669; font-size:12px;">${v.paid.toLocaleString()}</td>
+        <td style="padding:10px; border-bottom:1px solid #f3f4f6; font-weight:bold; color:#dc2626; font-size:12px;">${(v.amount - v.paid).toLocaleString()}</td>
+      </tr>
+    `).join("");
+
+    const paymentsHtml = payments.map((p: any) => `
+      <tr>
+        <td style="padding:10px; border-bottom:1px solid #f3f4f6; font-family:monospace; font-size:12px; color:#059669;">${p.ref || "—"}</td>
+        <td style="padding:10px; border-bottom:1px solid #f3f4f6; font-size:12px;">${p.date || "—"}</td>
+        <td style="padding:10px; border-bottom:1px solid #f3f4f6; font-weight:bold; color:#059669; font-size:12px;">${p.amount.toLocaleString()}</td>
+        <td style="padding:10px; border-bottom:1px solid #f3f4f6; font-size:12px;">${p.method || "—"}</td>
+        <td style="padding:10px; border-bottom:1px solid #f3f4f6; font-size:12px;">${p.linkedVisit || "—"}</td>
+      </tr>
+    `).join("");
+
+    const ledgerHtml = `
+      <div style="width:800px; background:#f9fafb; padding:40px; direction:rtl; font-family:'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;">
+        <div style="background:linear-gradient(135deg, #e11d48 0%, #be123c 100%); padding:30px; color:white; border-radius:16px; margin-bottom:24px; display:flex; justify-content:space-between; align-items:center;">
+          <div>
+            <h1 style="font-size:24px; font-weight:bold; margin:0 0 8px;">${clinic?.name} - كشف حساب شامل</h1>
+            <p style="margin:4px 0; font-size:14px; opacity:0.9;">المريض: ${patientName} | ${phone}</p>
+            <p style="margin:4px 0; font-size:14px; opacity:0.9;">التاريخ: ${format(new Date(), "yyyy/MM/dd")}</p>
+          </div>
+          ${clinic?.logo_url ? `<img src="${clinic.logo_url}" style="width:80px; height:80px; border-radius:12px; object-fit:cover; background:white; padding:4px;" />` : ''}
+        </div>
+        <div style="display:flex; justify-content:space-between; align-items:center; background:#fff1f2; padding:24px; border-radius:12px; border:1px solid #fecdd3; margin-bottom:24px;">
+          <div style="text-align:center; flex:1;"><p style="font-size:12px; color:#9f1239; font-weight:bold; margin:0 0 4px;">الإجمالي</p><p style="font-size:24px; font-weight:900; margin:0;">${total.toLocaleString()}</p></div>
+          <div style="width:1px; height:40px; background:#fecdd3;"></div>
+          <div style="text-align:center; flex:1;"><p style="font-size:12px; color:#9f1239; font-weight:bold; margin:0 0 4px;">الواصل</p><p style="font-size:24px; font-weight:900; margin:0; color:#be123c;">${paid.toLocaleString()}</p></div>
+          <div style="width:1px; height:40px; background:#fecdd3;"></div>
+          <div style="text-align:center; flex:1;"><p style="font-size:12px; color:#be123c; font-weight:bold; margin:0 0 4px;">المتبقي</p><p style="font-size:24px; font-weight:900; margin:0; color:#e11d48;">${remaining.toLocaleString()}</p></div>
+        </div>
+        <div style="margin-bottom:24px;">
+          <h3 style="font-size:16px; color:#374151; margin:0 0 12px;">سجل الزيارات</h3>
+          <table style="width:100%; text-align:right; background:white; border-radius:12px; overflow:hidden; border:1px solid #e5e7eb; border-collapse:collapse;">
+            <thead style="background:#f3f4f6; color:#4b5563;"><tr><th style="padding:12px; font-size:12px;">الزيارة</th><th style="padding:12px; font-size:12px;">التاريخ</th><th style="padding:12px; font-size:12px;">الخدمة</th><th style="padding:12px; font-size:12px;">المبلغ</th><th style="padding:12px; font-size:12px;">الواصل</th><th style="padding:12px; font-size:12px;">الباقي</th></tr></thead>
+            <tbody>${visitsHtml}</tbody>
+          </table>
+        </div>
+        ${payments.length > 0 ? `
+        <div>
+          <h3 style="font-size:16px; color:#374151; margin:0 0 12px;">سجل الدفعات (السندات)</h3>
+          <table style="width:100%; text-align:right; background:white; border-radius:12px; overflow:hidden; border:1px solid #e5e7eb; border-collapse:collapse;">
+            <thead style="background:#fff1f2; color:#9f1239;"><tr><th style="padding:12px; font-size:12px;">المرجع</th><th style="padding:12px; font-size:12px;">التاريخ</th><th style="padding:12px; font-size:12px;">المبلغ</th><th style="padding:12px; font-size:12px;">طريقة الدفع</th><th style="padding:12px; font-size:12px;">مرتبطة بزيارة</th></tr></thead>
+            <tbody>${paymentsHtml}</tbody>
+          </table>
+        </div>` : ''}
+        <p style="text-align:center; font-size:12px; color:#9ca3af; margin-top:32px; border-top:1px solid #e5e7eb; padding-top:16px;">معتمد إلكترونياً - ${clinic?.name}</p>
+      </div>
+    `;
+
+    const tempDiv = document.createElement("div");
+    tempDiv.style.position = "absolute";
+    tempDiv.style.left = "-9999px";
+    tempDiv.innerHTML = ledgerHtml;
+    document.body.appendChild(tempDiv);
+
+    const canvas = await html2canvas(tempDiv.firstElementChild as HTMLElement, { scale: 2, useCORS: true, backgroundColor: "#ffffff" });
+    const imgData = canvas.toDataURL("image/png");
+    document.body.removeChild(tempDiv);
+
+    await supabase.functions.invoke("telegram-bot", {
+      body: {
+        action: "send_receipt",
+        clinic_id: clinic?.id,
+        chat_id: tgId,
+        receipt_image: imgData,
+        reservation_code: "LEDGER",
+        patient_name: patientName,
+        service_name: "كشف حساب شامل",
+        amount: 0,
+        type: "ledger",
+        clinic_name: clinic?.name || "العيادة",
+      }
+    });
+    return true;
+  } catch (err) {
+    console.warn("[AUTO-LEDGER] فشل إرسال الكشف:", err);
+    return false;
+  } finally {
+    setSendingTelegram(false);
+  }
+};
+
+const handlePayNow = async () => {
+  if (!selectedAppointment || !clinic) return;
+  setProcessingPayment(true);
+
+  const totalCost = round2(parseFloat(totalCostInput) || 0);
+  let paidNow = round2(parseFloat(paidAmountInput) || 0);
+  const discountValue = round2(parseFloat(discountInput) || 0);
+  const discType = selectedAppointment.discount_type || (selectedAppointment.is_promo ? "percentage" : "fixed");
+  
+  const discountCash = calcDiscountAmount(totalCost, discountValue, discType);
+  const finalPrice = round2(Math.max(0, totalCost - discountCash));
+
+  if (visitType !== "link") {
+    const alreadyPaid = round2(selectedAppointment.paid_amount || 0);
+    const maxPayable = round2(Math.max(0, finalPrice - alreadyPaid));
+    if (paidNow > maxPayable) paidNow = maxPayable;
+  }
+
+  const netCollected = paidNow; 
+  const patientId = selectedAppointment.patients?.id || selectedAppointment.patient_id || "";
+  const tgId = selectedAppointment.customer_telegram_id || selectedAppointment.patients?.telegram_user_id || "";
+
+  if (patientId && (editPatientName.trim() || editPatientPhone.trim())) {
+    const updateData: any = {};
+    if (editPatientName.trim()) updateData.name = editPatientName.trim();
+    if (editPatientPhone.trim() && !editPatientPhone.startsWith("tg:")) updateData.phone = editPatientPhone.trim();
+    await supabase.from("patients").update(updateData).eq("id", patientId);
+  }
+
+  let typeToSend: "paid" | "partial" | "promo" | "manual" | "previous" | "invoice" = "paid";
+
+  if (visitType === "link" && linkedVisitCode) {
+    const paymentRef = generatePaymentReference(editPatientPhone || "0000");
+    const notes = `تسديد دفعة للزيارة ${linkedVisitCode} [LINKED_VISIT:${linkedVisitCode}]`;
+
+    const { error: invError } = await supabase.from("invoices").insert({
+      clinic_id: clinic.id,
+      patient_name: editPatientName.trim() || "غير محدد",
+      patient_phone: editPatientPhone.trim() || "بدون رقم",
+      invoice_number: paymentRef,
+      items: [{ name: `تسديد دفعة (${linkedVisitCode})`, qty: 1, price: netCollected, linkedVisit: linkedVisitCode }],
+      subtotal: netCollected, discount_type: "fixed", discount_value: 0, discount_amount: 0, total_amount: netCollected, paid_status: "paid", paid_amount: netCollected, payment_method: paymentMethodInput, notes, paid_at: new Date(paymentDate).toISOString(),
+    });
+
+    if (invError) { toast({ title: "خطأ", description: invError.message, variant: "destructive" }); setProcessingPayment(false); return; }
+
+    const targetVisit = patientPreviousVisits.find(v => v.code === linkedVisitCode);
+    if (targetVisit) {
+      const { data: oldAppt } = await supabase.from("appointments").select("paid_amount, final_price").eq("reservation_code", linkedVisitCode).single();
+      if (oldAppt) {
+        const newPaid = round2((oldAppt.paid_amount || 0) + netCollected);
+        const isFullyPaid = newPaid >= (oldAppt.final_price || 0);
+        await supabase.from("appointments").update({ paid_amount: newPaid, payment_status: isFullyPaid ? "paid" : "partial" }).eq("reservation_code", linkedVisitCode);
+      }
+    }
+
+    toast({ title: "✅ تم تسجيل الدفعة للسابق", description: `المرجع: ${paymentRef}` });
+    typeToSend = "previous";
+    setSelectedAppointment(null);
+
+  } else {
+    const totalPaidNow = round2((selectedAppointment.paid_amount || 0) + netCollected);
+    const isFullyPaid = totalPaidNow >= finalPrice || visitType === "followup";
+    typeToSend = selectedAppointment.is_promo ? "promo" : (isFullyPaid ? "paid" : "partial");
+
+    const updatePayload: any = {
+      payment_status: isFullyPaid ? "paid" : "partial",
+      status: "confirmed",
+      department: "صندوق",
+      paid_amount: totalPaidNow,
+      discount_amount: discountValue,
+      discount_applied: discountCash,
+      discount_type: discType,
+      payment_method: paymentMethodInput,
+      payment_time: new Date(paymentDate).toISOString(),
+      final_price: finalPrice,
+      original_price: totalCost
+    };
+
+    if (selectedAppointment.is_promo) {
+      updatePayload.is_promo = true;
+      updatePayload.promo_code = selectedAppointment.promo_code;
+    }
+
+    const { error } = await supabase.from("appointments").update(updatePayload).eq("id", selectedAppointment.id).eq("clinic_id", clinic.id);
+    if (error) {
+      toast({ title: "خطأ", description: "فشل تحديث حالة الدفع", variant: "destructive" });
+      setProcessingPayment(false);
+      return;
+    }
+
+    toast({ title: isFullyPaid ? "✅ تم سداد الزيارة بالكامل" : "✅ تم تسجيل دفعة جزئية", description: `الواصل الآن: ${totalPaidNow.toLocaleString()}` });
+
+    setSelectedAppointment({
+      ...selectedAppointment,
+      payment_status: isFullyPaid ? "paid" : "partial",
+      paid_amount: totalPaidNow,
+      final_price: finalPrice,
+      payment_method: paymentMethodInput,
+    });
+    setShowReceipt(true);
+  }
+
+  setProcessingPayment(false);
+  fetchAppointments();
+  fetchInvoices();
+  
+  setTimeout(async () => {
+     await autoSendToTelegram({
+       type: typeToSend,
+       code: linkedVisitCode || selectedAppointment.reservation_code,
+       name: editPatientName,
+       service: selectedAppointment.services?.name || "فحص طبي",
+       amount: netCollected,
+       tgId: tgId,
+       linkedVisit: linkedVisitCode || undefined,
+       original: totalCost,
+       discount: discountValue,
+       discountType: discType
+     });
+     
+     await sendTelegramLedger(editPatientName, editPatientPhone);
+  }, 1000);
+};
+
+const addWalkIn = async () => {
+  if (!clinic || !patientNameInput.trim()) return;
+  const { data: patient, error: patientError } = await supabase.from("patients").insert({ clinic_id: clinic.id, name: patientNameInput.trim(), phone: patientPhoneInput.trim() || "بدون هاتف" }).select("id").single();
+  if (patientError || !patient) { toast({ title: "خطأ", variant: "destructive" }); return; }
+  const code = `WI-${Math.floor(1000 + Math.random() * 9000)}`;
+  const { error } = await supabase.from("appointments").insert({ clinic_id: clinic.id, patient_id: patient.id, date: today, time: format(new Date(), "HH:mm"), status: "confirmed", reservation_code: code, arrived_at: new Date().toISOString(), payment_status: "paid", is_walk_in: true, department: "صندوق" });
+  if (error) toast({ title: "خطأ", variant: "destructive" });
+  else { toast({ title: "تمت الإضافة", description: code }); setWalkInOpen(false); setPatientNameInput(""); setPatientPhoneInput(""); fetchAppointments(); }
+};
+
+const handleAddExpense = async () => {
+  if (!clinic) return;
+  if (!expenseTitle.trim() || !expenseAmount || parseFloat(expenseAmount) <= 0) { toast({ title: "بيانات غير مكتملة", variant: "destructive" }); return; }
+  const { error } = await supabase.from("expenses").insert({ clinic_id: clinic.id, title: expenseTitle.trim(), amount: parseFloat(expenseAmount), category: expenseCategory, expense_date: expenseDate, expense_time: expenseTime + ":00" });
+  if (error) { toast({ title: "خطأ", description: "فشل حفظ المصروف", variant: "destructive" }); return; }
+  toast({ title: "✅ تم تسجيل المصروف" }); setExpenseTitle(""); setExpenseAmount(""); setExpenseModalOpen(false); fetchExpenses();
+};
+
+const generateReceiptCanvas = async (): Promise<HTMLCanvasElement> => {
+  const element = document.getElementById("receipt-export-container");
+  if (!element) throw new Error("عنصر السند غير متوفر");
+  return await html2canvas(element, { scale: 3, useCORS: true, backgroundColor: "#ffffff" });
+};
+
+const downloadReceipt = async () => {
+  try {
+    const canvas = await generateReceiptCanvas();
+    const link = document.createElement("a");
+    link.href = canvas.toDataURL("image/png");
+    link.download = `سند_${selectedAppointment?.reservation_code || "receipt"}.png`;
+    link.click();
+  } catch (_) { toast({ title: "خطأ", variant: "destructive" }); }
+};
+
+const printReceipt = async () => {
+  try {
+    const canvas = await generateReceiptCanvas();
+    const imgData = canvas.toDataURL("image/png");
+    const win = window.open("", "_blank");
+    if (win) { win.document.write(`<html><head><title>طباعة</title></head><body style="margin:0;display:flex;align-items:center;justify-content:center;min-height:100vh;background:#f4f4f5;"><img src="${imgData}" style="max-width:100%;height:auto;" onload="window.print();window.close();" /></body></html>`); win.document.close(); }
+  } catch (_) { toast({ title: "خطأ", variant: "destructive" }); }
+};
+
+const sendViaWhatsApp = async () => {
+  if (!selectedAppointment) return;
+  const rawPhone = editPatientPhone || selectedAppointment.extracted_patient_phone || selectedAppointment.patients?.phone || "";
+  const waPhone = cleanPhoneForWhatsApp(rawPhone);
+  if (!waPhone) { toast({ title: "❌ لا يوجد رقم صحيح", variant: "destructive" }); return; }
+  setSendingReceipt(true);
+  try {
+    const canvas = await generateReceiptCanvas();
+    const imgData = canvas.toDataURL("image/png");
+    const link = document.createElement("a"); link.href = imgData; link.download = `سند_${selectedAppointment.reservation_code}.png`; link.click();
+    const patientName = editPatientName || selectedAppointment.extracted_patient_name || "المريض";
+    const netAmt = selectedAppointment.paid_amount || 0;
+    const msg = encodeURIComponent(`🧾 سند دفع - ${clinic?.name || "العيادة"}\n━━━━━━━━━━━━━━━\n👤 ${patientName}\n🔖 ${selectedAppointment.reservation_code}\n💊 ${selectedAppointment.services?.name || "فحص طبي"}\n💰 ${netAmt.toLocaleString()}\n📅 ${format(new Date(), "yyyy/MM/dd - hh:mm a")}`);
+    setTimeout(() => { window.open(`https://wa.me/${waPhone}?text=${msg}`, "_blank"); }, 800);
+    toast({ title: "✅ تم حفظ السند وفتح الواتساب" });
+  } catch { toast({ title: "خطأ", variant: "destructive" }); }
+  finally { setSendingReceipt(false); }
+};
+
+const sendViaTelegram = async () => {
+  if (!selectedAppointment) return;
+  const tgUserId = selectedAppointment.customer_telegram_id || selectedAppointment.patients?.telegram_user_id;
+  if (!tgUserId) { toast({ title: "❌ المريض غير مسجل عبر تلجرام", variant: "destructive" }); return; }
+  
+  const typeToSend = selectedAppointment.is_promo ? "promo" : (selectedAppointment.payment_status === "partial" ? "partial" : "paid");
+  
+  await autoSendToTelegram({
+    type: typeToSend,
+    code: selectedAppointment.reservation_code,
+    name: editPatientName,
+    service: selectedAppointment.services?.name || "فحص طبي",
+    amount: selectedAppointment.paid_amount || 0,
+    tgId: tgUserId
+  });
+};
+
+const getUniquePaymentToken = (appointment: Appointment) => {
+  const netPaid = appointment.paid_amount || 0;
+  return `PAY-VERIFIED|${appointment.reservation_code || "PAY"}|${netPaid}|${appointment.id.slice(0, 6).toUpperCase()}`;
+};
+
+const openCreateInvoice = () => {
+  setInvPatientName(""); setInvPatientPhone(""); setInvItems([{ name: "", qty: 1, price: 0 }]); setInvDiscountType("fixed"); setInvDiscountValue("0"); setInvPaymentMethod("نقدي"); setInvNotes(""); setCreateInvoiceOpen(true);
+};
+
+const addInvoiceItem = () => setInvItems(prev => [...prev, { name: "", qty: 1, price: 0 }]);
+const updateInvoiceItem = (index: number, patch: Partial<InvoiceItem>) => setInvItems(prev => prev.map((it, i) => i === index ? { ...it, ...patch } : it));
+const removeInvoiceItem = (index: number) => setInvItems(prev => prev.filter((_, i) => i !== index));
+const calcInvoiceSubtotal = (): number => round2(invItems.reduce((s, it) => s + (Number(it.qty) || 0) * (Number(it.price) || 0), 0));
+const calcInvoiceDiscount = (subtotal: number): number => calcDiscountAmount(subtotal, parseFloat(invDiscountValue) || 0, invDiscountType);
+
+const handleSaveInvoice = async () => {
+  if (!clinic) return;
+  const subtotal = calcInvoiceSubtotal();
+  if (subtotal <= 0) { toast({ title: "❌ أضف بنداً بسعر صحيح", variant: "destructive" }); return; }
+  setInvSaving(true);
+  try {
+    const discountAmount = calcInvoiceDiscount(subtotal);
+    const totalAmount = round2(Math.max(0, subtotal - discountAmount));
+    const invoiceNumber = `INV-${Date.now().toString().slice(-6)}${Math.floor(Math.random() * 100)}`;
+    
+    const newInvoiceData = { clinic_id: clinic.id, patient_name: invPatientName.trim() || null, patient_phone: invPatientPhone.trim() || null, invoice_number: invoiceNumber, items: invItems.filter(it => it.name.trim() && Number(it.price) > 0), subtotal, discount_type: invDiscountType, discount_value: parseFloat(invDiscountValue) || 0, discount_amount: discountAmount, total_amount: totalAmount, paid_status: "paid", paid_amount: totalAmount, payment_method: invPaymentMethod, notes: invNotes.trim() || null, paid_at: new Date().toISOString() };
+
+    const { data: inserted, error } = await supabase.from("invoices").insert(newInvoiceData).select().single();
+    if (error) throw error;
+    
+    toast({ title: "✅ تم إنشاء الفاتورة", description: invoiceNumber });
+    setCreateInvoiceOpen(false);
+    
+    if (inserted) { 
+      setSelectedInvoice({ ...inserted, payment_reference: undefined, linked_visit_code: null } as Invoice); 
       
-      const newInvoiceData = { clinic_id: clinic.id, patient_name: invPatientName.trim() || null, patient_phone: invPatientPhone.trim() || null, invoice_number: invoiceNumber, items: invItems.filter(it => it.name.trim() && Number(it.price) > 0), subtotal, discount_type: invDiscountType, discount_value: parseFloat(invDiscountValue) || 0, discount_amount: discountAmount, total_amount: totalAmount, paid_status: "paid", paid_amount: totalAmount, payment_method: invPaymentMethod, notes: invNotes.trim() || null, paid_at: new Date().toISOString() };
+      const phoneTrimmed = invPatientPhone.trim();
+      if (phoneTrimmed) {
+        let tgId = "";
+        const { data: pRow } = await supabase.from("patients")
+          .select("telegram_user_id")
+          .eq("clinic_id", clinic.id)
+          .eq("phone", phoneTrimmed)
+          .maybeSingle();
+        if (pRow?.telegram_user_id) tgId = pRow.telegram_user_id;
 
-      const { data: inserted, error } = await supabase.from("invoices").insert(newInvoiceData).select().single();
-      if (error) throw error;
-      
-      toast({ title: "✅ تم إنشاء الفاتورة", description: invoiceNumber });
-      setCreateInvoiceOpen(false);
-      
-      if (inserted) { 
-        setSelectedInvoice({ ...inserted, payment_reference: undefined, linked_visit_code: null } as Invoice); 
-        
-        if (invPatientPhone.trim()) {
+        if (tgId) {
           await autoSendToTelegram({
             type: "invoice",
             code: invoiceNumber,
             name: invPatientName.trim() || "غير محدد",
             service: "فاتورة جديدة",
             amount: totalAmount,
-            tgId: invPatientPhone.trim(),
+            tgId: tgId,
             items: newInvoiceData.items
           });
+        } else {
+          console.warn("[INVOICE] لا يوجد telegram_user_id لهذا الرقم — سيتم الاكتفاء بالواتساب.");
+        }
+
+        const waPhone = cleanPhoneForWhatsApp(phoneTrimmed);
+        if (waPhone) {
+          const itemsText = newInvoiceData.items.map((it: any) => `• ${it.name} × ${it.qty} = ${(Number(it.qty)*Number(it.price)).toLocaleString()}`).join("\n");
+          const waMsg = encodeURIComponent(`🧾 فاتورة جديدة - ${clinic.name}\n━━━━━━━━━━━━━━━\n👤 ${invPatientName.trim() || "—"}\n🔖 ${invoiceNumber}\n\n${itemsText}\n\n💰 الإجمالي: ${totalAmount.toLocaleString()}\n📅 ${format(new Date(), "yyyy/MM/dd - hh:mm a")}\n\nمعتمد إلكترونياً`);
+          setTimeout(() => { window.open(`https://wa.me/${waPhone}?text=${waMsg}`, "_blank"); }, 800);
         }
       }
-      fetchInvoices();
-    } catch (e: any) { toast({ title: "خطأ", description: e.message, variant: "destructive" }); } finally { setInvSaving(false); }
-  };
-
-  const filtered = useMemo(() => appointments.filter((a) => {
-    const { cleanName, cleanPhone } = extractCleanInfo(a);
-    const matchesSearch = a.reservation_code.toLowerCase().includes(search.toLowerCase()) || cleanName.toLowerCase().includes(search.toLowerCase()) || cleanPhone.includes(search);
-    if (!matchesSearch) return false;
-    if (statusFilter === "all") return true;
-    if (statusFilter === "active") return !["cancelled"].includes(a.status);
-    if (statusFilter === "paid") return a.payment_status === "paid";
-    if (statusFilter === "unpaid") return a.payment_status !== "paid" && a.status !== "cancelled";
-    if (statusFilter === "arrived") return !!a.arrived_at;
-    if (statusFilter === "waiting") return !a.arrived_at && a.status !== "cancelled";
-    return true;
-  }), [appointments, search, statusFilter]);
-
-  const filteredInvoices = useMemo(() => invoiceAppointments.filter((a) => {
-    const { cleanName, cleanPhone } = extractCleanInfo(a);
-    const q = invoicesSearch.trim().toLowerCase();
-    const matchesSearch = !q || a.reservation_code.toLowerCase().includes(q) || cleanName.toLowerCase().includes(q) || cleanPhone.includes(q);
-    if (!matchesSearch) return false;
-    if (invoicesOnlyPromo && !a.is_promo) return false;
-    return true;
-  }), [invoiceAppointments, invoicesSearch, invoicesOnlyPromo]);
-
-  const filteredInvoicesList = useMemo(() => invoicesList.filter((inv) => {
-    const q = invoicesSearch.trim().toLowerCase();
-    if (!q) return true;
-    return inv.invoice_number.toLowerCase().includes(q) || (inv.patient_name || "").toLowerCase().includes(q) || (inv.patient_phone || "").includes(q);
-  }), [invoicesList, invoicesSearch]);
-
-  const invoicesStats = useMemo(() => {
-    const apptTotal = filteredInvoices.reduce((s, a) => s + computeNetCollected(a), 0);
-    const invTotal = filteredInvoicesList.reduce((s, i) => s + (i.total_amount || 0), 0);
-    return { totalPaid: round2(apptTotal + invTotal), count: filteredInvoices.length + filteredInvoicesList.length, promoCount: filteredInvoices.filter(a => a.is_promo).length };
-  }, [filteredInvoices, filteredInvoicesList]);
-
-  const modalRawAmount = round2(parseFloat(paidAmountInput) || 0);
-  const modalRawDiscount = round2(parseFloat(discountInput) || 0);
-  const modalDiscType = selectedAppointment?.discount_type || (selectedAppointment?.is_promo ? "percentage" : "fixed");
-  const modalDiscountCash = calcDiscountAmount(parseFloat(totalCostInput) || 0, modalRawDiscount, modalDiscType);
-  const modalNetCollected = modalRawAmount; 
-
-  // ============================================================
-  // LEDGER
-  // ============================================================
-  const ledgerPatients = useMemo(() => {
-    type Visit = { code: string; date: string; service: string; amount: number; paid: number; method?: string; discount?: number };
-    type Payment = { ref: string; date: string; amount: number; method: string; linkedVisit?: string; notes?: string };
-    type Patient = { name: string; phone: string; visits: Visit[]; payments: Payment[]; total: number; paid: number; remaining: number; };
-
-    const map = new Map<string, Patient>();
-    
-    invoiceAppointments.forEach(a => {
-      const { cleanName, cleanPhone } = extractCleanInfo(a);
-      const key = cleanPhone !== "بدون رقم" ? cleanPhone : cleanName;
-      if (!map.has(key)) map.set(key, { name: cleanName, phone: cleanPhone, visits: [], payments: [], total: 0, paid: 0, remaining: 0 });
-      const p = map.get(key)!;
-      
-      const originalAmount = round2(a.original_price ?? a.services?.price ?? 0);
-      const discount = round2(a.discount_applied || 0);
-      const finalAmount = round2(a.final_price ?? (originalAmount - discount) ?? a.paid_amount ?? 0);
-      const paid = round2(a.paid_amount || 0);
-      
-      if (paid > 0 || a.payment_status === "partial") {
-          p.visits.push({
-            code: a.reservation_code, date: a.date, service: a.services?.name || "فحص",
-            amount: finalAmount, paid: paid, method: a.payment_method || "نقدي",
-            discount: discount > 0 ? discount : undefined
-          });
-          p.total = round2(p.total + finalAmount); 
-          p.paid = round2(p.paid + paid);
-      }
-    });
-
-    invoicesList.forEach(inv => {
-      const name = inv.patient_name || "غير محدد";
-      const phone = inv.patient_phone || "بدون رقم";
-      const key = phone !== "بدون رقم" ? phone : name;
-      if (!map.has(key)) map.set(key, { name, phone, visits: [], payments: [], total: 0, paid: 0, remaining: 0 });
-      const p = map.get(key)!;
-
-      const isPayment = isPaymentRecord(inv);
-      const linkedVisit = extractLinkedVisit(inv) || undefined;
-
-      if (isPayment) {
-        p.payments.push({ ref: inv.invoice_number, date: inv.created_at.split('T')[0], amount: round2(inv.total_amount), method: inv.payment_method || "نقدي", linkedVisit, notes: inv.notes || undefined });
-      } else {
-        p.visits.push({ code: inv.invoice_number, date: inv.created_at.split('T')[0], service: 'فاتورة يدوية', amount: round2(inv.total_amount), paid: round2(inv.total_amount), method: inv.payment_method || "نقدي" });
-        p.total = round2(p.total + inv.total_amount);
-        p.paid = round2(p.paid + inv.total_amount);
-      }
-    });
-
-    return Array.from(map.values()).map(p => ({ 
-      ...p, 
-      remaining: round2(Math.max(0, p.total - p.paid)),
-      visits: p.visits.sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime()),
-      payments: p.payments.sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime())
-    })).filter(p => p.total > 0);
-  }, [invoiceAppointments, invoicesList]);
-
-  const handleOpenLedger = async (patient: any) => {
-    setSelectedLedgerPatient(patient);
-    setLedgerAmount(String(patient.remaining > 0 ? patient.remaining : 0)); 
-    setLedgerLinkedVisit(""); 
-    setLedgerNotes("");
-    
-    setFullPatientHistory({
-        visits: patient.visits,
-        payments: patient.payments,
-        total: patient.total,
-        paid: patient.paid,
-        remaining: patient.remaining
-    });
-    
-    setLedgerModalOpen(true);
-  };
-
-  const handleAddLedgerPayment = async () => {
-    if (!selectedLedgerPatient || !clinic || !ledgerAmount) return;
-    const amount = round2(parseFloat(ledgerAmount) || 0);
-    if (amount <= 0) { toast({ title: "❌ المبلغ غير صحيح", variant: "destructive" }); return; }
-
-    const paymentRef = generatePaymentReference(selectedLedgerPatient.phone || selectedLedgerPatient.name);
-    let notes = "دفعة من دفتر الإيصالات";
-    if (ledgerLinkedVisit) notes += ` [LINKED_VISIT:${ledgerLinkedVisit}]`;
-    if (ledgerNotes.trim()) notes += ` - ${ledgerNotes.trim()}`;
-
-    const { error } = await supabase.from("invoices").insert({
-      clinic_id: clinic.id, patient_name: selectedLedgerPatient.name, patient_phone: selectedLedgerPatient.phone,
-      invoice_number: paymentRef,
-      items: [{ name: `دفعة${ledgerLinkedVisit ? ` للزيارة ${ledgerLinkedVisit}` : ''}`, qty: 1, price: amount, reference: paymentRef, linkedVisit: ledgerLinkedVisit || undefined }],
-      subtotal: amount, discount_type: "fixed", discount_value: 0, discount_amount: 0, total_amount: amount, paid_status: "paid", paid_amount: amount, payment_method: ledgerMethod, notes, paid_at: new Date().toISOString(),
-    });
-
-    if (error) { toast({ title: "خطأ", description: error.message, variant: "destructive" }); return; }
-
-    if (ledgerLinkedVisit) {
-      const { data: oldAppt } = await supabase.from("appointments").select("paid_amount, final_price").eq("reservation_code", ledgerLinkedVisit).single();
-      if (oldAppt) {
-        const newPaid = round2((oldAppt.paid_amount || 0) + amount);
-        const isFullyPaid = newPaid >= (oldAppt.final_price || 0);
-        await supabase.from("appointments").update({ paid_amount: newPaid, payment_status: isFullyPaid ? "paid" : "partial" }).eq("reservation_code", ledgerLinkedVisit);
-      }
     }
+    fetchInvoices();
+  } catch (e: any) { toast({ title: "خطأ", description: e.message, variant: "destructive" }); } finally { setInvSaving(false); }
+};
+
+const filtered = useMemo(() => appointments.filter((a) => {
+  const { cleanName, cleanPhone } = extractCleanInfo(a);
+  const matchesSearch = a.reservation_code.toLowerCase().includes(search.toLowerCase()) || cleanName.toLowerCase().includes(search.toLowerCase()) || cleanPhone.includes(search);
+  if (!matchesSearch) return false;
+  if (statusFilter === "all") return true;
+  if (statusFilter === "active") return !["cancelled"].includes(a.status);
+  if (statusFilter === "paid") return a.payment_status === "paid";
+  if (statusFilter === "unpaid") return a.payment_status !== "paid" && a.status !== "cancelled";
+  if (statusFilter === "arrived") return !!a.arrived_at;
+  if (statusFilter === "waiting") return !a.arrived_at && a.status !== "cancelled";
+  return true;
+}), [appointments, search, statusFilter]);
+
+const filteredInvoices = useMemo(() => invoiceAppointments.filter((a) => {
+  const { cleanName, cleanPhone } = extractCleanInfo(a);
+  const q = invoicesSearch.trim().toLowerCase();
+  const matchesSearch = !q || a.reservation_code.toLowerCase().includes(q) || cleanName.toLowerCase().includes(q) || cleanPhone.includes(q);
+  if (!matchesSearch) return false;
+  if (invoicesOnlyPromo && !a.is_promo) return false;
+  return true;
+}), [invoiceAppointments, invoicesSearch, invoicesOnlyPromo]);
+
+const filteredInvoicesList = useMemo(() => invoicesList.filter((inv) => {
+  const q = invoicesSearch.trim().toLowerCase();
+  if (!q) return true;
+  return inv.invoice_number.toLowerCase().includes(q) || (inv.patient_name || "").toLowerCase().includes(q) || (inv.patient_phone || "").includes(q);
+}), [invoicesList, invoicesSearch]);
+
+const invoicesStats = useMemo(() => {
+  const apptTotal = filteredInvoices.reduce((s, a) => s + computeNetCollected(a), 0);
+  const invTotal = filteredInvoicesList.reduce((s, i) => s + (i.total_amount || 0), 0);
+  return { totalPaid: round2(apptTotal + invTotal), count: filteredInvoices.length + filteredInvoicesList.length, promoCount: filteredInvoices.filter(a => a.is_promo).length };
+}, [filteredInvoices, filteredInvoicesList]);
+
+const modalRawAmount = round2(parseFloat(paidAmountInput) || 0);
+const modalRawDiscount = round2(parseFloat(discountInput) || 0);
+const modalDiscType = selectedAppointment?.discount_type || (selectedAppointment?.is_promo ? "percentage" : "fixed");
+const modalDiscountCash = calcDiscountAmount(parseFloat(totalCostInput) || 0, modalRawDiscount, modalDiscType);
+const modalNetCollected = modalRawAmount; 
+
+// ============================================================
+// LEDGER
+// ============================================================
+const ledgerPatients = useMemo(() => {
+  type Visit = { code: string; date: string; service: string; amount: number; paid: number; method?: string; discount?: number };
+  type Payment = { ref: string; date: string; amount: number; method: string; linkedVisit?: string; notes?: string };
+  type Patient = { name: string; phone: string; visits: Visit[]; payments: Payment[]; total: number; paid: number; remaining: number; };
+
+  const map = new Map<string, Patient>();
+  
+  invoiceAppointments.forEach(a => {
+    const { cleanName, cleanPhone } = extractCleanInfo(a);
+    const key = cleanPhone !== "بدون رقم" ? cleanPhone : cleanName;
+    if (!map.has(key)) map.set(key, { name: cleanName, phone: cleanPhone, visits: [], payments: [], total: 0, paid: 0, remaining: 0 });
+    const p = map.get(key)!;
     
-    toast({ title: "✅ تم تسجيل الدفعة", description: `المرجع: ${paymentRef}` });
-    setLedgerAmount(""); setLedgerLinkedVisit(""); setLedgerNotes("");
+    const originalAmount = round2(a.original_price ?? a.services?.price ?? 0);
+    const discount = round2(a.discount_applied || 0);
+    const finalAmount = round2(a.final_price ?? (originalAmount - discount) ?? a.paid_amount ?? 0);
+    const paid = round2(a.paid_amount || 0);
     
-    await fetchInvoices(); 
-    await fetchAppointments();
-    
-    const refreshed = ledgerPatients.find(p => p.phone === selectedLedgerPatient.phone || p.name === selectedLedgerPatient.name);
-    if (refreshed) {
-       setSelectedLedgerPatient(refreshed);
-       setFullPatientHistory({
-           visits: refreshed.visits,
-           payments: refreshed.payments,
-           total: refreshed.total,
-           paid: refreshed.paid,
-           remaining: refreshed.remaining
-       });
+    if (paid > 0 || a.payment_status === "partial") {
+        p.visits.push({
+          code: a.reservation_code, date: a.date, service: a.services?.name || "فحص",
+          amount: finalAmount, paid: paid, method: a.payment_method || "نقدي",
+          discount: discount > 0 ? discount : undefined
+        });
+        p.total = round2(p.total + finalAmount); 
+        p.paid = round2(p.paid + paid);
     }
+  });
 
-    setTimeout(async () => {
-       let tgId = "";
-       const { data: p } = await supabase.from("patients").select("telegram_user_id").eq("phone", selectedLedgerPatient.phone).maybeSingle();
-       if (p?.telegram_user_id) tgId = p.telegram_user_id;
-       else {
-          const pVisits = invoiceAppointments.find(a => extractCleanInfo(a).cleanPhone === selectedLedgerPatient.phone || extractCleanInfo(a).cleanName === selectedLedgerPatient.name);
-          if (pVisits) tgId = pVisits.customer_telegram_id || pVisits.patients?.telegram_user_id || "";
-       }
+  invoicesList.forEach(inv => {
+    const name = inv.patient_name || "غير محدد";
+    const phone = inv.patient_phone || "بدون رقم";
+    const key = phone !== "بدون رقم" ? phone : name;
+    if (!map.has(key)) map.set(key, { name, phone, visits: [], payments: [], total: 0, paid: 0, remaining: 0 });
+    const p = map.get(key)!;
 
-       if (tgId) {
-          await autoSendToTelegram({
-            type: "manual", code: paymentRef, name: selectedLedgerPatient.name, service: ledgerLinkedVisit ? `دفعة للزيارة ${ledgerLinkedVisit}` : "دفعة يدوية", amount, tgId, linkedVisit: ledgerLinkedVisit || undefined
-          });
-          await sendTelegramLedger(selectedLedgerPatient.name, selectedLedgerPatient.phone);
-       }
-       setLedgerModalOpen(false);
-    }, 1000);
-  };
+    const isPayment = isPaymentRecord(inv);
+    const linkedVisit = extractLinkedVisit(inv) || undefined;
 
-  if (authLoading || clinicLoading) return <div className="min-h-screen bg-mesh flex items-center justify-center text-muted-foreground">جاري التحميل...</div>;
-  if (clinicError) return <div className="min-h-screen bg-mesh flex items-center justify-center text-destructive font-bold">{clinicError}</div>;
+    if (isPayment) {
+      p.payments.push({ ref: inv.invoice_number, date: inv.created_at.split('T')[0], amount: round2(inv.total_amount), method: inv.payment_method || "نقدي", linkedVisit, notes: inv.notes || undefined });
+    } else {
+      p.visits.push({ code: inv.invoice_number, date: inv.created_at.split('T')[0], service: 'فاتورة يدوية', amount: round2(inv.total_amount), paid: round2(inv.total_amount), method: inv.payment_method || "نقدي" });
+      p.total = round2(p.total + inv.total_amount);
+      p.paid = round2(p.paid + inv.total_amount);
+    }
+  });
 
-  if (isTrialExpired && role !== "owner") {
-    return (
-      <div className="min-h-screen bg-mesh flex items-center justify-center p-4">
-        <div className="card-modern p-8 max-w-md text-center space-y-4"><div className="text-3xl">⛔</div><h1 className="text-xl font-black">لا يمكن الدخول</h1><Button onClick={signOut} className="w-full">تسجيل الخروج</Button></div>
-      </div>
-    );
+  return Array.from(map.values()).map(p => ({ 
+    ...p, 
+    remaining: round2(Math.max(0, p.total - p.paid)),
+    visits: p.visits.sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime()),
+    payments: p.payments.sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime())
+  })).filter(p => p.total > 0);
+}, [invoiceAppointments, invoicesList]);
+
+const handleOpenLedger = async (patient: any) => {
+  setSelectedLedgerPatient(patient);
+  setLedgerAmount(String(patient.remaining > 0 ? patient.remaining : 0)); 
+  setLedgerLinkedVisit(""); 
+  setLedgerNotes("");
+  
+  setFullPatientHistory({
+      visits: patient.visits,
+      payments: patient.payments,
+      total: patient.total,
+      paid: patient.paid,
+      remaining: patient.remaining
+  });
+  
+  setLedgerModalOpen(true);
+};
+
+const handleAddLedgerPayment = async () => {
+  if (!selectedLedgerPatient || !clinic || !ledgerAmount) return;
+  const amount = round2(parseFloat(ledgerAmount) || 0);
+  if (amount <= 0) { toast({ title: "❌ المبلغ غير صحيح", variant: "destructive" }); return; }
+
+  const paymentRef = generatePaymentReference(selectedLedgerPatient.phone || selectedLedgerPatient.name);
+  let notes = "دفعة من دفتر الإيصالات";
+  if (ledgerLinkedVisit) notes += ` [LINKED_VISIT:${ledgerLinkedVisit}]`;
+  if (ledgerNotes.trim()) notes += ` - ${ledgerNotes.trim()}`;
+
+  const { error } = await supabase.from("invoices").insert({
+    clinic_id: clinic.id, patient_name: selectedLedgerPatient.name, patient_phone: selectedLedgerPatient.phone,
+    invoice_number: paymentRef,
+    items: [{ name: `دفعة${ledgerLinkedVisit ? ` للزيارة ${ledgerLinkedVisit}` : ''}`, qty: 1, price: amount, reference: paymentRef, linkedVisit: ledgerLinkedVisit || undefined }],
+    subtotal: amount, discount_type: "fixed", discount_value: 0, discount_amount: 0, total_amount: amount, paid_status: "paid", paid_amount: amount, payment_method: ledgerMethod, notes, paid_at: new Date().toISOString(),
+  });
+
+  if (error) { toast({ title: "خطأ", description: error.message, variant: "destructive" }); return; }
+
+  if (ledgerLinkedVisit) {
+    const { data: oldAppt } = await supabase.from("appointments").select("paid_amount, final_price").eq("reservation_code", ledgerLinkedVisit).single();
+    if (oldAppt) {
+      const newPaid = round2((oldAppt.paid_amount || 0) + amount);
+      const isFullyPaid = newPaid >= (oldAppt.final_price || 0);
+      await supabase.from("appointments").update({ paid_amount: newPaid, payment_status: isFullyPaid ? "paid" : "partial" }).eq("reservation_code", ledgerLinkedVisit);
+    }
+  }
+  
+  toast({ title: "✅ تم تسجيل الدفعة", description: `المرجع: ${paymentRef}` });
+  setLedgerAmount(""); setLedgerLinkedVisit(""); setLedgerNotes("");
+  
+  await fetchInvoices(); 
+  await fetchAppointments();
+  
+  const refreshed = ledgerPatients.find(p => p.phone === selectedLedgerPatient.phone || p.name === selectedLedgerPatient.name);
+  if (refreshed) {
+     setSelectedLedgerPatient(refreshed);
+     setFullPatientHistory({
+         visits: refreshed.visits,
+         payments: refreshed.payments,
+         total: refreshed.total,
+         paid: refreshed.paid,
+         remaining: refreshed.remaining
+     });
   }
 
+  setTimeout(async () => {
+     let tgId = "";
+     const { data: p } = await supabase.from("patients").select("telegram_user_id").eq("phone", selectedLedgerPatient.phone).maybeSingle();
+     if (p?.telegram_user_id) tgId = p.telegram_user_id;
+     else {
+        const pVisits = invoiceAppointments.find(a => extractCleanInfo(a).cleanPhone === selectedLedgerPatient.phone || extractCleanInfo(a).cleanName === selectedLedgerPatient.name);
+        if (pVisits) tgId = pVisits.customer_telegram_id || pVisits.patients?.telegram_user_id || "";
+     }
+
+     if (tgId) {
+        await autoSendToTelegram({
+          type: "manual", code: paymentRef, name: selectedLedgerPatient.name, service: ledgerLinkedVisit ? `دفعة للزيارة ${ledgerLinkedVisit}` : "دفعة يدوية", amount, tgId, linkedVisit: ledgerLinkedVisit || undefined
+        });
+        await sendTelegramLedger(selectedLedgerPatient.name, selectedLedgerPatient.phone);
+     }
+     setLedgerModalOpen(false);
+  }, 1000);
+};
+
+const handlePrintLedger = async () => {
+  try {
+    const el = document.getElementById("ledger-export-container");
+    if (!el) { toast({ title: "❌ لا يوجد كشف للطباعة", variant: "destructive" }); return; }
+    const canvas = await html2canvas(el, { scale: 2, useCORS: true, backgroundColor: "#ffffff" });
+    const imgData = canvas.toDataURL("image/png");
+    const win = window.open("", "_blank");
+    if (win) {
+      win.document.write(`<html><head><title>طباعة كشف الحساب</title></head><body style="margin:0;display:flex;align-items:center;justify-content:center;min-height:100vh;background:#f4f4f5;"><img src="${imgData}" style="max-width:100%;height:auto;" onload="window.print();window.close();" /></body></html>`);
+      win.document.close();
+    }
+  } catch (_) { toast({ title: "خطأ في الطباعة", variant: "destructive" }); }
+};
+
+const handleSendLedgerNow = async () => {
+  if (!selectedLedgerPatient) return;
+  const sent = await sendTelegramLedger(selectedLedgerPatient.name, selectedLedgerPatient.phone);
+  if (sent) toast({ title: "✅ تم إرسال كشف الحساب للتليجرام" });
+  else toast({ title: "⚠️ تعذّر الإرسال — المريض غير مسجل بتليجرام", variant: "destructive" });
+};
+
+if (authLoading || clinicLoading) return <div className="min-h-screen bg-mesh flex items-center justify-center text-muted-foreground">جاري التحميل...</div>;
+if (clinicError) return <div className="min-h-screen bg-mesh flex items-center justify-center text-destructive font-bold">{clinicError}</div>;
+
+if (isTrialExpired && role !== "owner") {
+  return (
+    <div className="min-h-screen bg-mesh flex items-center justify-center p-4">
+      <div className="card-modern p-8 max-w-md text-center space-y-4"><div className="text-3xl">⛔</div><h1 className="text-xl font-black">لا يمكن الدخول</h1><Button onClick={signOut} className="w-full">تسجيل الخروج</Button></div>
+    </div>
+  );
+}
   return (
     <div className="min-h-screen bg-mesh flex flex-col" dir="rtl">
       <div id={QR_FILE_ELEMENT_ID} className="hidden" />
       <input type="file" ref={fileInputRef} accept="image/*" className="hidden" onChange={handleFileUpload} />
 
+      {/* ✨ ماسح QR — نافذة كاملة الشاشة */}
       {scannerOpen && (
         <div className="fixed inset-0 z-50 bg-black/95 backdrop-blur-lg flex items-center justify-center p-2 sm:p-4">
-          <div className="bg-white dark:bg-gray-900 rounded-3xl max-w-lg w-full shadow-2xl overflow-hidden border border-border">
-            <div className="flex justify-between items-center px-6 pt-6 pb-4 border-b border-border/40">
+          <div className="bg-white dark:bg-gray-900 rounded-3xl w-full max-w-5xl h-[96vh] shadow-2xl overflow-hidden border border-border flex flex-col">
+            <div className="flex justify-between items-center px-6 pt-6 pb-4 border-b border-border/40 shrink-0">
               <div className="flex items-center gap-3">
-                <div className="w-10 h-10 rounded-xl bg-primary/10 flex items-center justify-center">{verifyScannerOpen ? <ShieldCheck className="w-5 h-5 text-primary" /> : <Camera className="w-5 h-5 text-primary" />}</div>
-                <div><h3 className="text-lg font-bold text-foreground">{verifyScannerOpen ? "التحقق من السندات" : "مسح QR للصندوق"}</h3><p className="text-xs text-muted-foreground">{verifyScannerOpen ? "امسح الكود للتأكد من صحة السند" : "وجّه الكاميرا نحو كود الحجز"}</p></div>
+                <div className="w-11 h-11 rounded-xl bg-primary/10 flex items-center justify-center">{verifyScannerOpen ? <ShieldCheck className="w-6 h-6 text-primary" /> : <Camera className="w-6 h-6 text-primary" />}</div>
+                <div><h3 className="text-xl font-bold text-foreground">{verifyScannerOpen ? "التحقق من السندات" : "مسح QR للصندوق"}</h3><p className="text-sm text-muted-foreground">{verifyScannerOpen ? "امسح الكود للتأكد من صحة السند" : "وجّه الكاميرا نحو كود الحجز"}</p></div>
               </div>
-              <button onClick={stopScanner} className="p-2 rounded-full bg-muted hover:bg-muted/80 text-foreground transition"><X className="w-5 h-5" /></button>
+              <button onClick={stopScanner} className="p-2 rounded-full bg-muted hover:bg-muted/80 text-foreground transition"><X className="w-6 h-6" /></button>
             </div>
             {scannerMessage && (<div className={`mx-6 mt-3 px-4 py-3 rounded-xl text-sm font-bold text-center ${scannerMessage.startsWith("✅") ? "bg-emerald-500/15 text-emerald-700 border border-emerald-500/30" : "bg-red-500/15 text-red-700 border border-red-500/30"}`}>{scannerMessage}</div>)}
-            <div className="relative mx-6 my-4 rounded-2xl overflow-hidden bg-black" style={{ aspectRatio: "1/1" }}>
+            <div className="flex-1 relative mx-6 my-4 rounded-2xl overflow-hidden bg-black">
               <div id={QR_CAMERA_ELEMENT_ID} className="w-full h-full" />
-              {(scannerStatus === "loading" || uploadingImage) && (<div className="absolute inset-0 flex flex-col items-center justify-center bg-black/80 z-20"><Loader2 className="w-12 h-12 animate-spin text-primary mb-3" /><p className="text-white text-sm">{uploadingImage ? "جاري قراءة الصورة..." : "جاري تشغيل الكاميرا..."}</p></div>)}
-              {scannerStatus === "active" && !uploadingImage && (<div className="absolute inset-0 pointer-events-none flex items-center justify-center"><div className="relative w-64 h-64"><div className="absolute top-0 left-0 w-12 h-12 border-t-4 border-l-4 border-primary rounded-tl-lg" /><div className="absolute top-0 right-0 w-12 h-12 border-t-4 border-r-4 border-primary rounded-tr-lg" /><div className="absolute bottom-0 left-0 w-12 h-12 border-b-4 border-l-4 border-primary rounded-bl-lg" /><div className="absolute bottom-0 right-0 w-12 h-12 border-b-4 border-r-4 border-primary rounded-br-lg" /><div className="absolute top-0 left-0 right-0 h-0.5 bg-primary animate-bounce" style={{ animationDuration: "1.5s" }} /></div></div>)}
-              {scannerStatus === "error" && !uploadingImage && (<div className="absolute inset-0 flex flex-col items-center justify-center bg-black/90 p-5 text-center z-20"><AlertCircle className="w-12 h-12 text-red-400 mb-3" /><p className="text-white text-sm mb-4">{cameraError}</p><Button onClick={() => startScanner(verifyScannerOpen)} className="bg-primary text-white" size="sm"><RefreshCw className="w-4 h-4 ml-1" />إعادة المحاولة</Button></div>)}
+              {(scannerStatus === "loading" || uploadingImage) && (<div className="absolute inset-0 flex flex-col items-center justify-center bg-black/80 z-20"><Loader2 className="w-14 h-14 animate-spin text-primary mb-3" /><p className="text-white text-base">{uploadingImage ? "جاري قراءة الصورة..." : "جاري تشغيل الكاميرا..."}</p></div>)}
+              {scannerStatus === "active" && !uploadingImage && (<div className="absolute inset-0 pointer-events-none flex items-center justify-center"><div className="relative w-72 h-72 sm:w-96 sm:h-96"><div className="absolute top-0 left-0 w-16 h-16 border-t-4 border-l-4 border-primary rounded-tl-lg" /><div className="absolute top-0 right-0 w-16 h-16 border-t-4 border-r-4 border-primary rounded-tr-lg" /><div className="absolute bottom-0 left-0 w-16 h-16 border-b-4 border-l-4 border-primary rounded-bl-lg" /><div className="absolute bottom-0 right-0 w-16 h-16 border-b-4 border-r-4 border-primary rounded-br-lg" /><div className="absolute top-0 left-0 right-0 h-0.5 bg-primary animate-bounce" style={{ animationDuration: "1.5s" }} /></div></div>)}
+              {scannerStatus === "error" && !uploadingImage && (<div className="absolute inset-0 flex flex-col items-center justify-center bg-black/90 p-5 text-center z-20"><AlertCircle className="w-14 h-14 text-red-400 mb-3" /><p className="text-white text-base mb-4">{cameraError}</p><Button onClick={() => startScanner(verifyScannerOpen)} className="bg-primary text-white" size="lg"><RefreshCw className="w-5 h-5 ml-1" />إعادة المحاولة</Button></div>)}
             </div>
-            <div className="px-6 pb-3"><Button variant="outline" className="w-full gap-2 border-dashed border-primary/50 text-primary h-12 font-bold" onClick={() => fileInputRef.current?.click()} disabled={uploadingImage}><ImageIcon className="w-5 h-5" />رفع صورة QR من المعرض</Button></div>
-            <div className="flex gap-2 px-6 pb-6"><Button variant="ghost" className="w-full" onClick={stopScanner}>إغلاق</Button></div>
+            <div className="px-6 pb-3 shrink-0"><Button variant="outline" className="w-full gap-2 border-dashed border-primary/50 text-primary h-12 font-bold" onClick={() => fileInputRef.current?.click()} disabled={uploadingImage}><ImageIcon className="w-5 h-5" />رفع صورة QR من المعرض</Button></div>
+            <div className="flex gap-2 px-6 pb-6 shrink-0"><Button variant="ghost" className="w-full" onClick={stopScanner}>إغلاق</Button></div>
           </div>
         </div>
       )}
@@ -1662,7 +1772,7 @@ export default function CashierPage() {
           <div className="space-y-4 pt-2">
             <div className="grid grid-cols-2 gap-3">
               <div><label className="text-xs font-semibold text-muted-foreground block mb-1">اسم المريض</label><Input value={invPatientName} onChange={(e) => setInvPatientName(e.target.value)} placeholder="اسم المريض" onKeyDown={(e) => e.key === 'Enter' && e.preventDefault()} /></div>
-              <div><label className="text-xs font-semibold text-muted-foreground block mb-1">رقم الهاتف</label><Input value={invPatientPhone} onChange={(e) => setInvPatientPhone(e.target.value)} placeholder="مثال: +967771234567" dir="ltr" onKeyDown={(e) => e.key === 'Enter' && e.preventDefault()} /></div>
+              <div><label className="text-xs font-semibold text-muted-foreground block mb-1">رقم الهاتف</label><Input value={invPatientPhone} onChange={(e) => setInvPatientPhone(e.target.value)} placeholder="رقم الهاتف" dir="ltr" onKeyDown={(e) => e.key === 'Enter' && e.preventDefault()} /></div>
             </div>
             <div>
               <div className="flex items-center justify-between mb-2"><label className="text-sm font-bold text-foreground">البنود</label><Button size="sm" variant="outline" onClick={addInvoiceItem} className="gap-1"><Plus className="w-3.5 h-3.5" />إضافة بند</Button></div>
@@ -1749,6 +1859,14 @@ export default function CashierPage() {
           <DialogHeader><DialogTitle className="flex items-center gap-2"><BookOpen className="w-5 h-5 text-primary" />دفتر المريض: {selectedLedgerPatient?.name}</DialogTitle></DialogHeader>
           
           <div className="space-y-5">
+            <div className="flex flex-wrap gap-2 p-3 bg-rose-50/50 border border-rose-200/60 rounded-xl">
+              <Button size="sm" variant="outline" className="gap-1 text-xs" onClick={handlePrintLedger}><Printer className="w-4 h-4" />طباعة الكشف</Button>
+              <Button size="sm" className="gap-1 text-xs bg-[#0088cc] hover:bg-[#0077b5] text-white" onClick={handleSendLedgerNow} disabled={sendingTelegram}>
+                {sendingTelegram ? <Loader2 className="w-4 h-4 animate-spin" /> : <Send className="w-4 h-4" />}
+                إرسال للتليجرام
+              </Button>
+            </div>
+
             <div className="space-y-2">
               <h3 className="font-bold text-sm text-foreground flex items-center gap-1"><Clock className="w-4 h-4 text-primary"/> سجل الزيارات</h3>
               <div className="overflow-x-auto rounded-xl border border-border max-h-60">
@@ -1795,7 +1913,7 @@ export default function CashierPage() {
         </DialogContent>
       </Dialog>
 
-      {/* ✨ حاوية مخفية لتصدير دفتر الحساب إلى التليجرام (تصميم احترافي كامل) */}
+      {/* ✨ حاوية مخفية لتصدير دفتر الحساب */}
       {fullPatientHistory && (
         <div className="absolute -left-[9999px] top-0">
           <div id="ledger-export-container" className="p-8 bg-gray-50 w-[800px] text-right" dir="rtl" style={{ fontFamily: 'system-ui, -apple-system, sans-serif' }}>
