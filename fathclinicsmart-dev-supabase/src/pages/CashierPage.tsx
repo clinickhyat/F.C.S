@@ -13,7 +13,7 @@ import {
   Banknote, CheckCircle, LogOut, Search, Stethoscope, Users,
   Camera, X, Loader2, AlertCircle, Image as ImageIcon, Upload, RefreshCw, Printer, Download, Clock, Plus, UserPlus, DollarSign, TrendingUp, Receipt, MessageCircle, MinusCircle, Wallet, ArrowDownCircle, ArrowUpCircle, Sparkles, Send, FileText, Calendar, Filter, Trash2, CreditCard, PieChart as PieIcon, Home, QrCode, ScanLine, ShieldCheck, ShieldAlert, BookOpen, Link as LinkIcon, RotateCcw, PlusCircle
 } from "lucide-react";
-import { AreaChart, Area, BarChart, Bar, PieChart, Pie, Cell, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid, Legend, RadialBarChart, RadialBar, PolarAngleAxis } from "recharts";
+import { AreaChart, Area, BarChart, Bar, PieChart, Pie, Cell, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid, Legend } from "recharts";
 import { Html5Qrcode } from "html5-qrcode";
 import html2canvas from "html2canvas";
 
@@ -93,18 +93,36 @@ type Invoice = {
 };
 
 // ============================================================
-// Helpers
+// Helpers & Constants
 // ============================================================
 const QR_CAMERA_ELEMENT_ID = "qr-camera-container-cashier";
 const QR_FILE_ELEMENT_ID = "qr-hidden-file-reader-cashier";
 
-const round2 = (num: number): number => {
-  return Math.round((num + Number.EPSILON) * 100) / 100;
-};
+const ARAB_COUNTRY_CODES = [
+  { code: "+962", name: "الأردن" },
+  { code: "+971", name: "الإمارات" },
+  { code: "+973", name: "البحرين" },
+  { code: "+213", name: "الجزائر" },
+  { code: "+966", name: "السعودية" },
+  { code: "+249", name: "السودان" },
+  { code: "+964", name: "العراق" },
+  { code: "+968", name: "عمان" },
+  { code: "+974", name: "قطر" },
+  { code: "+965", name: "الكويت" },
+  { code: "+212", name: "المغرب" },
+  { code: "+967", name: "اليمن" },
+  { code: "+216", name: "تونس" },
+  { code: "+963", name: "سوريا" },
+  { code: "+961", name: "لبنان" },
+  { code: "+218", name: "ليبيا" },
+  { code: "+20", name: "مصر" },
+  { code: "+222", name: "موريتانيا" }
+].sort((a, b) => a.name.localeCompare(b.name, 'ar'));
+
+const round2 = (num: number): number => Math.round((num + Number.EPSILON) * 100) / 100;
 
 const parseQRText = (text: string) => {
   let code = "", name = "", phone = "", service = "", date = "", time = "";
-
   const verifiedMatch = text.match(/PAY-VERIFIED\|([^\n\r|]+)/i);
   const searchText = verifiedMatch ? verifiedMatch[1].trim() : text;
 
@@ -129,42 +147,33 @@ const parseQRText = (text: string) => {
 };
 
 const cleanPhoneForWhatsApp = (phone?: string): string => {
-  if (!phone || phone.startsWith("tg:") || phone.startsWith("TG:") || phone === "بدون هاتف" || phone === ".") return "";
+  if (!phone || phone.startsWith("tg:") || phone === "بدون هاتف" || phone === ".") return "";
   const digits = phone.replace(/\D/g, "");
   if (!digits) return "";
   let waPhone = digits;
   if (digits.startsWith("00")) waPhone = digits.slice(2);
   else if (digits.startsWith("0")) waPhone = "967" + digits.slice(1);
-  else if (!digits.startsWith("967") && digits.length === 9) waPhone = "967" + digits;
   return waPhone;
 };
 
 const extractCleanInfo = (a: Appointment) => {
   let name = a.patients?.name || a.extracted_patient_name || "";
   let phone = a.patients?.phone || a.extracted_patient_phone || "";
-
-  const isGenericName = !name || name === "." || name.trim().toLowerCase() === "point" || name.startsWith("tg:") || name.includes("غير محدد");
-  const isGenericPhone = !phone || phone.trim().toLowerCase().startsWith("tg:") || phone === "." || phone === "بدون هاتف";
+  const isGenericName = !name || name === "." || name.includes("غير محدد");
+  const isGenericPhone = !phone || phone.startsWith("tg:") || phone === "." || phone === "بدون هاتف";
 
   if ((isGenericName || isGenericPhone) && a.notes) {
     const nameMatch = a.notes.match(/المريض:\s*([^(–\n\r]+)/);
-    if (nameMatch && nameMatch[1] && isGenericName) {
-      name = nameMatch[1].replace(/👤/g, "").replace(/@\w+/g, "").trim();
-    }
-    const phoneMatch = a.notes.match(/\(([^)]+)\)/) || a.notes.match(/(?:الهاتف:\s*|📱\s*)([+\d\s-]+)/);
-    if (phoneMatch && phoneMatch[1] && isGenericPhone) {
-      const extractedP = phoneMatch[1].trim();
-      if (!extractedP.startsWith("tg:")) phone = extractedP;
-    }
+    if (nameMatch && isGenericName) name = nameMatch[1].trim();
+    const phoneMatch = a.notes.match(/\(([^)]+)\)/);
+    if (phoneMatch && isGenericPhone) phone = phoneMatch[1].trim();
   }
 
   let cleanName = name.replace(/^tg:\d+/i, "").replace(/👤/g, "").replace(/@\w+/g, "").trim();
-  if (!cleanName || cleanName === "." || cleanName.length < 2) cleanName = "مريض غير محدد";
-
+  if (!cleanName || cleanName.length < 2) cleanName = "مريض غير محدد";
   let cleanPhone = phone.trim();
-  if (!cleanPhone || cleanPhone.toLowerCase().startsWith("tg:") || cleanPhone === "." || cleanPhone === "بدون هاتف") {
-    cleanPhone = "بدون رقم";
-  }
+  if (!cleanPhone || cleanPhone.startsWith("tg:") || cleanPhone === ".") cleanPhone = "بدون رقم";
+  
   return { cleanName, cleanPhone };
 };
 
@@ -172,13 +181,6 @@ const calcDiscountAmount = (baseAmount: number, value: number, type: string | nu
   if (!value || value <= 0 || !baseAmount || baseAmount <= 0) return 0;
   if (type === "percentage") return round2(baseAmount * (value / 100));
   return Math.min(value, baseAmount);
-};
-
-const formatDiscountLabel = (a: Appointment): string => {
-  const val = a.discount_amount ?? 0;
-  if (val <= 0) return "";
-  const type = a.discount_type || (a.is_promo ? "percentage" : "fixed");
-  return type === "percentage" ? `${val}%` : `${val}`;
 };
 
 const computeNetCollected = (a: Appointment): number => {
@@ -231,13 +233,11 @@ export default function CashierPage() {
   const [expenseTime, setExpenseTime] = useState<string>(format(new Date(), "HH:mm"));
 
   const todayStr = format(new Date(), "yyyy-MM-dd");
-  
   const [dateFilter, setDateFilter] = useState<string>(todayStr);
   const today = dateFilter;
   
   const [invoicesFrom, setInvoicesFrom] = useState<string>(todayStr);
   const [invoicesTo, setInvoicesTo] = useState<string>(todayStr);
-
   const [statusFilter, setStatusFilter] = useState<string>("active");
 
   const [selectedAppointment, setSelectedAppointment] = useState<Appointment | null>(null);
@@ -280,6 +280,7 @@ export default function CashierPage() {
 
   const [createInvoiceOpen, setCreateInvoiceOpen] = useState(false);
   const [invPatientName, setInvPatientName] = useState("");
+  const [invPatientCountryCode, setInvPatientCountryCode] = useState("+967");
   const [invPatientPhone, setInvPatientPhone] = useState("");
   const [invItems, setInvItems] = useState<InvoiceItem[]>([{ name: "", qty: 1, price: 0 }]);
   const [invDiscountType, setInvDiscountType] = useState<"fixed" | "percentage">("fixed");
@@ -315,12 +316,7 @@ export default function CashierPage() {
 
   const fetchExpenses = useCallback(async () => {
     if (!clinic) return;
-    const { data, error } = await supabase
-      .from("expenses")
-      .select("*")
-      .eq("clinic_id", clinic.id)
-      .eq("expense_date", today)
-      .order("expense_time", { ascending: false });
+    const { data, error } = await supabase.from("expenses").select("*").eq("clinic_id", clinic.id).eq("expense_date", today).order("expense_time", { ascending: false });
     if (!error) setExpenses((data || []) as Expense[]);
   }, [clinic, today]);
 
@@ -329,45 +325,19 @@ export default function CashierPage() {
     setInvoicesLoading(true);
     try {
       const [apptRes, invRes] = await Promise.all([
-        supabase
-          .from("appointments")
-          .select("id,patient_id,date,time,status,reservation_code,arrived_at,payment_status,paid_amount,discount_amount,discount_applied,discount_type,is_walk_in,notes,customer_telegram_id,is_promo,promo_code,promotion_id,original_price,final_price,payment_method,payment_time,created_at,patients(id,name,phone,telegram_user_id),services(name,price)")
-          .eq("clinic_id", clinic.id)
-          .in("payment_status", ["paid", "partial"])
-          .gte("date", invoicesFrom)
-          .lte("date", invoicesTo)
-          .order("date", { ascending: false })
-          .order("time", { ascending: false })
-          .limit(500),
-        supabase
-          .from("invoices")
-          .select("*")
-          .eq("clinic_id", clinic.id)
-          .gte("created_at", `${invoicesFrom}T00:00:00`)
-          .lte("created_at", `${invoicesTo}T23:59:59`)
-          .order("created_at", { ascending: false })
-          .limit(500),
+        supabase.from("appointments").select("id,patient_id,date,time,status,reservation_code,arrived_at,payment_status,paid_amount,discount_amount,discount_applied,discount_type,is_walk_in,notes,customer_telegram_id,is_promo,promo_code,promotion_id,original_price,final_price,payment_method,payment_time,created_at,patients(id,name,phone,telegram_user_id),services(name,price)").eq("clinic_id", clinic.id).in("payment_status", ["paid", "partial"]).gte("date", invoicesFrom).lte("date", invoicesTo).order("date", { ascending: false }).order("time", { ascending: false }).limit(500),
+        supabase.from("invoices").select("*").eq("clinic_id", clinic.id).gte("created_at", `${invoicesFrom}T00:00:00`).lte("created_at", `${invoicesTo}T23:59:59`).order("created_at", { ascending: false }).limit(500),
       ]);
       setInvoiceAppointments((apptRes.data || []) as Appointment[]);
-      
-      const enriched = (invRes.data || []).map((inv: any) => ({
-        ...inv,
-        payment_reference: String(inv.invoice_number || "").startsWith("PAY-") ? inv.invoice_number : undefined,
-        linked_visit_code: extractLinkedVisit(inv),
-      })) as Invoice[];
-      
+      const enriched = (invRes.data || []).map((inv: any) => ({ ...inv, payment_reference: String(inv.invoice_number || "").startsWith("PAY-") ? inv.invoice_number : undefined, linked_visit_code: extractLinkedVisit(inv) })) as Invoice[];
       setInvoicesList(enriched);
-    } finally {
-      setInvoicesLoading(false);
-    }
+    } finally { setInvoicesLoading(false); }
   }, [clinic, invoicesFrom, invoicesTo]);
 
   useEffect(() => {
     if (!clinic) return;
-    fetchAppointments();
-    fetchExpenses();
-    const channel = supabase
-      .channel(`cashier-${clinic.id}-${today}`)
+    fetchAppointments(); fetchExpenses();
+    const channel = supabase.channel(`cashier-${clinic.id}-${today}`)
       .on("postgres_changes", { event: "*", schema: "public", table: "appointments", filter: `clinic_id=eq.${clinic.id}` }, fetchAppointments)
       .on("postgres_changes", { event: "*", schema: "public", table: "expenses", filter: `clinic_id=eq.${clinic.id}` }, fetchExpenses)
       .subscribe();
@@ -380,144 +350,85 @@ export default function CashierPage() {
   const destroyScanner = async () => {
     if (!scannerRef.current) return;
     try { if (scannerRef.current.isScanning) await scannerRef.current.stop(); scannerRef.current.clear(); }
-    catch (_) {}
-    finally { scannerRef.current = null; }
+    catch (_) {} finally { scannerRef.current = null; }
   };
 
   const getFriendlyError = (error: any): string => {
     const msg = String(error?.message || error || "");
-    if (msg.includes("NotAllowedError") || msg.includes("Permission")) return "🔒 لم يتم منح إذن الكاميرا.";
-    if (msg.includes("NotFoundError") || msg.includes("DevicesNotFoundError")) return "📷 لا توجد كاميرا متصلة.";
-    if (msg.includes("NotReadableError") || msg.includes("TrackStartError")) return "⚠️ الكاميرا مستخدمة من تطبيق آخر.";
+    if (msg.includes("NotAllowedError")) return "🔒 لم يتم منح إذن الكاميرا.";
+    if (msg.includes("NotFoundError")) return "📷 لا توجد كاميرا متصلة.";
+    if (msg.includes("NotReadableError")) return "⚠️ الكاميرا مستخدمة من تطبيق آخر.";
     return `❌ فشل تشغيل الكاميرا.`;
   };
 
   const markArrived = async (appointmentId: string) => {
     if (!clinic) return;
-    const { error } = await supabase.from("appointments")
-      .update({ arrived_at: new Date().toISOString(), department: "استقبال" })
-      .eq("id", appointmentId).eq("clinic_id", clinic.id);
+    const { error } = await supabase.from("appointments").update({ arrived_at: new Date().toISOString(), department: "استقبال" }).eq("id", appointmentId).eq("clinic_id", clinic.id);
     if (!error) { toast({ title: "✅ تم تسجيل الحضور" }); fetchAppointments(); }
   };
 
   const fetchPatientPreviousVisits = async (patientId: string) => {
     if (!patientId) return;
-    const { data } = await supabase
-      .from("appointments")
-      .select("reservation_code, services(name), final_price, paid_amount, date")
-      .eq("patient_id", patientId)
-      .in("payment_status", ["unpaid", "partial"])
-      .order("date", { ascending: false });
-    
-    if (data) {
-      setPatientPreviousVisits(data.map((v: any) => ({
-        code: v.reservation_code,
-        service: v.services?.name || "خدمة",
-        remaining: round2((v.final_price || 0) - (v.paid_amount || 0)),
-      })));
-    }
+    const { data } = await supabase.from("appointments").select("reservation_code, services(name), final_price, paid_amount, date").eq("patient_id", patientId).in("payment_status", ["unpaid", "partial"]).order("date", { ascending: false });
+    if (data) setPatientPreviousVisits(data.map((v: any) => ({ code: v.reservation_code, service: v.services?.name || "خدمة", remaining: round2((v.final_price || 0) - (v.paid_amount || 0)) })));
   };
 
   const handleScannedCode = useCallback(async (rawText: string) => {
     if (verifyScannerOpen) {
-      setVerifyResult({ status: "loading", message: "جاري التحقق من السند..." });
+      setVerifyResult({ status: "loading", message: "جاري التحقق..." });
       const qrParsed = parseQRText(rawText);
       const targetCode = qrParsed.code || rawText.trim();
-
       if (targetCode) {
         const { data: inv } = await supabase.from("invoices").select("*").eq("invoice_number", targetCode).maybeSingle();
         if (inv) {
-          const isPayment = isPaymentRecord(inv);
-          const invAmount = Number(inv.total_amount || 0);
-          setVerifyResult({
-            status: "valid",
-            message: `✅ ${isPayment ? "سند دفعة صحيح" : "فاتورة صحيحة"}\nرقم: ${inv.invoice_number}\nالمريض: ${inv.patient_name || "—"}\nالمبلغ: ${invAmount.toLocaleString()}`
-          });
+          setVerifyResult({ status: "valid", message: `✅ سند صحيح\nرقم: ${inv.invoice_number}\nالمريض: ${inv.patient_name}\nالمبلغ: ${Number(inv.total_amount).toLocaleString()}` });
           setScannerOpen(false); stopScanner(); return;
         }
-
         const { data: appt } = await supabase.from("appointments").select("*, patients(name)").eq("reservation_code", targetCode).maybeSingle();
         if (appt) {
-          const visitPaid = Number(appt.paid_amount || 0);
-          setVerifyResult({
-            status: "valid",
-            message: `✅ سند دفع صحيح\nكود: ${appt.reservation_code}\nالمريض: ${appt.patients?.name || appt.notes || 'غير محدد'}\nالمبلغ المدفوع: ${visitPaid.toLocaleString()}`
-          });
+          setVerifyResult({ status: "valid", message: `✅ سند صحيح\nكود: ${appt.reservation_code}\nالمريض: ${appt.patients?.name || 'غير محدد'}\nالمدفوع: ${Number(appt.paid_amount || 0).toLocaleString()}` });
           setScannerOpen(false); stopScanner(); return;
         }
       }
-
-      setVerifyResult({ status: "invalid", message: `❌ تحذير: هذا السند غير صحيح أو لا ينتمي لهذه العيادة!\nالكود: ${targetCode || "—"}` });
+      setVerifyResult({ status: "invalid", message: `❌ سند غير صحيح` });
       setScannerOpen(false); stopScanner(); return;
     }
 
     const qrParsed = parseQRText(rawText);
     const targetCode = qrParsed.code || rawText.trim();
-    let found: Appointment | undefined;
-    const current = appointmentsRef.current;
-    found = current.find(a => a.id === targetCode || a.reservation_code.toUpperCase() === targetCode.toUpperCase() || rawText.toUpperCase().includes(a.reservation_code.toUpperCase()));
-
+    let found = appointmentsRef.current.find(a => a.id === targetCode || a.reservation_code.toUpperCase() === targetCode.toUpperCase());
     if (!found && clinic && targetCode) {
-      const { data } = await supabase.from("appointments")
-        .select("id,patient_id,date,time,status,reservation_code,arrived_at,payment_status,paid_amount,discount_amount,discount_applied,discount_type,is_walk_in,notes,customer_telegram_id,is_promo,promo_code,promotion_id,original_price,final_price,payment_method,payment_time,created_at,patients(id,name,phone,telegram_user_id),services(name,price)")
-        .eq("clinic_id", clinic.id).ilike("reservation_code", `%${targetCode}%`).maybeSingle();
+      const { data } = await supabase.from("appointments").select("id,patient_id,date,time,status,reservation_code,arrived_at,payment_status,paid_amount,discount_amount,discount_applied,discount_type,is_walk_in,notes,customer_telegram_id,is_promo,promo_code,promotion_id,original_price,final_price,payment_method,payment_time,created_at,patients(id,name,phone,telegram_user_id),services(name,price)").eq("clinic_id", clinic.id).ilike("reservation_code", `%${targetCode}%`).maybeSingle();
       if (data) found = data as Appointment;
     }
-
     if (found) {
       const { cleanName, cleanPhone } = extractCleanInfo(found);
-      const enriched: Appointment = {
-        ...found,
-        extracted_patient_name: cleanName,
-        extracted_patient_phone: cleanPhone,
-        patients: { id: found.patients?.id, name: cleanName, phone: cleanPhone, telegram_user_id: found.patients?.telegram_user_id },
-        services: found.services || (qrParsed.service ? { name: qrParsed.service, price: null } : null),
-      };
+      const enriched: Appointment = { ...found, extracted_patient_name: cleanName, extracted_patient_phone: cleanPhone, patients: { id: found.patients?.id, name: cleanName, phone: cleanPhone, telegram_user_id: found.patients?.telegram_user_id }, services: found.services || (qrParsed.service ? { name: qrParsed.service, price: null } : null) };
       if (!enriched.arrived_at) { await markArrived(enriched.id); enriched.arrived_at = new Date().toISOString(); }
-      
       openPaymentModal(enriched);
-      
-      setScannerMessage(`✅ تم العثور على الحجز: ${cleanName}`);
-      setTimeout(() => setScannerMessage(null), 3000);
-      setScannerOpen(false);
-      stopScanner();
+      setScannerOpen(false); stopScanner();
     } else {
-      setScannerMessage(`❌ لم يتم العثور — الكود: ${targetCode}`);
-      setTimeout(() => setScannerMessage(null), 4000);
+      setScannerMessage(`❌ لم يتم العثور على الحجز`);
+      setTimeout(() => setScannerMessage(null), 3000);
     }
   }, [clinic, verifyScannerOpen]);
 
   const stopScanner = useCallback(async () => {
-    await destroyScanner();
-    setScannerOpen(false);
-    setVerifyScannerOpen(false);
-    setScannerStatus("idle");
-    setCameraError(null);
+    await destroyScanner(); setScannerOpen(false); setVerifyScannerOpen(false); setScannerStatus("idle"); setCameraError(null);
   }, []);
 
   const startScanner = useCallback(async (isVerify = false) => {
     await destroyScanner();
-    setVerifyScannerOpen(isVerify);
-    setVerifyResult(null);
-    setCameraError(null);
-    setScannerStatus("loading");
-    setScannerOpen(true);
+    setVerifyScannerOpen(isVerify); setVerifyResult(null); setCameraError(null); setScannerStatus("loading"); setScannerOpen(true);
     await new Promise(r => setTimeout(r, 250));
-
     const element = document.getElementById(QR_CAMERA_ELEMENT_ID);
     if (!element) { setCameraError("❌ تعذر تهيئة الماسح."); setScannerStatus("error"); return; }
-    if (!navigator.mediaDevices?.getUserMedia) { setCameraError("🌐 المتصفح لا يدعم الكاميرا."); setScannerStatus("error"); return; }
-
+    
     const tryStart = async (facingMode: "environment" | "user"): Promise<boolean> => {
       try {
         const scanner = new Html5Qrcode(QR_CAMERA_ELEMENT_ID, { verbose: false });
         scannerRef.current = scanner;
-        await scanner.start(
-          { facingMode },
-          { fps: 10, qrbox: (w, h) => ({ width: Math.floor(Math.min(w, h) * 0.75), height: Math.floor(Math.min(w, h) * 0.75) }), aspectRatio: 1.0 },
-          (text) => { stopScanner().then(() => handleScannedCode(text)); },
-          () => {}
-        );
+        await scanner.start({ facingMode }, { fps: 10, qrbox: (w, h) => ({ width: Math.floor(Math.min(w, h) * 0.85), height: Math.floor(Math.min(w, h) * 0.85) }) }, (text) => { stopScanner().then(() => handleScannedCode(text)); }, () => {});
         setScannerStatus("active");
         return true;
       } catch (e) {
@@ -525,11 +436,8 @@ export default function CashierPage() {
         throw e;
       }
     };
-
-    try { await tryStart("environment"); return; } catch (_) {
-      try { await new Promise(r => setTimeout(r, 150)); await tryStart("user"); return; } catch (second) {
-        setCameraError(getFriendlyError(second)); setScannerStatus("error");
-      }
+    try { await tryStart("environment"); } catch (_) {
+      try { await tryStart("user"); } catch (second) { setCameraError(getFriendlyError(second)); setScannerStatus("error"); }
     }
   }, [stopScanner, handleScannedCode]);
 
@@ -537,187 +445,150 @@ export default function CashierPage() {
     return new Promise((resolve, reject) => {
       const img = new Image();
       img.onload = () => {
-        const canvas = document.createElement("canvas");
-        const ctx = canvas.getContext("2d");
+        const canvas = document.createElement("canvas"); const ctx = canvas.getContext("2d");
         if (!ctx) return reject("فشل Canvas");
         let w = img.width, h = img.height;
-        const maxDim = 1000;
-        if (w > maxDim || h > maxDim) { if (w > h) { h = Math.round((h * maxDim) / w); w = maxDim; } else { w = Math.round((w * maxDim) / h); h = maxDim; } }
-        canvas.width = w; canvas.height = h;
-        ctx.drawImage(img, 0, 0, w, h);
-        canvas.toBlob((blob) => { if (blob) resolve(new File([blob], file.name, { type: "image/png" })); else reject("فشل التحويل"); }, "image/png");
+        if (w > 1000 || h > 1000) { if (w > h) { h = Math.round((h * 1000) / w); w = 1000; } else { w = Math.round((w * 1000) / h); h = 1000; } }
+        canvas.width = w; canvas.height = h; ctx.drawImage(img, 0, 0, w, h);
+        canvas.toBlob((blob) => { if (blob) resolve(new File([blob], file.name, { type: "image/png" })); else reject("فشل"); }, "image/png");
       };
-      img.onerror = () => reject("فشل التحميل");
-      img.src = URL.createObjectURL(file);
+      img.onerror = () => reject("فشل التحميل"); img.src = URL.createObjectURL(file);
     });
   };
 
   const handleFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (!file) return;
-    setUploadingImage(true);
-    await destroyScanner();
+    const file = e.target.files?.[0]; if (!file) return;
+    setUploadingImage(true); await destroyScanner();
     try {
       const fileScanner = new Html5Qrcode(QR_FILE_ELEMENT_ID, { verbose: false });
       let decodedText = "";
-      try { decodedText = await fileScanner.scanFile(file, false); }
-      catch (_) { const resized = await processImageForQR(file); decodedText = await fileScanner.scanFile(resized, false); }
-      await stopScanner();
-      handleScannedCode(decodedText);
-    } catch (err) {
-      toast({ title: "فشل قراءة QR", description: "تأكد من وضوح الكود في الصورة.", variant: "destructive" });
-    } finally {
-      setUploadingImage(false);
-      if (fileInputRef.current) fileInputRef.current.value = "";
-    }
+      try { decodedText = await fileScanner.scanFile(file, false); } catch (_) { const resized = await processImageForQR(file); decodedText = await fileScanner.scanFile(resized, false); }
+      await stopScanner(); handleScannedCode(decodedText);
+    } catch (err) { toast({ title: "فشل قراءة QR", description: "تأكد من وضوح الكود.", variant: "destructive" }); } finally { setUploadingImage(false); if (fileInputRef.current) fileInputRef.current.value = ""; }
   };
 
   const openPaymentModal = (appointment: Appointment) => {
     const { cleanName, cleanPhone } = extractCleanInfo(appointment);
-    const appEnriched = { ...appointment, extracted_patient_name: cleanName, extracted_patient_phone: cleanPhone };
-    setSelectedAppointment(appEnriched);
-    setEditPatientName(cleanName !== "مريض غير محدد" ? cleanName : "");
-    setEditPatientPhone(cleanPhone === "بدون رقم" ? "" : cleanPhone);
-
+    setSelectedAppointment({ ...appointment, extracted_patient_name: cleanName, extracted_patient_phone: cleanPhone });
+    setEditPatientName(cleanName !== "مريض غير محدد" ? cleanName : ""); setEditPatientPhone(cleanPhone === "بدون رقم" ? "" : cleanPhone);
     const original = appointment.original_price ?? appointment.final_price ?? appointment.services?.price ?? 0;
-    const isPromo = appointment.is_promo === true;
     const discountValue = appointment.discount_amount ?? 0;
-    const discountType = appointment.discount_type || (isPromo ? "percentage" : "fixed");
-    const discountAmt = appointment.discount_applied ?? calcDiscountAmount(original, discountValue, discountType);
+    const discountAmt = appointment.discount_applied ?? calcDiscountAmount(original, discountValue, appointment.discount_type || "fixed");
     const final = appointment.final_price ?? (original - discountAmt);
     const alreadyPaid = round2(appointment.paid_amount || 0);
     const remaining = round2(Math.max(0, final - alreadyPaid));
-    
-    setTotalCostInput(String(original));
-    setPaidAmountInput(String(remaining > 0 ? remaining : (final > 0 ? final : original)));
-    setDiscountInput(String(discountValue));
-    setPaymentMethodInput(appointment.payment_method || "نقدي");
-    setShowReceipt(appointment.payment_status === "paid");
-    
-    setVisitType("normal");
-    setLinkedVisitCode("");
-    setPaymentDate(todayStr);
-
-    if (appointment.patients?.id) {
-      fetchPatientPreviousVisits(appointment.patients.id);
-    } else {
-      setPatientPreviousVisits([]);
-    }
+    setTotalCostInput(String(original)); setPaidAmountInput(String(remaining > 0 ? remaining : (final > 0 ? final : original)));
+    setDiscountInput(String(discountValue)); setPaymentMethodInput(appointment.payment_method || "نقدي"); setShowReceipt(appointment.payment_status === "paid");
+    setVisitType("normal"); setLinkedVisitCode(""); setPaymentDate(todayStr);
+    if (appointment.patients?.id) fetchPatientPreviousVisits(appointment.patients.id); else setPatientPreviousVisits([]);
   };
-
-  // ============================================================
-// محرك التوليد والإرسال التلقائي
 // ============================================================
+// دوال الإرسال إلى تليجرام (تصميم فاخر + إرسال تلقائي)
+// ============================================================
+
 const autoSendToTelegram = async (payload: {
   type: "paid" | "partial" | "promo" | "manual" | "previous" | "invoice";
-  code: string;
-  name: string;
-  service: string;
-  amount: number;
-  tgId: string;
-  linkedVisit?: string;
-  original?: number;
-  discount?: number;
-  discountType?: string;
-  items?: any[];
-  date?: string;
+  code: string; name: string; service: string; amount: number; tgId: string;
+  linkedVisit?: string; original?: number; discount?: number; discountType?: string; items?: any[];
 }) => {
-  if (!payload.tgId) {
-    console.warn("[AUTO-RECEIPT] تم تجاهل الإرسال: لا يوجد telegram chat_id للمستلم.");
-    return;
-  }
+  if (!payload.tgId) return;
   setSendingTelegram(true);
   try {
-    let bgColor = "#059669"; 
-    let title = "OFFICIAL RECEIPT";
-    let status = "مدفوع ✓";
-    let colorCode = "#ecfdf5";
-    let textColor = "#065f46";
-
-    if (payload.type === "promo") { bgColor = "#7c3aed"; title = "PROMO RECEIPT"; colorCode = "#f5f3ff"; textColor = "#5b21b6"; }
-    if (payload.type === "partial") { bgColor = "#ea580c"; title = "PARTIAL RECEIPT"; colorCode = "#fff7ed"; textColor = "#9a3412"; status = "دفع جزئي"; }
-    if (payload.type === "manual") { bgColor = "#e11d48"; title = "MANUAL RECEIPT"; colorCode = "#fff1f2"; textColor = "#9f1239"; status = "دفعة يدوية"; }
-    if (payload.type === "previous") { bgColor = "#0284c7"; title = "PREVIOUS PAYMENT"; colorCode = "#f0f9ff"; textColor = "#075985"; status = "سداد سابق"; }
-    if (payload.type === "invoice") { bgColor = "#ec4899"; title = "OFFICIAL INVOICE"; colorCode = "#fdf2f8"; textColor = "#9d174d"; status = "فاتورة"; }
+    let themeColor = "#059669"; 
+    let bgLight = "#ecfdf5";
+    let title = "سند استلام مبلغ";
+    
+    if (payload.type === "promo") { themeColor = "#7c3aed"; bgLight = "#f5f3ff"; title = "سند عرض خاص"; }
+    if (payload.type === "partial") { themeColor = "#ea580c"; bgLight = "#fff7ed"; title = "سند دفع جزئي"; }
+    if (payload.type === "manual") { themeColor = "#e11d48"; bgLight = "#fff1f2"; title = "سند دفعة يدوية"; }
+    if (payload.type === "previous") { themeColor = "#0284c7"; bgLight = "#f0f9ff"; title = "سند سداد سابق"; }
+    if (payload.type === "invoice") { themeColor = "#db2777"; bgLight = "#fdf2f8"; title = "فاتورة مبيعات"; }
 
     const itemsHtml = payload.items ? payload.items.map((it: any) => `
-      <div style="display:flex; justify-content:space-between; background:#f9fafb; padding:8px 12px; border-radius:6px; margin-bottom:4px;">
-        <span style="font-size:12px; color:#4b5563;">${it.name} × ${it.qty}</span>
-        <span style="font-size:12px; font-weight:bold; color:#111;">${(Number(it.qty) * Number(it.price)).toLocaleString()}</span>
+      <div style="display:flex; justify-content:space-between; align-items:center; background:#f8fafc; padding:10px 14px; border-radius:12px; margin-bottom:6px; border:1px solid #f1f5f9;">
+        <span style="font-size:13px; color:#334155; font-weight:600;">${it.name} <span style="color:#94a3b8; font-size:11px;">× ${it.qty}</span></span>
+        <span style="font-size:14px; font-weight:800; color:#0f172a;">${(Number(it.qty) * Number(it.price)).toLocaleString()}</span>
       </div>
     `).join("") : '';
 
     const receiptHtml = `
-      <div style="width:380px; background:#fff; padding:0; direction:rtl; font-family:'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; border-radius:16px; overflow:hidden; border:1px solid #e5e7eb; box-shadow: 0 10px 25px -5px rgba(0,0,0,0.1);">
-        <div style="background:linear-gradient(135deg, ${bgColor} 0%, ${bgColor}cc 100%); padding:24px; color:white; display:flex; justify-content:space-between; align-items:center;">
-          <div>
-            <p style="font-size:10px; opacity:0.9; margin:0 0 4px; letter-spacing:2px; font-weight:600;">${title}</p>
-            <h2 style="font-size:20px; font-weight:900; margin:0; line-height:1.2;">${clinic?.name || "العيادة"}</h2>
-            <p style="font-size:11px; opacity:0.9; margin:4px 0 0;">سند استلام مبلغ</p>
+      <div style="width:400px; background:#ffffff; padding:0; direction:rtl; font-family:'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; border-radius:28px; overflow:hidden; border:1px solid #e2e8f0; box-shadow: 0 25px 50px -12px rgba(0,0,0,0.15);">
+        
+        <div style="background:linear-gradient(135deg, ${themeColor} 0%, ${themeColor}dd 100%); padding:32px 28px; color:white; display:flex; justify-content:space-between; align-items:center; position:relative; overflow:hidden;">
+          <div style="position:absolute; top:-30px; left:-30px; width:120px; height:120px; background:rgba(255,255,255,0.1); border-radius:50%;"></div>
+          <div style="position:absolute; bottom:-20px; right:-20px; width:80px; height:80px; background:rgba(255,255,255,0.1); border-radius:50%;"></div>
+          
+          <div style="position:relative; z-index:10;">
+            <p style="font-size:11px; opacity:0.9; margin:0 0 8px; letter-spacing:2px; font-weight:800; text-transform:uppercase;">${title}</p>
+            <h2 style="font-size:24px; font-weight:900; margin:0; line-height:1.2; text-shadow:0 2px 4px rgba(0,0,0,0.1);">${clinic?.name || "العيادة"}</h2>
           </div>
-          ${clinic?.logo_url ? `<img src="${clinic.logo_url}" style="width:48px; height:48px; border-radius:10px; object-fit:cover; background:white; padding:2px;" />` : `<div style="width:48px; height:48px; background:rgba(255,255,255,0.2); border-radius:10px; display:flex; align-items:center; justify-content:center; font-size:20px;">🏥</div>`}
+          ${clinic?.logo_url ? `<img src="${clinic.logo_url}" style="width:64px; height:64px; border-radius:18px; object-fit:cover; background:white; padding:4px; box-shadow:0 4px 6px -1px rgba(0,0,0,0.1); position:relative; z-index:10;" />` : `<div style="width:64px; height:64px; background:rgba(255,255,255,0.2); border-radius:18px; display:flex; align-items:center; justify-content:center; font-size:28px; position:relative; z-index:10; border:2px solid rgba(255,255,255,0.3);">🏥</div>`}
         </div>
-        <div style="padding:24px; font-size:13px; color:#374151; display:flex; flex-direction:column; gap:10px;">
-          <div style="display:flex; justify-content:space-between;"><span>رقم المستند:</span><b style="color:#111; font-family:monospace;">${payload.code}</b></div>
-          <div style="display:flex; justify-content:space-between;"><span>التاريخ:</span><b style="color:#111;">${format(new Date(), "yyyy/MM/dd - hh:mm a")}</b></div>
-          <div style="display:flex; justify-content:space-between;"><span>المريض:</span><b style="color:#111;">${payload.name}</b></div>
-          <div style="display:flex; justify-content:space-between;"><span>الخدمة:</span><b style="color:#111;">${payload.service}</b></div>
-          ${payload.linkedVisit ? `<div style="display:flex; justify-content:space-between;"><span>مرتبطة بزيارة:</span><b style="color:${bgColor}; background:${colorCode}; padding:2px 6px; border-radius:4px; font-size:11px;">${payload.linkedVisit}</b></div>` : ''}
+        
+        <div style="padding:28px; font-size:14px; color:#1e293b; display:flex; flex-direction:column; gap:14px;">
+          
+          <div style="display:flex; justify-content:space-between; align-items:center; padding-bottom:12px; border-bottom:1px dashed #cbd5e1;">
+            <div>
+              <p style="margin:0 0 4px; font-size:11px; color:#64748b; font-weight:700;">رقم المستند</p>
+              <b style="color:#0f172a; font-family:monospace; font-size:15px; background:#f1f5f9; padding:4px 8px; border-radius:8px; border:1px solid #e2e8f0;">${payload.code}</b>
+            </div>
+            <div style="text-align:left;">
+              <p style="margin:0 0 4px; font-size:11px; color:#64748b; font-weight:700;">التاريخ</p>
+              <b style="color:#334155; font-size:13px;">${format(new Date(), "yyyy/MM/dd - hh:mm a")}</b>
+            </div>
+          </div>
+
+          <div style="display:flex; justify-content:space-between; align-items:center;">
+            <span style="color:#64748b; font-weight:600;">المريض</span>
+            <b style="color:#0f172a; font-size:16px;">${payload.name}</b>
+          </div>
+          <div style="display:flex; justify-content:space-between; align-items:center;">
+            <span style="color:#64748b; font-weight:600;">الخدمة</span>
+            <b style="color:#0f172a; font-size:15px;">${payload.service}</b>
+          </div>
+          ${payload.linkedVisit ? `
+          <div style="display:flex; justify-content:space-between; align-items:center;">
+            <span style="color:#64748b; font-weight:600;">مرتبطة بزيارة</span>
+            <b style="color:${themeColor}; background:${bgLight}; padding:4px 10px; border-radius:8px; font-size:13px; font-family:monospace; border:1px solid ${themeColor}30;">${payload.linkedVisit}</b>
+          </div>` : ''}
           
           ${payload.items && payload.items.length > 0 ? `
-            <div style="border-top:1px dashed #e5e7eb; margin:10px 0;"></div>
-            <p style="font-size:10px; font-weight:bold; color:#6b7280; margin-bottom:6px;">البنود:</p>
+            <div style="border-top:1px dashed #cbd5e1; margin:8px 0;"></div>
+            <p style="font-size:11px; font-weight:800; color:#64748b; margin:0 0 8px; letter-spacing:1px;">تفاصيل البنود</p>
             ${itemsHtml}
           ` : ''}
 
-          ${payload.type === "promo" && payload.original ? `
-            <div style="border-top:1px dashed #e5e7eb; margin:10px 0;"></div>
-            <div style="background:${colorCode}; border:1px solid ${bgColor}40; padding:12px; border-radius:10px; display:flex; flex-direction:column; gap:6px;">
-              <div style="display:flex; justify-content:space-between; color:${textColor};"><span>السعر الأصلي:</span><s>${payload.original}</s></div>
-              <div style="display:flex; justify-content:space-between; color:${textColor};"><span>الخصم (${payload.discountType === 'percentage' ? payload.discount + '%' : 'مبلغ'}):</span><span style="color:#dc2626; font-weight:bold;">-${payload.discountType === 'percentage' ? calcDiscountAmount(payload.original, payload.discount || 0, 'percentage') : payload.discount}</span></div>
+          <div style="border-top:1px dashed #cbd5e1; margin:8px 0;"></div>
+          
+          <div style="background:linear-gradient(to bottom right, ${bgLight}, #ffffff); border:2px solid ${themeColor}30; padding:24px; border-radius:20px; display:flex; justify-content:space-between; align-items:center; box-shadow:inset 0 2px 8px 0 rgba(0,0,0,0.02), 0 8px 20px -6px ${themeColor}20;">
+            <span style="font-weight:800; color:${themeColor}; font-size:16px;">المبلغ المستلم</span>
+            <span style="font-size:38px; font-weight:900; color:${themeColor}; letter-spacing:-1px;">${Number(payload.amount).toLocaleString()}</span>
+          </div>
+          
+          <div style="display:flex; justify-content:space-between; align-items:flex-end; margin-top:16px;">
+            <div>
+              <p style="font-size:10px; color:#94a3b8; margin:0 0 4px; font-weight:700;">رمز التحقق الإلكتروني</p>
+              <p style="font-size:11px; font-family:monospace; color:#64748b; margin:0; background:#f8fafc; padding:4px 8px; border-radius:6px; border:1px solid #e2e8f0;">PAY-VERIFIED|${payload.code}</p>
             </div>
-          ` : ''}
-
-          <div style="border-top:1px dashed #e5e7eb; margin:10px 0;"></div>
-          <div style="background:${colorCode}; border:1px solid ${bgColor}40; padding:16px; border-radius:12px; display:flex; justify-content:space-between; align-items:center;">
-            <span style="font-weight:bold; color:${textColor};">المبلغ المستلم:</span>
-            <span style="font-size:24px; font-weight:900; color:${bgColor};">${Number(payload.amount).toLocaleString()}</span>
+            <div style="background:white; padding:8px; border-radius:14px; border:1px solid #e2e8f0; box-shadow:0 4px 6px -1px rgba(0,0,0,0.05);">
+              <img src="https://api.qrserver.com/v1/create-qr-code/?size=100x100&data=${encodeURIComponent("PAY-VERIFIED|" + payload.code)}" style="width:56px; height:56px; display:block;" />
+            </div>
           </div>
-          <div style="display:flex; justify-content:space-between; align-items:center; margin-top:10px; border-top:1px solid #f3f4f6; padding-top:10px;">
-            <div><p style="font-size:9px; color:#9ca3af; margin:0;">رمز التحقق:</p><p style="font-size:9px; font-family:monospace; color:#9ca3af; margin:0;">PAY-VERIFIED|${payload.code}</p></div>
-            <img src="https://api.qrserver.com/v1/create-qr-code/?size=80x80&data=${encodeURIComponent("PAY-VERIFIED|" + payload.code)}" style="width:40px; height:40px;" />
-          </div>
-          <p style="text-align:center; font-size:10px; color:#9ca3af; margin-top:12px;">معتمد إلكترونياً - ${clinic?.name}</p>
+          
+          <p style="text-align:center; font-size:11px; color:#94a3b8; margin-top:20px; font-weight:600; border-top:1px solid #f1f5f9; padding-top:16px;">معتمد إلكترونياً - ${clinic?.name}</p>
         </div>
       </div>
     `;
 
-    const tempDiv = document.createElement("div");
-    tempDiv.style.position = "absolute";
-    tempDiv.style.left = "-9999px";
-    tempDiv.innerHTML = receiptHtml;
-    document.body.appendChild(tempDiv);
-
+    const tempDiv = document.createElement("div"); tempDiv.style.position = "absolute"; tempDiv.style.left = "-9999px"; tempDiv.innerHTML = receiptHtml; document.body.appendChild(tempDiv);
     const canvas = await html2canvas(tempDiv.firstElementChild as HTMLElement, { scale: 3, useCORS: true, backgroundColor: "#ffffff" });
-    const imgData = canvas.toDataURL("image/png");
-    document.body.removeChild(tempDiv);
+    const imgData = canvas.toDataURL("image/png"); document.body.removeChild(tempDiv);
 
     await supabase.functions.invoke("telegram-bot", {
-      body: {
-        action: "send_receipt",
-        clinic_id: clinic?.id,
-        chat_id: payload.tgId,
-        receipt_image: imgData,
-        reservation_code: payload.code,
-        patient_name: payload.name,
-        service_name: payload.service,
-        amount: payload.amount,
-        type: payload.type,
-        clinic_name: clinic?.name || "العيادة",
-      }
+      body: { action: "send_receipt", clinic_id: clinic?.id, chat_id: payload.tgId, receipt_image: imgData, reservation_code: payload.code, patient_name: payload.name, service_name: payload.service, amount: payload.amount, type: payload.type, clinic_name: clinic?.name || "العيادة" }
     });
   } catch (err) {
-    console.warn("[AUTO-RECEIPT] فشل إرسال السند:", err);
+    console.warn("[AUTO-RECEIPT] فشل الإرسال:", err);
   } finally {
     setSendingTelegram(false);
   }
@@ -727,179 +598,148 @@ const sendTelegramLedger = async (patientName: string, phone: string): Promise<b
   setSendingTelegram(true);
   try {
     let tgId = "";
-
     if (phone && phone !== "بدون رقم") {
-      const { data: pData } = await supabase.from("patients")
-        .select("id, telegram_user_id")
-        .eq("clinic_id", clinic?.id)
-        .eq("phone", phone)
-        .maybeSingle();
+      const { data: pData } = await supabase.from("patients").select("id, telegram_user_id").eq("clinic_id", clinic?.id).eq("phone", phone).maybeSingle();
       if (pData?.telegram_user_id) tgId = pData.telegram_user_id;
     }
-
-    if (!tgId) {
+    if (!tgId && patientName) {
       const pVisits = invoiceAppointments.find(a => {
         const info = extractCleanInfo(a);
-        return (phone && phone !== "بدون رقم" && info.cleanPhone === phone) ||
-               (patientName && info.cleanName === patientName);
+        return (phone && phone !== "بدون رقم" && info.cleanPhone === phone) || (patientName && info.cleanName === patientName);
       });
       if (pVisits) tgId = pVisits.customer_telegram_id || pVisits.patients?.telegram_user_id || "";
     }
+    if (!tgId) return false;
 
-    if (!tgId && patientName) {
-      const { data: apptData } = await supabase.from("appointments")
-        .select("customer_telegram_id, patients!inner(name, telegram_user_id)")
-        .eq("clinic_id", clinic?.id)
-        .eq("patients.name", patientName)
-        .not("customer_telegram_id", "is", null)
-        .limit(1)
-        .maybeSingle();
-      if (apptData) tgId = apptData.customer_telegram_id || (apptData as any).patients?.telegram_user_id || "";
-    }
-
-    if (!tgId) { return false; }
-
-    let appts: any[] = [];
-    const { data: pData2 } = await supabase.from("patients")
-      .select("id")
-      .eq("clinic_id", clinic?.id)
-      .eq("phone", phone)
-      .maybeSingle();
-
+    const { data: pData2 } = await supabase.from("patients").select("id").eq("clinic_id", clinic?.id).eq("phone", phone).maybeSingle();
+    let appts = [];
     if (pData2?.id) {
-      const { data } = await supabase.from("appointments")
-        .select("reservation_code, date, final_price, paid_amount, services(name), payment_status")
-        .eq("clinic_id", clinic?.id)
-        .eq("patient_id", pData2.id);
+      const { data } = await supabase.from("appointments").select("reservation_code, date, final_price, paid_amount, services(name), payment_status").eq("clinic_id", clinic?.id).eq("patient_id", pData2.id);
       appts = data || [];
     } else if (phone && phone !== "بدون رقم") {
-      const { data } = await supabase.from("appointments")
-        .select("reservation_code, date, final_price, paid_amount, services(name), payment_status, patients!inner(phone)")
-        .eq("clinic_id", clinic?.id)
-        .eq("patients.phone", phone);
+      const { data } = await supabase.from("appointments").select("reservation_code, date, final_price, paid_amount, services(name), payment_status, patients!inner(phone)").eq("clinic_id", clinic?.id).eq("patients.phone", phone);
       appts = data || [];
     }
 
-    const filters: string[] = [];
+    const filters = [];
     if (phone && phone !== "بدون رقم") filters.push(`patient_phone.eq.${phone}`);
     if (patientName) filters.push(`patient_name.eq.${patientName}`);
     const orFilter = filters.length ? filters.join(",") : "id.eq.00000000-0000-0000-0000-000000000000";
 
-    const { data: invs } = await supabase.from("invoices")
-      .select("*")
-      .eq("clinic_id", clinic?.id)
-      .or(orFilter);
+    const { data: invs } = await supabase.from("invoices").select("*").eq("clinic_id", clinic?.id).or(orFilter);
 
     const validAppts = appts.filter(a => a.payment_status === "paid" || a.payment_status === "partial" || Number(a.paid_amount) > 0);
+    
+    const visitsHtml = validAppts.map(a => `
+      <div style="display:flex; justify-content:space-between; align-items:center; background:#ffffff; padding:16px; border-radius:16px; margin-bottom:10px; border:1px solid #f1f5f9; box-shadow:0 2px 4px 0 rgba(0,0,0,0.02);">
+        <div>
+          <div style="display:flex; align-items:center; gap:8px; margin-bottom:6px;">
+            <span style="font-family:monospace; font-size:12px; font-weight:bold; background:#f1f5f9; padding:2px 8px; border-radius:6px; border:1px solid #e2e8f0; color:#334155;">${a.reservation_code}</span>
+            <span style="font-size:12px; color:#64748b; font-weight:600;"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="display:inline; margin-left:4px; vertical-align:middle;"><rect x="3" y="4" width="18" height="18" rx="2" ry="2"></rect><line x1="16" y1="2" x2="16" y2="6"></line><line x1="8" y1="2" x2="8" y2="6"></line><line x1="3" y1="10" x2="21" y2="10"></line></svg>${a.date}</span>
+          </div>
+          <span style="font-size:15px; font-weight:800; color:#0f172a;">${a.services?.name || "فحص"}</span>
+        </div>
+        <div style="text-align:left; background:#f8fafc; padding:8px 12px; border-radius:12px;">
+          <div style="font-size:12px; color:#64748b; margin-bottom:2px; font-weight:600;">المبلغ: ${Number(a.final_price||0).toLocaleString()}</div>
+          <div style="font-size:15px; font-weight:900; color:#059669;">مدفوع: ${Number(a.paid_amount||0).toLocaleString()}</div>
+          <div style="font-size:12px; font-weight:bold; color:#dc2626; margin-top:2px;">باقي: ${Number((a.final_price||0)-(a.paid_amount||0)).toLocaleString()}</div>
+        </div>
+      </div>
+    `).join("");
 
-    const visits = validAppts.map(a => ({
-        code: a.reservation_code,
-        date: a.date,
-        service: a.services?.name || "فحص",
-        amount: round2(Number(a.final_price || 0)),
-        paid: round2(Number(a.paid_amount || 0))
-    })).sort((a,b) => new Date(b.date).getTime() - new Date(a.date).getTime());
+    const paymentsHtml = (invs || []).filter(i => isPaymentRecord(i as any)).map(i => {
+      const isPrevious = i.notes?.includes("[LINKED_VISIT:");
+      const linkedCode = extractLinkedVisit(i as any);
+      return `
+      <div style="display:flex; justify-content:space-between; align-items:center; background:#ffffff; padding:16px; border-radius:16px; margin-bottom:10px; border:1px solid #f1f5f9; box-shadow:0 2px 4px 0 rgba(0,0,0,0.02);">
+        <div>
+          <div style="display:flex; align-items:center; gap:8px; margin-bottom:6px;">
+            <span style="font-family:monospace; font-size:12px; font-weight:bold; color:#0284c7;">${i.invoice_number}</span>
+            <span style="font-size:12px; color:#64748b; font-weight:600;">${i.created_at.split('T')[0]}</span>
+          </div>
+          <span style="font-size:12px; font-weight:bold; background:${isPrevious ? '#e0f2fe' : '#fce7f3'}; color:${isPrevious ? '#0369a1' : '#be185d'}; padding:4px 10px; border-radius:8px; display:inline-block;">
+            ${isPrevious ? `دفعة سابقة للزيارة ${linkedCode}` : (i.items?.[0]?.name || "دفعة")}
+          </span>
+        </div>
+        <div style="text-align:left; background:#f8fafc; padding:8px 12px; border-radius:12px; min-width:100px;">
+          <div style="font-size:16px; font-weight:900; color:#059669;">+ ${Number(i.total_amount).toLocaleString()}</div>
+          <div style="font-size:11px; color:#64748b; margin-top:4px; font-weight:bold; text-align:center; background:#e2e8f0; padding:2px 6px; border-radius:6px;">${i.payment_method || "نقدي"}</div>
+        </div>
+      </div>
+    `}).join("");
 
-    const payments = (invs || []).filter(i => isPaymentRecord(i as any)).map(i => ({
-        ref: i.invoice_number,
-        date: i.created_at.split('T')[0],
-        amount: round2(Number(i.total_amount || 0)),
-        method: i.payment_method || "—",
-        linkedVisit: extractLinkedVisit(i as any) || "—"
-    })).sort((a,b) => new Date(b.date).getTime() - new Date(a.date).getTime());
-
-    const total = round2(visits.reduce((s, v) => s + v.amount, 0));
-    const paid = round2(visits.reduce((s, v) => s + v.paid, 0));
+    const total = round2(validAppts.reduce((s, v) => s + Number(v.final_price || 0), 0));
+    const paid = round2(validAppts.reduce((s, v) => s + Number(v.paid_amount || 0), 0));
     const remaining = round2(Math.max(0, total - paid));
 
-    const visitsHtml = visits.map((v: any) => `
-      <tr>
-        <td style="padding:10px; border-bottom:1px solid #f3f4f6; font-family:monospace; font-size:12px;">${v.code || "—"}</td>
-        <td style="padding:10px; border-bottom:1px solid #f3f4f6; font-size:12px;">${v.date || "—"}</td>
-        <td style="padding:10px; border-bottom:1px solid #f3f4f6; font-size:12px;">${v.service || "—"}</td>
-        <td style="padding:10px; border-bottom:1px solid #f3f4f6; font-weight:bold; font-size:12px;">${v.amount.toLocaleString()}</td>
-        <td style="padding:10px; border-bottom:1px solid #f3f4f6; font-weight:bold; color:#059669; font-size:12px;">${v.paid.toLocaleString()}</td>
-        <td style="padding:10px; border-bottom:1px solid #f3f4f6; font-weight:bold; color:#dc2626; font-size:12px;">${(v.amount - v.paid).toLocaleString()}</td>
-      </tr>
-    `).join("");
-
-    const paymentsHtml = payments.map((p: any) => `
-      <tr>
-        <td style="padding:10px; border-bottom:1px solid #f3f4f6; font-family:monospace; font-size:12px; color:#059669;">${p.ref || "—"}</td>
-        <td style="padding:10px; border-bottom:1px solid #f3f4f6; font-size:12px;">${p.date || "—"}</td>
-        <td style="padding:10px; border-bottom:1px solid #f3f4f6; font-weight:bold; color:#059669; font-size:12px;">${p.amount.toLocaleString()}</td>
-        <td style="padding:10px; border-bottom:1px solid #f3f4f6; font-size:12px;">${p.method || "—"}</td>
-        <td style="padding:10px; border-bottom:1px solid #f3f4f6; font-size:12px;">${p.linkedVisit || "—"}</td>
-      </tr>
-    `).join("");
-
     const ledgerHtml = `
-      <div style="width:800px; background:#f9fafb; padding:40px; direction:rtl; font-family:'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;">
-        <div style="background:linear-gradient(135deg, #e11d48 0%, #be123c 100%); padding:30px; color:white; border-radius:16px; margin-bottom:24px; display:flex; justify-content:space-between; align-items:center;">
-          <div>
-            <h1 style="font-size:24px; font-weight:bold; margin:0 0 8px;">${clinic?.name} - كشف حساب شامل</h1>
-            <p style="margin:4px 0; font-size:14px; opacity:0.9;">المريض: ${patientName} | ${phone}</p>
-            <p style="margin:4px 0; font-size:14px; opacity:0.9;">التاريخ: ${format(new Date(), "yyyy/MM/dd")}</p>
+      <div style="width:800px; background:#f8fafc; padding:40px; direction:rtl; font-family:'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;">
+        
+        <div style="background:linear-gradient(135deg, #be123c 0%, #e11d48 50%, #f43f5e 100%); padding:40px; color:white; border-radius:28px; margin-bottom:28px; display:flex; justify-content:space-between; align-items:center; box-shadow:0 20px 40px -10px rgba(225,29,72,0.3); position:relative; overflow:hidden;">
+          <div style="position:absolute; top:-30px; right:-30px; width:200px; height:200px; background:rgba(255,255,255,0.1); border-radius:50%;"></div>
+          <div style="position:absolute; bottom:-50px; left:20px; width:120px; height:120px; background:rgba(255,255,255,0.1); border-radius:50%;"></div>
+          
+          <div style="position:relative; z-index:1;">
+            <h1 style="font-size:28px; font-weight:900; margin:0 0 12px; letter-spacing:-0.5px;">${clinic?.name} - كشف حساب شامل</h1>
+            <p style="margin:0 0 6px; font-size:16px; opacity:0.95; font-weight:700;">المريض: ${patientName}</p>
+            <p style="margin:0; font-size:14px; opacity:0.85; font-weight:600;">رقم الهاتف: ${phone} | تاريخ الإصدار: ${format(new Date(), "yyyy/MM/dd")}</p>
           </div>
-          ${clinic?.logo_url ? `<img src="${clinic.logo_url}" style="width:80px; height:80px; border-radius:12px; object-fit:cover; background:white; padding:4px;" />` : ''}
+          ${clinic?.logo_url ? `<img src="${clinic.logo_url}" style="width:90px; height:90px; border-radius:24px; object-fit:cover; background:white; padding:4px; position:relative; z-index:1; box-shadow:0 8px 16px -4px rgba(0,0,0,0.2);" />` : ''}
         </div>
-        <div style="display:flex; justify-content:space-between; align-items:center; background:#fff1f2; padding:24px; border-radius:12px; border:1px solid #fecdd3; margin-bottom:24px;">
-          <div style="text-align:center; flex:1;"><p style="font-size:12px; color:#9f1239; font-weight:bold; margin:0 0 4px;">الإجمالي</p><p style="font-size:24px; font-weight:900; margin:0;">${total.toLocaleString()}</p></div>
-          <div style="width:1px; height:40px; background:#fecdd3;"></div>
-          <div style="text-align:center; flex:1;"><p style="font-size:12px; color:#9f1239; font-weight:bold; margin:0 0 4px;">الواصل</p><p style="font-size:24px; font-weight:900; margin:0; color:#be123c;">${paid.toLocaleString()}</p></div>
-          <div style="width:1px; height:40px; background:#fecdd3;"></div>
-          <div style="text-align:center; flex:1;"><p style="font-size:12px; color:#be123c; font-weight:bold; margin:0 0 4px;">المتبقي</p><p style="font-size:24px; font-weight:900; margin:0; color:#e11d48;">${remaining.toLocaleString()}</p></div>
+
+        <div style="display:flex; gap:20px; margin-bottom:36px;">
+          <div style="flex:1; background:rgba(255,255,255,0.9); backdrop-filter:blur(10px); padding:24px; border-radius:24px; text-align:center; box-shadow:0 10px 25px -5px rgba(0,0,0,0.05); border:1px solid #e2e8f0;">
+            <div style="width:48px; height:48px; background:#f1f5f9; border-radius:16px; display:flex; align-items:center; justify-content:center; margin:0 auto 12px;">
+              <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="#475569" stroke-width="2"><path d="M12 2v20M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"/></svg>
+            </div>
+            <p style="font-size:13px; color:#64748b; font-weight:800; margin:0 0 8px;">إجمالي المبالغ</p>
+            <p style="font-size:32px; font-weight:900; margin:0; color:#0f172a;">${total.toLocaleString()}</p>
+          </div>
+          <div style="flex:1; background:rgba(255,255,255,0.9); backdrop-filter:blur(10px); padding:24px; border-radius:24px; text-align:center; box-shadow:0 10px 25px -5px rgba(0,0,0,0.05); border:1px solid #e2e8f0;">
+            <div style="width:48px; height:48px; background:#ecfdf5; border-radius:16px; display:flex; align-items:center; justify-content:center; margin:0 auto 12px;">
+              <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="#059669" stroke-width="2"><polyline points="20 6 9 17 4 12"></polyline></svg>
+            </div>
+            <p style="font-size:13px; color:#059669; font-weight:800; margin:0 0 8px;">إجمالي الواصل</p>
+            <p style="font-size:32px; font-weight:900; margin:0; color:#059669;">${paid.toLocaleString()}</p>
+          </div>
+          <div style="flex:1; background:rgba(255,255,255,0.9); backdrop-filter:blur(10px); padding:24px; border-radius:24px; text-align:center; box-shadow:0 10px 25px -5px rgba(0,0,0,0.05); border:1px solid #e2e8f0;">
+            <div style="width:48px; height:48px; background:#fff1f2; border-radius:16px; display:flex; align-items:center; justify-content:center; margin:0 auto 12px;">
+              <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="#e11d48" stroke-width="2"><circle cx="12" cy="12" r="10"></circle><polyline points="12 6 12 12 16 14"></polyline></svg>
+            </div>
+            <p style="font-size:13px; color:#e11d48; font-weight:800; margin:0 0 8px;">إجمالي المتبقي</p>
+            <p style="font-size:32px; font-weight:900; margin:0; color:#e11d48;">${remaining.toLocaleString()}</p>
+          </div>
         </div>
-        <div style="margin-bottom:24px;">
-          <h3 style="font-size:16px; color:#374151; margin:0 0 12px;">سجل الزيارات</h3>
-          <table style="width:100%; text-align:right; background:white; border-radius:12px; overflow:hidden; border:1px solid #e5e7eb; border-collapse:collapse;">
-            <thead style="background:#f3f4f6; color:#4b5563;"><tr><th style="padding:12px; font-size:12px;">الزيارة</th><th style="padding:12px; font-size:12px;">التاريخ</th><th style="padding:12px; font-size:12px;">الخدمة</th><th style="padding:12px; font-size:12px;">المبلغ</th><th style="padding:12px; font-size:12px;">الواصل</th><th style="padding:12px; font-size:12px;">الباقي</th></tr></thead>
-            <tbody>${visitsHtml}</tbody>
-          </table>
+
+        <div style="margin-bottom:36px;">
+          <h3 style="font-size:20px; font-weight:900; color:#1e293b; margin:0 0 16px; display:flex; align-items:center; gap:10px;">
+            <span style="display:inline-block; width:6px; height:24px; background:#e11d48; border-radius:4px;"></span> سجل الزيارات
+          </h3>
+          <div>${visitsHtml || '<div style="text-align:center; padding:30px; background:white; border-radius:16px; color:#94a3b8; font-weight:bold;">لا توجد زيارات مسجلة</div>'}</div>
         </div>
-        ${payments.length > 0 ? `
+
         <div>
-          <h3 style="font-size:16px; color:#374151; margin:0 0 12px;">سجل الدفعات (السندات)</h3>
-          <table style="width:100%; text-align:right; background:white; border-radius:12px; overflow:hidden; border:1px solid #e5e7eb; border-collapse:collapse;">
-            <thead style="background:#fff1f2; color:#9f1239;"><tr><th style="padding:12px; font-size:12px;">المرجع</th><th style="padding:12px; font-size:12px;">التاريخ</th><th style="padding:12px; font-size:12px;">المبلغ</th><th style="padding:12px; font-size:12px;">طريقة الدفع</th><th style="padding:12px; font-size:12px;">مرتبطة بزيارة</th></tr></thead>
-            <tbody>${paymentsHtml}</tbody>
-          </table>
-        </div>` : ''}
-        <p style="text-align:center; font-size:12px; color:#9ca3af; margin-top:32px; border-top:1px solid #e5e7eb; padding-top:16px;">معتمد إلكترونياً - ${clinic?.name}</p>
+          <h3 style="font-size:20px; font-weight:900; color:#1e293b; margin:0 0 16px; display:flex; align-items:center; gap:10px;">
+            <span style="display:inline-block; width:6px; height:24px; background:#0ea5e9; border-radius:4px;"></span> سجل الدفعات (الإيصالات)
+          </h3>
+          <div>${paymentsHtml || '<div style="text-align:center; padding:30px; background:white; border-radius:16px; color:#94a3b8; font-weight:bold;">لا توجد دفعات مسجلة</div>'}</div>
+        </div>
+
+        <p style="text-align:center; font-size:14px; color:#94a3b8; margin-top:40px; border-top:1px solid #cbd5e1; padding-top:24px; font-weight:800; letter-spacing:1px;">معتمد إلكترونياً - ${clinic?.name}</p>
       </div>
     `;
 
-    const tempDiv = document.createElement("div");
-    tempDiv.style.position = "absolute";
-    tempDiv.style.left = "-9999px";
-    tempDiv.innerHTML = ledgerHtml;
-    document.body.appendChild(tempDiv);
-
+    const tempDiv = document.createElement("div"); tempDiv.style.position = "absolute"; tempDiv.style.left = "-9999px"; tempDiv.innerHTML = ledgerHtml; document.body.appendChild(tempDiv);
     const canvas = await html2canvas(tempDiv.firstElementChild as HTMLElement, { scale: 2, useCORS: true, backgroundColor: "#ffffff" });
-    const imgData = canvas.toDataURL("image/png");
-    document.body.removeChild(tempDiv);
+    const imgData = canvas.toDataURL("image/png"); document.body.removeChild(tempDiv);
 
     await supabase.functions.invoke("telegram-bot", {
-      body: {
-        action: "send_receipt",
-        clinic_id: clinic?.id,
-        chat_id: tgId,
-        receipt_image: imgData,
-        reservation_code: "LEDGER",
-        patient_name: patientName,
-        service_name: "كشف حساب شامل",
-        amount: 0,
-        type: "ledger",
-        clinic_name: clinic?.name || "العيادة",
-      }
+      body: { action: "send_receipt", clinic_id: clinic?.id, chat_id: tgId, receipt_image: imgData, reservation_code: "LEDGER", patient_name: patientName, service_name: "كشف حساب شامل", amount: 0, type: "ledger", clinic_name: clinic?.name || "العيادة" }
     });
     return true;
   } catch (err) {
-    console.warn("[AUTO-LEDGER] فشل إرسال الكشف:", err);
-    return false;
-  } finally {
-    setSendingTelegram(false);
-  }
+    console.warn("[AUTO-LEDGER] فشل الإرسال:", err); return false;
+  } finally { setSendingTelegram(false); }
 };
 
 const handlePayNow = async () => {
@@ -910,7 +750,6 @@ const handlePayNow = async () => {
   let paidNow = round2(parseFloat(paidAmountInput) || 0);
   const discountValue = round2(parseFloat(discountInput) || 0);
   const discType = selectedAppointment.discount_type || (selectedAppointment.is_promo ? "percentage" : "fixed");
-  
   const discountCash = calcDiscountAmount(totalCost, discountValue, discType);
   const finalPrice = round2(Math.max(0, totalCost - discountCash));
 
@@ -936,16 +775,11 @@ const handlePayNow = async () => {
   if (visitType === "link" && linkedVisitCode) {
     const paymentRef = generatePaymentReference(editPatientPhone || "0000");
     const notes = `تسديد دفعة للزيارة ${linkedVisitCode} [LINKED_VISIT:${linkedVisitCode}]`;
-
     const { error: invError } = await supabase.from("invoices").insert({
-      clinic_id: clinic.id,
-      patient_name: editPatientName.trim() || "غير محدد",
-      patient_phone: editPatientPhone.trim() || "بدون رقم",
-      invoice_number: paymentRef,
+      clinic_id: clinic.id, patient_name: editPatientName.trim() || "غير محدد", patient_phone: editPatientPhone.trim() || "بدون رقم", invoice_number: paymentRef,
       items: [{ name: `تسديد دفعة (${linkedVisitCode})`, qty: 1, price: netCollected, linkedVisit: linkedVisitCode }],
       subtotal: netCollected, discount_type: "fixed", discount_value: 0, discount_amount: 0, total_amount: netCollected, paid_status: "paid", paid_amount: netCollected, payment_method: paymentMethodInput, notes, paid_at: new Date(paymentDate).toISOString(),
     });
-
     if (invError) { toast({ title: "خطأ", description: invError.message, variant: "destructive" }); setProcessingPayment(false); return; }
 
     const targetVisit = patientPreviousVisits.find(v => v.code === linkedVisitCode);
@@ -953,421 +787,160 @@ const handlePayNow = async () => {
       const { data: oldAppt } = await supabase.from("appointments").select("paid_amount, final_price").eq("reservation_code", linkedVisitCode).single();
       if (oldAppt) {
         const newPaid = round2((oldAppt.paid_amount || 0) + netCollected);
-        const isFullyPaid = newPaid >= (oldAppt.final_price || 0);
-        await supabase.from("appointments").update({ paid_amount: newPaid, payment_status: isFullyPaid ? "paid" : "partial" }).eq("reservation_code", linkedVisitCode);
+        await supabase.from("appointments").update({ paid_amount: newPaid, payment_status: newPaid >= (oldAppt.final_price || 0) ? "paid" : "partial" }).eq("reservation_code", linkedVisitCode);
       }
     }
-
-    toast({ title: "✅ تم تسجيل الدفعة للسابق", description: `المرجع: ${paymentRef}` });
+    toast({ title: "✅ تم تسجيل الدفعة للسابق" });
     typeToSend = "previous";
     setSelectedAppointment(null);
-
   } else {
     const totalPaidNow = round2((selectedAppointment.paid_amount || 0) + netCollected);
     const isFullyPaid = totalPaidNow >= finalPrice || visitType === "followup";
     typeToSend = selectedAppointment.is_promo ? "promo" : (isFullyPaid ? "paid" : "partial");
 
     const updatePayload: any = {
-      payment_status: isFullyPaid ? "paid" : "partial",
-      status: "confirmed",
-      department: "صندوق",
-      paid_amount: totalPaidNow,
-      discount_amount: discountValue,
-      discount_applied: discountCash,
-      discount_type: discType,
-      payment_method: paymentMethodInput,
-      payment_time: new Date(paymentDate).toISOString(),
-      final_price: finalPrice,
-      original_price: totalCost
+      payment_status: isFullyPaid ? "paid" : "partial", status: "confirmed", department: "صندوق", paid_amount: totalPaidNow, discount_amount: discountValue, discount_applied: discountCash, discount_type: discType, payment_method: paymentMethodInput, payment_time: new Date(paymentDate).toISOString(), final_price: finalPrice, original_price: totalCost
     };
-
-    if (selectedAppointment.is_promo) {
-      updatePayload.is_promo = true;
-      updatePayload.promo_code = selectedAppointment.promo_code;
-    }
+    if (selectedAppointment.is_promo) { updatePayload.is_promo = true; updatePayload.promo_code = selectedAppointment.promo_code; }
 
     const { error } = await supabase.from("appointments").update(updatePayload).eq("id", selectedAppointment.id).eq("clinic_id", clinic.id);
-    if (error) {
-      toast({ title: "خطأ", description: "فشل تحديث حالة الدفع", variant: "destructive" });
-      setProcessingPayment(false);
-      return;
-    }
+    if (error) { toast({ title: "خطأ", description: "فشل التحديث", variant: "destructive" }); setProcessingPayment(false); return; }
 
-    toast({ title: isFullyPaid ? "✅ تم سداد الزيارة بالكامل" : "✅ تم تسجيل دفعة جزئية", description: `الواصل الآن: ${totalPaidNow.toLocaleString()}` });
-
-    setSelectedAppointment({
-      ...selectedAppointment,
-      payment_status: isFullyPaid ? "paid" : "partial",
-      paid_amount: totalPaidNow,
-      final_price: finalPrice,
-      payment_method: paymentMethodInput,
-    });
+    toast({ title: isFullyPaid ? "✅ سداد كامل" : "✅ دفع جزئي", description: `الواصل: ${totalPaidNow}` });
+    setSelectedAppointment({ ...selectedAppointment, payment_status: isFullyPaid ? "paid" : "partial", paid_amount: totalPaidNow, final_price: finalPrice, payment_method: paymentMethodInput });
     setShowReceipt(true);
   }
 
   setProcessingPayment(false);
-  fetchAppointments();
-  fetchInvoices();
+  await fetchAppointments();
+  await fetchInvoices();
   
   setTimeout(async () => {
-     await autoSendToTelegram({
-       type: typeToSend,
-       code: linkedVisitCode || selectedAppointment.reservation_code,
-       name: editPatientName,
-       service: selectedAppointment.services?.name || "فحص طبي",
-       amount: netCollected,
-       tgId: tgId,
-       linkedVisit: linkedVisitCode || undefined,
-       original: totalCost,
-       discount: discountValue,
-       discountType: discType
-     });
-     
+     await autoSendToTelegram({ type: typeToSend, code: linkedVisitCode || selectedAppointment.reservation_code, name: editPatientName, service: selectedAppointment.services?.name || "فحص", amount: netCollected, tgId: tgId, linkedVisit: linkedVisitCode || undefined });
      await sendTelegramLedger(editPatientName, editPatientPhone);
   }, 1000);
 };
-
-const addWalkIn = async () => {
-  if (!clinic || !patientNameInput.trim()) return;
-  const { data: patient, error: patientError } = await supabase.from("patients").insert({ clinic_id: clinic.id, name: patientNameInput.trim(), phone: patientPhoneInput.trim() || "بدون هاتف" }).select("id").single();
-  if (patientError || !patient) { toast({ title: "خطأ", variant: "destructive" }); return; }
-  const code = `WI-${Math.floor(1000 + Math.random() * 9000)}`;
-  const { error } = await supabase.from("appointments").insert({ clinic_id: clinic.id, patient_id: patient.id, date: today, time: format(new Date(), "HH:mm"), status: "confirmed", reservation_code: code, arrived_at: new Date().toISOString(), payment_status: "paid", is_walk_in: true, department: "صندوق" });
-  if (error) toast({ title: "خطأ", variant: "destructive" });
-  else { toast({ title: "تمت الإضافة", description: code }); setWalkInOpen(false); setPatientNameInput(""); setPatientPhoneInput(""); fetchAppointments(); }
-};
-
-const handleAddExpense = async () => {
-  if (!clinic) return;
-  if (!expenseTitle.trim() || !expenseAmount || parseFloat(expenseAmount) <= 0) { toast({ title: "بيانات غير مكتملة", variant: "destructive" }); return; }
-  const { error } = await supabase.from("expenses").insert({ clinic_id: clinic.id, title: expenseTitle.trim(), amount: parseFloat(expenseAmount), category: expenseCategory, expense_date: expenseDate, expense_time: expenseTime + ":00" });
-  if (error) { toast({ title: "خطأ", description: "فشل حفظ المصروف", variant: "destructive" }); return; }
-  toast({ title: "✅ تم تسجيل المصروف" }); setExpenseTitle(""); setExpenseAmount(""); setExpenseModalOpen(false); fetchExpenses();
-};
-
-const generateReceiptCanvas = async (): Promise<HTMLCanvasElement> => {
-  const element = document.getElementById("receipt-export-container");
-  if (!element) throw new Error("عنصر السند غير متوفر");
-  return await html2canvas(element, { scale: 3, useCORS: true, backgroundColor: "#ffffff" });
-};
-
-const downloadReceipt = async () => {
-  try {
-    const canvas = await generateReceiptCanvas();
-    const link = document.createElement("a");
-    link.href = canvas.toDataURL("image/png");
-    link.download = `سند_${selectedAppointment?.reservation_code || "receipt"}.png`;
-    link.click();
-  } catch (_) { toast({ title: "خطأ", variant: "destructive" }); }
-};
-
-const printReceipt = async () => {
-  try {
-    const canvas = await generateReceiptCanvas();
-    const imgData = canvas.toDataURL("image/png");
-    const win = window.open("", "_blank");
-    if (win) { win.document.write(`<html><head><title>طباعة</title></head><body style="margin:0;display:flex;align-items:center;justify-content:center;min-height:100vh;background:#f4f4f5;"><img src="${imgData}" style="max-width:100%;height:auto;" onload="window.print();window.close();" /></body></html>`); win.document.close(); }
-  } catch (_) { toast({ title: "خطأ", variant: "destructive" }); }
-};
-
-const sendViaWhatsApp = async () => {
-  if (!selectedAppointment) return;
-  const rawPhone = editPatientPhone || selectedAppointment.extracted_patient_phone || selectedAppointment.patients?.phone || "";
-  const waPhone = cleanPhoneForWhatsApp(rawPhone);
-  if (!waPhone) { toast({ title: "❌ لا يوجد رقم صحيح", variant: "destructive" }); return; }
-  setSendingReceipt(true);
-  try {
-    const canvas = await generateReceiptCanvas();
-    const imgData = canvas.toDataURL("image/png");
-    const link = document.createElement("a"); link.href = imgData; link.download = `سند_${selectedAppointment.reservation_code}.png`; link.click();
-    const patientName = editPatientName || selectedAppointment.extracted_patient_name || "المريض";
-    const netAmt = selectedAppointment.paid_amount || 0;
-    const msg = encodeURIComponent(`🧾 سند دفع - ${clinic?.name || "العيادة"}\n━━━━━━━━━━━━━━━\n👤 ${patientName}\n🔖 ${selectedAppointment.reservation_code}\n💊 ${selectedAppointment.services?.name || "فحص طبي"}\n💰 ${netAmt.toLocaleString()}\n📅 ${format(new Date(), "yyyy/MM/dd - hh:mm a")}`);
-    setTimeout(() => { window.open(`https://wa.me/${waPhone}?text=${msg}`, "_blank"); }, 800);
-    toast({ title: "✅ تم حفظ السند وفتح الواتساب" });
-  } catch { toast({ title: "خطأ", variant: "destructive" }); }
-  finally { setSendingReceipt(false); }
-};
-
-const sendViaTelegram = async () => {
-  if (!selectedAppointment) return;
-  const tgUserId = selectedAppointment.customer_telegram_id || selectedAppointment.patients?.telegram_user_id;
-  if (!tgUserId) { toast({ title: "❌ المريض غير مسجل عبر تلجرام", variant: "destructive" }); return; }
-  
-  const typeToSend = selectedAppointment.is_promo ? "promo" : (selectedAppointment.payment_status === "partial" ? "partial" : "paid");
-  
-  await autoSendToTelegram({
-    type: typeToSend,
-    code: selectedAppointment.reservation_code,
-    name: editPatientName,
-    service: selectedAppointment.services?.name || "فحص طبي",
-    amount: selectedAppointment.paid_amount || 0,
-    tgId: tgUserId
-  });
-};
-
-const getUniquePaymentToken = (appointment: Appointment) => {
-  const netPaid = appointment.paid_amount || 0;
-  return `PAY-VERIFIED|${appointment.reservation_code || "PAY"}|${netPaid}|${appointment.id.slice(0, 6).toUpperCase()}`;
-};
-
-const openCreateInvoice = () => {
-  setInvPatientName(""); setInvPatientPhone(""); setInvItems([{ name: "", qty: 1, price: 0 }]); setInvDiscountType("fixed"); setInvDiscountValue("0"); setInvPaymentMethod("نقدي"); setInvNotes(""); setCreateInvoiceOpen(true);
-};
-
 const addInvoiceItem = () => setInvItems(prev => [...prev, { name: "", qty: 1, price: 0 }]);
 const updateInvoiceItem = (index: number, patch: Partial<InvoiceItem>) => setInvItems(prev => prev.map((it, i) => i === index ? { ...it, ...patch } : it));
 const removeInvoiceItem = (index: number) => setInvItems(prev => prev.filter((_, i) => i !== index));
-const calcInvoiceSubtotal = (): number => round2(invItems.reduce((s, it) => s + (Number(it.qty) || 0) * (Number(it.price) || 0), 0));
-const calcInvoiceDiscount = (subtotal: number): number => calcDiscountAmount(subtotal, parseFloat(invDiscountValue) || 0, invDiscountType);
+
+
+
 
 const handleSaveInvoice = async () => {
   if (!clinic) return;
   const subtotal = calcInvoiceSubtotal();
-  if (subtotal <= 0) { toast({ title: "❌ أضف بنداً بسعر صحيح", variant: "destructive" }); return; }
+  if (subtotal <= 0) { toast({ title: "❌ أضف بنداً", variant: "destructive" }); return; }
   setInvSaving(true);
   try {
     const discountAmount = calcInvoiceDiscount(subtotal);
     const totalAmount = round2(Math.max(0, subtotal - discountAmount));
     const invoiceNumber = `INV-${Date.now().toString().slice(-6)}${Math.floor(Math.random() * 100)}`;
+    const fullPhone = invPatientPhone.trim() ? `${invPatientCountryCode}${invPatientPhone.trim()}` : null;
     
-    const newInvoiceData = { clinic_id: clinic.id, patient_name: invPatientName.trim() || null, patient_phone: invPatientPhone.trim() || null, invoice_number: invoiceNumber, items: invItems.filter(it => it.name.trim() && Number(it.price) > 0), subtotal, discount_type: invDiscountType, discount_value: parseFloat(invDiscountValue) || 0, discount_amount: discountAmount, total_amount: totalAmount, paid_status: "paid", paid_amount: totalAmount, payment_method: invPaymentMethod, notes: invNotes.trim() || null, paid_at: new Date().toISOString() };
+    const newInvoiceData = { clinic_id: clinic.id, patient_name: invPatientName.trim() || null, patient_phone: fullPhone, invoice_number: invoiceNumber, items: invItems.filter(it => it.name.trim() && Number(it.price) > 0), subtotal, discount_type: invDiscountType, discount_value: parseFloat(invDiscountValue) || 0, discount_amount: discountAmount, total_amount: totalAmount, paid_status: "paid", paid_amount: totalAmount, payment_method: invPaymentMethod, notes: invNotes.trim() || null, paid_at: new Date().toISOString() };
 
     const { data: inserted, error } = await supabase.from("invoices").insert(newInvoiceData).select().single();
     if (error) throw error;
     
     toast({ title: "✅ تم إنشاء الفاتورة", description: invoiceNumber });
     setCreateInvoiceOpen(false);
+    await fetchInvoices();
     
     if (inserted) { 
       setSelectedInvoice({ ...inserted, payment_reference: undefined, linked_visit_code: null } as Invoice); 
-      
-      const phoneTrimmed = invPatientPhone.trim();
-      if (phoneTrimmed) {
+      if (fullPhone) {
         let tgId = "";
-        const { data: pRow } = await supabase.from("patients")
-          .select("telegram_user_id")
-          .eq("clinic_id", clinic.id)
-          .eq("phone", phoneTrimmed)
-          .maybeSingle();
+        const { data: pRow } = await supabase.from("patients").select("telegram_user_id").eq("clinic_id", clinic.id).eq("phone", fullPhone).maybeSingle();
         if (pRow?.telegram_user_id) tgId = pRow.telegram_user_id;
 
         if (tgId) {
-          await autoSendToTelegram({
-            type: "invoice",
-            code: invoiceNumber,
-            name: invPatientName.trim() || "غير محدد",
-            service: "فاتورة جديدة",
-            amount: totalAmount,
-            tgId: tgId,
-            items: newInvoiceData.items
-          });
-        } else {
-          console.warn("[INVOICE] لا يوجد telegram_user_id لهذا الرقم — سيتم الاكتفاء بالواتساب.");
+          await autoSendToTelegram({ type: "invoice", code: invoiceNumber, name: invPatientName.trim() || "غير محدد", service: "فاتورة مبيعة", amount: totalAmount, tgId: tgId, items: newInvoiceData.items });
+          await sendTelegramLedger(invPatientName.trim() || "غير محدد", fullPhone);
         }
-
-        const waPhone = cleanPhoneForWhatsApp(phoneTrimmed);
+        const waPhone = cleanPhoneForWhatsApp(fullPhone);
         if (waPhone) {
           const itemsText = newInvoiceData.items.map((it: any) => `• ${it.name} × ${it.qty} = ${(Number(it.qty)*Number(it.price)).toLocaleString()}`).join("\n");
-          const waMsg = encodeURIComponent(`🧾 فاتورة جديدة - ${clinic.name}\n━━━━━━━━━━━━━━━\n👤 ${invPatientName.trim() || "—"}\n🔖 ${invoiceNumber}\n\n${itemsText}\n\n💰 الإجمالي: ${totalAmount.toLocaleString()}\n📅 ${format(new Date(), "yyyy/MM/dd - hh:mm a")}\n\nمعتمد إلكترونياً`);
+          const waMsg = encodeURIComponent(`🧾 فاتورة جديدة - ${clinic.name}\n👤 ${invPatientName.trim()}\n🔖 ${invoiceNumber}\n\n${itemsText}\n\n💰 الإجمالي: ${totalAmount.toLocaleString()}`);
           setTimeout(() => { window.open(`https://wa.me/${waPhone}?text=${waMsg}`, "_blank"); }, 800);
         }
       }
     }
-    fetchInvoices();
   } catch (e: any) { toast({ title: "خطأ", description: e.message, variant: "destructive" }); } finally { setInvSaving(false); }
-};
-
-const filtered = useMemo(() => appointments.filter((a) => {
-  const { cleanName, cleanPhone } = extractCleanInfo(a);
-  const matchesSearch = a.reservation_code.toLowerCase().includes(search.toLowerCase()) || cleanName.toLowerCase().includes(search.toLowerCase()) || cleanPhone.includes(search);
-  if (!matchesSearch) return false;
-  if (statusFilter === "all") return true;
-  if (statusFilter === "active") return !["cancelled"].includes(a.status);
-  if (statusFilter === "paid") return a.payment_status === "paid";
-  if (statusFilter === "unpaid") return a.payment_status !== "paid" && a.status !== "cancelled";
-  if (statusFilter === "arrived") return !!a.arrived_at;
-  if (statusFilter === "waiting") return !a.arrived_at && a.status !== "cancelled";
-  return true;
-}), [appointments, search, statusFilter]);
-
-const filteredInvoices = useMemo(() => invoiceAppointments.filter((a) => {
-  const { cleanName, cleanPhone } = extractCleanInfo(a);
-  const q = invoicesSearch.trim().toLowerCase();
-  const matchesSearch = !q || a.reservation_code.toLowerCase().includes(q) || cleanName.toLowerCase().includes(q) || cleanPhone.includes(q);
-  if (!matchesSearch) return false;
-  if (invoicesOnlyPromo && !a.is_promo) return false;
-  return true;
-}), [invoiceAppointments, invoicesSearch, invoicesOnlyPromo]);
-
-const filteredInvoicesList = useMemo(() => invoicesList.filter((inv) => {
-  const q = invoicesSearch.trim().toLowerCase();
-  if (!q) return true;
-  return inv.invoice_number.toLowerCase().includes(q) || (inv.patient_name || "").toLowerCase().includes(q) || (inv.patient_phone || "").includes(q);
-}), [invoicesList, invoicesSearch]);
-
-const invoicesStats = useMemo(() => {
-  const apptTotal = filteredInvoices.reduce((s, a) => s + computeNetCollected(a), 0);
-  const invTotal = filteredInvoicesList.reduce((s, i) => s + (i.total_amount || 0), 0);
-  return { totalPaid: round2(apptTotal + invTotal), count: filteredInvoices.length + filteredInvoicesList.length, promoCount: filteredInvoices.filter(a => a.is_promo).length };
-}, [filteredInvoices, filteredInvoicesList]);
-
-const modalRawAmount = round2(parseFloat(paidAmountInput) || 0);
-const modalRawDiscount = round2(parseFloat(discountInput) || 0);
-const modalDiscType = selectedAppointment?.discount_type || (selectedAppointment?.is_promo ? "percentage" : "fixed");
-const modalDiscountCash = calcDiscountAmount(parseFloat(totalCostInput) || 0, modalRawDiscount, modalDiscType);
-const modalNetCollected = modalRawAmount; 
-
-// ============================================================
-// LEDGER
-// ============================================================
-const ledgerPatients = useMemo(() => {
-  type Visit = { code: string; date: string; service: string; amount: number; paid: number; method?: string; discount?: number };
-  type Payment = { ref: string; date: string; amount: number; method: string; linkedVisit?: string; notes?: string };
-  type Patient = { name: string; phone: string; visits: Visit[]; payments: Payment[]; total: number; paid: number; remaining: number; };
-
-  const map = new Map<string, Patient>();
-  
-  invoiceAppointments.forEach(a => {
-    const { cleanName, cleanPhone } = extractCleanInfo(a);
-    const key = cleanPhone !== "بدون رقم" ? cleanPhone : cleanName;
-    if (!map.has(key)) map.set(key, { name: cleanName, phone: cleanPhone, visits: [], payments: [], total: 0, paid: 0, remaining: 0 });
-    const p = map.get(key)!;
-    
-    const originalAmount = round2(a.original_price ?? a.services?.price ?? 0);
-    const discount = round2(a.discount_applied || 0);
-    const finalAmount = round2(a.final_price ?? (originalAmount - discount) ?? a.paid_amount ?? 0);
-    const paid = round2(a.paid_amount || 0);
-    
-    if (paid > 0 || a.payment_status === "partial") {
-        p.visits.push({
-          code: a.reservation_code, date: a.date, service: a.services?.name || "فحص",
-          amount: finalAmount, paid: paid, method: a.payment_method || "نقدي",
-          discount: discount > 0 ? discount : undefined
-        });
-        p.total = round2(p.total + finalAmount); 
-        p.paid = round2(p.paid + paid);
-    }
-  });
-
-  invoicesList.forEach(inv => {
-    const name = inv.patient_name || "غير محدد";
-    const phone = inv.patient_phone || "بدون رقم";
-    const key = phone !== "بدون رقم" ? phone : name;
-    if (!map.has(key)) map.set(key, { name, phone, visits: [], payments: [], total: 0, paid: 0, remaining: 0 });
-    const p = map.get(key)!;
-
-    const isPayment = isPaymentRecord(inv);
-    const linkedVisit = extractLinkedVisit(inv) || undefined;
-
-    if (isPayment) {
-      p.payments.push({ ref: inv.invoice_number, date: inv.created_at.split('T')[0], amount: round2(inv.total_amount), method: inv.payment_method || "نقدي", linkedVisit, notes: inv.notes || undefined });
-    } else {
-      p.visits.push({ code: inv.invoice_number, date: inv.created_at.split('T')[0], service: 'فاتورة يدوية', amount: round2(inv.total_amount), paid: round2(inv.total_amount), method: inv.payment_method || "نقدي" });
-      p.total = round2(p.total + inv.total_amount);
-      p.paid = round2(p.paid + inv.total_amount);
-    }
-  });
-
-  return Array.from(map.values()).map(p => ({ 
-    ...p, 
-    remaining: round2(Math.max(0, p.total - p.paid)),
-    visits: p.visits.sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime()),
-    payments: p.payments.sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime())
-  })).filter(p => p.total > 0);
-}, [invoiceAppointments, invoicesList]);
-
-const handleOpenLedger = async (patient: any) => {
-  setSelectedLedgerPatient(patient);
-  setLedgerAmount(String(patient.remaining > 0 ? patient.remaining : 0)); 
-  setLedgerLinkedVisit(""); 
-  setLedgerNotes("");
-  
-  setFullPatientHistory({
-      visits: patient.visits,
-      payments: patient.payments,
-      total: patient.total,
-      paid: patient.paid,
-      remaining: patient.remaining
-  });
-  
-  setLedgerModalOpen(true);
 };
 
 const handleAddLedgerPayment = async () => {
   if (!selectedLedgerPatient || !clinic || !ledgerAmount) return;
   const amount = round2(parseFloat(ledgerAmount) || 0);
-  if (amount <= 0) { toast({ title: "❌ المبلغ غير صحيح", variant: "destructive" }); return; }
+  if (amount <= 0) { toast({ title: "❌ مبلغ غير صحيح", variant: "destructive" }); return; }
 
   const paymentRef = generatePaymentReference(selectedLedgerPatient.phone || selectedLedgerPatient.name);
   let notes = "دفعة من دفتر الإيصالات";
   if (ledgerLinkedVisit) notes += ` [LINKED_VISIT:${ledgerLinkedVisit}]`;
-  if (ledgerNotes.trim()) notes += ` - ${ledgerNotes.trim()}`;
-
+  
   const { error } = await supabase.from("invoices").insert({
-    clinic_id: clinic.id, patient_name: selectedLedgerPatient.name, patient_phone: selectedLedgerPatient.phone,
-    invoice_number: paymentRef,
-    items: [{ name: `دفعة${ledgerLinkedVisit ? ` للزيارة ${ledgerLinkedVisit}` : ''}`, qty: 1, price: amount, reference: paymentRef, linkedVisit: ledgerLinkedVisit || undefined }],
+    clinic_id: clinic.id, patient_name: selectedLedgerPatient.name, patient_phone: selectedLedgerPatient.phone, invoice_number: paymentRef,
+    items: [{ name: `دفعة${ledgerLinkedVisit ? ` للزيارة ${ledgerLinkedVisit}` : ''}`, qty: 1, price: amount, linkedVisit: ledgerLinkedVisit || undefined }],
     subtotal: amount, discount_type: "fixed", discount_value: 0, discount_amount: 0, total_amount: amount, paid_status: "paid", paid_amount: amount, payment_method: ledgerMethod, notes, paid_at: new Date().toISOString(),
   });
 
-  if (error) { toast({ title: "خطأ", description: error.message, variant: "destructive" }); return; }
+  if (error) { toast({ title: "خطأ", variant: "destructive" }); return; }
 
   if (ledgerLinkedVisit) {
     const { data: oldAppt } = await supabase.from("appointments").select("paid_amount, final_price").eq("reservation_code", ledgerLinkedVisit).single();
     if (oldAppt) {
       const newPaid = round2((oldAppt.paid_amount || 0) + amount);
-      const isFullyPaid = newPaid >= (oldAppt.final_price || 0);
-      await supabase.from("appointments").update({ paid_amount: newPaid, payment_status: isFullyPaid ? "paid" : "partial" }).eq("reservation_code", ledgerLinkedVisit);
+      await supabase.from("appointments").update({ paid_amount: newPaid, payment_status: newPaid >= (oldAppt.final_price || 0) ? "paid" : "partial" }).eq("reservation_code", ledgerLinkedVisit);
     }
   }
   
-  toast({ title: "✅ تم تسجيل الدفعة", description: `المرجع: ${paymentRef}` });
+  toast({ title: "✅ تم التسجيل" });
   setLedgerAmount(""); setLedgerLinkedVisit(""); setLedgerNotes("");
-  
-  await fetchInvoices(); 
-  await fetchAppointments();
-  
-  const refreshed = ledgerPatients.find(p => p.phone === selectedLedgerPatient.phone || p.name === selectedLedgerPatient.name);
-  if (refreshed) {
-     setSelectedLedgerPatient(refreshed);
-     setFullPatientHistory({
-         visits: refreshed.visits,
-         payments: refreshed.payments,
-         total: refreshed.total,
-         paid: refreshed.paid,
-         remaining: refreshed.remaining
-     });
-  }
+  await fetchInvoices(); await fetchAppointments();
+  setLedgerModalOpen(false);
 
   setTimeout(async () => {
-     let tgId = "";
-     const { data: p } = await supabase.from("patients").select("telegram_user_id").eq("phone", selectedLedgerPatient.phone).maybeSingle();
-     if (p?.telegram_user_id) tgId = p.telegram_user_id;
-     else {
-        const pVisits = invoiceAppointments.find(a => extractCleanInfo(a).cleanPhone === selectedLedgerPatient.phone || extractCleanInfo(a).cleanName === selectedLedgerPatient.name);
-        if (pVisits) tgId = pVisits.customer_telegram_id || pVisits.patients?.telegram_user_id || "";
-     }
-
-     if (tgId) {
-        await autoSendToTelegram({
-          type: "manual", code: paymentRef, name: selectedLedgerPatient.name, service: ledgerLinkedVisit ? `دفعة للزيارة ${ledgerLinkedVisit}` : "دفعة يدوية", amount, tgId, linkedVisit: ledgerLinkedVisit || undefined
-        });
-        await sendTelegramLedger(selectedLedgerPatient.name, selectedLedgerPatient.phone);
-     }
-     setLedgerModalOpen(false);
+     await autoSendToTelegram({ type: "manual", code: paymentRef, name: selectedLedgerPatient.name, service: ledgerLinkedVisit ? `سداد ${ledgerLinkedVisit}` : "دفعة يدوية", amount, tgId: selectedLedgerPatient.phone, linkedVisit: ledgerLinkedVisit || undefined });
+     await sendTelegramLedger(selectedLedgerPatient.name, selectedLedgerPatient.phone);
   }, 1000);
+};
+
+const addWalkIn = async () => {
+  if (!clinic || !patientNameInput.trim()) return;
+  const { data: patient } = await supabase.from("patients").insert({ clinic_id: clinic.id, name: patientNameInput.trim(), phone: patientPhoneInput.trim() || "بدون هاتف" }).select("id").single();
+  if (patient) {
+    const code = `WI-${Math.floor(1000 + Math.random() * 9000)}`;
+    await supabase.from("appointments").insert({ clinic_id: clinic.id, patient_id: patient.id, date: today, time: format(new Date(), "HH:mm"), status: "confirmed", reservation_code: code, arrived_at: new Date().toISOString(), payment_status: "paid", is_walk_in: true, department: "صندوق" });
+    setWalkInOpen(false); setPatientNameInput(""); setPatientPhoneInput(""); fetchAppointments();
+  }
+};
+
+const handleAddExpense = async () => {
+  if (!clinic) return;
+  if (!expenseTitle.trim() || !expenseAmount) return;
+  await supabase.from("expenses").insert({ clinic_id: clinic.id, title: expenseTitle.trim(), amount: parseFloat(expenseAmount), category: expenseCategory, expense_date: expenseDate, expense_time: expenseTime + ":00" });
+  setExpenseModalOpen(false); fetchExpenses();
 };
 
 const handlePrintLedger = async () => {
   try {
     const el = document.getElementById("ledger-export-container");
-    if (!el) { toast({ title: "❌ لا يوجد كشف للطباعة", variant: "destructive" }); return; }
+    if (!el) return;
     const canvas = await html2canvas(el, { scale: 2, useCORS: true, backgroundColor: "#ffffff" });
+    const win = window.open("", "_blank");
+    if (win) { win.document.write(`<html><body style="margin:0;"><img src="${canvas.toDataURL("image/png")}" style="width:100%;" onload="window.print();window.close();"/></body></html>`); win.document.close(); }
+  } catch (_) {}
+};
+
+const handlePrintReceipt = async () => {
+  try {
+    const el = document.getElementById("receipt-export-container");
+    if (!el) { toast({ title: "❌ لا يوجد سند للطباعة", variant: "destructive" }); return; }
+    const canvas = await html2canvas(el, { scale: 3, useCORS: true, backgroundColor: "#ffffff" });
     const imgData = canvas.toDataURL("image/png");
     const win = window.open("", "_blank");
     if (win) {
-      win.document.write(`<html><head><title>طباعة كشف الحساب</title></head><body style="margin:0;display:flex;align-items:center;justify-content:center;min-height:100vh;background:#f4f4f5;"><img src="${imgData}" style="max-width:100%;height:auto;" onload="window.print();window.close();" /></body></html>`);
+      win.document.write(`<html><head><title>طباعة السند</title></head><body style="margin:0;display:flex;align-items:center;justify-content:center;min-height:100vh;background:#f4f4f5;"><img src="${imgData}" style="max-width:100%;height:auto;" onload="window.print();window.close();" /></body></html>`);
       win.document.close();
     }
   } catch (_) { toast({ title: "خطأ في الطباعة", variant: "destructive" }); }
@@ -1376,615 +949,632 @@ const handlePrintLedger = async () => {
 const handleSendLedgerNow = async () => {
   if (!selectedLedgerPatient) return;
   const sent = await sendTelegramLedger(selectedLedgerPatient.name, selectedLedgerPatient.phone);
-  if (sent) toast({ title: "✅ تم إرسال كشف الحساب للتليجرام" });
-  else toast({ title: "⚠️ تعذّر الإرسال — المريض غير مسجل بتليجرام", variant: "destructive" });
+  if (sent) toast({ title: "✅ أُرسل للتليجرام" });
+  else toast({ title: "⚠️ غير مسجل بتليجرام", variant: "destructive" });
 };
 
-if (authLoading || clinicLoading) return <div className="min-h-screen bg-mesh flex items-center justify-center text-muted-foreground">جاري التحميل...</div>;
-if (clinicError) return <div className="min-h-screen bg-mesh flex items-center justify-center text-destructive font-bold">{clinicError}</div>;
+const filtered = useMemo(() => appointments.filter((a) => {
+  const { cleanName, cleanPhone } = extractCleanInfo(a);
+  const matchesSearch = a.reservation_code.toLowerCase().includes(search.toLowerCase()) || cleanName.includes(search) || cleanPhone.includes(search);
+  if (!matchesSearch) return false;
+  if (statusFilter === "active") return a.status !== "cancelled";
+  if (statusFilter === "paid") return a.payment_status === "paid";
+  if (statusFilter === "unpaid") return a.payment_status !== "paid";
+  return true;
+}), [appointments, search, statusFilter]);
 
-if (isTrialExpired && role !== "owner") {
+const filteredInvoices = useMemo(() => invoiceAppointments.filter((a) => {
+  const q = invoicesSearch.trim().toLowerCase();
+  if (!q) return true;
+  return a.reservation_code.toLowerCase().includes(q) || extractCleanInfo(a).cleanName.includes(q);
+}), [invoiceAppointments, invoicesSearch]);
+
+const filteredInvoicesList = useMemo(() => invoicesList.filter((inv) => {
+  const q = invoicesSearch.trim().toLowerCase();
+  if (!q) return true;
+  return inv.invoice_number.toLowerCase().includes(q) || (inv.patient_name || "").includes(q);
+}), [invoicesList, invoicesSearch]);
+
+const ledgerPatients = useMemo(() => {
+  const map = new Map<string, any>();
+  invoiceAppointments.forEach(a => {
+    const { cleanName, cleanPhone } = extractCleanInfo(a);
+    const key = cleanPhone !== "بدون رقم" ? cleanPhone : cleanName;
+    if (!map.has(key)) map.set(key, { name: cleanName, phone: cleanPhone, visits: [], payments: [], total: 0, paid: 0, remaining: 0 });
+    const p = map.get(key)!;
+    const finalAmount = round2(a.final_price ?? a.paid_amount ?? 0);
+    const paid = round2(a.paid_amount || 0);
+    if (paid > 0 || a.payment_status === "partial") {
+        p.visits.push({ code: a.reservation_code, date: a.date, service: a.services?.name || "فحص", amount: finalAmount, paid: paid });
+        p.total += finalAmount; p.paid += paid;
+    }
+  });
+  invoicesList.forEach(inv => {
+    const name = inv.patient_name || "غير محدد";
+    const phone = inv.patient_phone || "بدون رقم";
+    const key = phone !== "بدون رقم" ? phone : name;
+    if (!map.has(key)) map.set(key, { name, phone, visits: [], payments: [], total: 0, paid: 0, remaining: 0 });
+    const p = map.get(key)!;
+    if (isPaymentRecord(inv)) {
+      p.payments.push({ ref: inv.invoice_number, date: inv.created_at.split('T')[0], amount: inv.total_amount, method: inv.payment_method || "نقدي", linkedVisit: extractLinkedVisit(inv) });
+    } else {
+      p.visits.push({ code: inv.invoice_number, date: inv.created_at.split('T')[0], service: 'فاتورة يدوية', amount: inv.total_amount, paid: inv.total_amount });
+      p.total += inv.total_amount; p.paid += inv.total_amount;
+    }
+  });
+  return Array.from(map.values()).map(p => ({ ...p, remaining: round2(Math.max(0, p.total - p.paid)) })).filter(p => p.total > 0);
+}, [invoiceAppointments, invoicesList]);
+
+const handleOpenLedger = (patient: any) => {
+  setSelectedLedgerPatient(patient);
+  setLedgerAmount(String(patient.remaining > 0 ? patient.remaining : 0)); setLedgerLinkedVisit(""); setLedgerNotes("");
+  setFullPatientHistory({ visits: patient.visits, payments: patient.payments, total: patient.total, paid: patient.paid, remaining: patient.remaining });
+  setLedgerModalOpen(true);
+};
+
+const calcInvoiceSubtotal = () => round2(invItems.reduce((s, it) => s + (Number(it.qty) || 0) * (Number(it.price) || 0), 0));
+const calcInvoiceDiscount = (sub: number) => calcDiscountAmount(sub, parseFloat(invDiscountValue) || 0, invDiscountType);
+  if (authLoading || clinicLoading) return <div className="min-h-screen flex items-center justify-center font-bold text-slate-500">جاري التحميل...</div>;
+  if (clinicError) return <div className="text-rose-500 text-center font-bold p-8">{clinicError}</div>;
+
   return (
-    <div className="min-h-screen bg-mesh flex items-center justify-center p-4">
-      <div className="card-modern p-8 max-w-md text-center space-y-4"><div className="text-3xl">⛔</div><h1 className="text-xl font-black">لا يمكن الدخول</h1><Button onClick={signOut} className="w-full">تسجيل الخروج</Button></div>
-    </div>
-  );
-}
-  return (
-    <div className="min-h-screen bg-mesh flex flex-col" dir="rtl">
+    <div className="min-h-screen bg-slate-50 flex flex-col font-sans" dir="rtl">
       <div id={QR_FILE_ELEMENT_ID} className="hidden" />
       <input type="file" ref={fileInputRef} accept="image/*" className="hidden" onChange={handleFileUpload} />
 
-      {/* ✨ ماسح QR — نافذة كاملة الشاشة */}
+      {/* --- الماسح الضوئي (شاشة كاملة) --- */}
       {scannerOpen && (
-        <div className="fixed inset-0 z-50 bg-black/95 backdrop-blur-lg flex items-center justify-center p-2 sm:p-4">
-          <div className="bg-white dark:bg-gray-900 rounded-3xl w-full max-w-5xl h-[96vh] shadow-2xl overflow-hidden border border-border flex flex-col">
-            <div className="flex justify-between items-center px-6 pt-6 pb-4 border-b border-border/40 shrink-0">
-              <div className="flex items-center gap-3">
-                <div className="w-11 h-11 rounded-xl bg-primary/10 flex items-center justify-center">{verifyScannerOpen ? <ShieldCheck className="w-6 h-6 text-primary" /> : <Camera className="w-6 h-6 text-primary" />}</div>
-                <div><h3 className="text-xl font-bold text-foreground">{verifyScannerOpen ? "التحقق من السندات" : "مسح QR للصندوق"}</h3><p className="text-sm text-muted-foreground">{verifyScannerOpen ? "امسح الكود للتأكد من صحة السند" : "وجّه الكاميرا نحو كود الحجز"}</p></div>
+        <div className="fixed inset-0 z-[100] bg-black/95 backdrop-blur-md flex flex-col animate-in fade-in duration-200">
+          <div className="flex justify-between items-center p-6 border-b border-white/10 bg-black/50">
+            <h3 className="text-xl font-bold text-white flex items-center gap-2"><Camera className="w-6 h-6" /> {verifyScannerOpen ? "التحقق من السندات" : "مسح الكود"}</h3>
+            <button onClick={stopScanner} className="p-2 rounded-full bg-white/10 hover:bg-white/20 text-white transition"><X className="w-6 h-6" /></button>
+          </div>
+          
+          <div className="flex-1 relative flex items-center justify-center overflow-hidden">
+            <div id={QR_CAMERA_ELEMENT_ID} className="w-full h-full max-w-4xl" />
+            
+            {scannerStatus === "loading" && (
+              <div className="absolute inset-0 flex flex-col items-center justify-center bg-black/80 z-20">
+                <Loader2 className="w-16 h-16 animate-spin text-emerald-500 mb-4" />
+                <p className="text-white text-lg font-bold">جاري تشغيل الكاميرا...</p>
               </div>
-              <button onClick={stopScanner} className="p-2 rounded-full bg-muted hover:bg-muted/80 text-foreground transition"><X className="w-6 h-6" /></button>
+            )}
+            
+            {scannerStatus === "active" && (
+              <div className="absolute inset-0 pointer-events-none flex items-center justify-center z-10">
+                <div className="relative w-[80vw] h-[80vw] max-w-[500px] max-h-[500px]">
+                  <div className="absolute top-0 left-0 w-20 h-20 border-t-4 border-l-4 border-emerald-500 rounded-tl-3xl shadow-[0_0_20px_rgba(16,185,129,0.5)]" />
+                  <div className="absolute top-0 right-0 w-20 h-20 border-t-4 border-r-4 border-emerald-500 rounded-tr-3xl shadow-[0_0_20px_rgba(16,185,129,0.5)]" />
+                  <div className="absolute bottom-0 left-0 w-20 h-20 border-b-4 border-l-4 border-emerald-500 rounded-bl-3xl shadow-[0_0_20px_rgba(16,185,129,0.5)]" />
+                  <div className="absolute bottom-0 right-0 w-20 h-20 border-b-4 border-r-4 border-emerald-500 rounded-br-3xl shadow-[0_0_20px_rgba(16,185,129,0.5)]" />
+                  <div className="absolute top-0 left-0 right-0 h-1 bg-emerald-500 shadow-[0_0_20px_#10b981] animate-[scan_2s_ease-in-out_infinite]" />
+                </div>
+              </div>
+            )}
+          </div>
+          
+          {scannerMessage && (
+            <div className="absolute top-24 left-1/2 -translate-x-1/2 bg-rose-500 text-white px-6 py-3 rounded-xl font-bold shadow-lg animate-in slide-in-from-top">
+              {scannerMessage}
             </div>
-            {scannerMessage && (<div className={`mx-6 mt-3 px-4 py-3 rounded-xl text-sm font-bold text-center ${scannerMessage.startsWith("✅") ? "bg-emerald-500/15 text-emerald-700 border border-emerald-500/30" : "bg-red-500/15 text-red-700 border border-red-500/30"}`}>{scannerMessage}</div>)}
-            <div className="flex-1 relative mx-6 my-4 rounded-2xl overflow-hidden bg-black">
-              <div id={QR_CAMERA_ELEMENT_ID} className="w-full h-full" />
-              {(scannerStatus === "loading" || uploadingImage) && (<div className="absolute inset-0 flex flex-col items-center justify-center bg-black/80 z-20"><Loader2 className="w-14 h-14 animate-spin text-primary mb-3" /><p className="text-white text-base">{uploadingImage ? "جاري قراءة الصورة..." : "جاري تشغيل الكاميرا..."}</p></div>)}
-              {scannerStatus === "active" && !uploadingImage && (<div className="absolute inset-0 pointer-events-none flex items-center justify-center"><div className="relative w-72 h-72 sm:w-96 sm:h-96"><div className="absolute top-0 left-0 w-16 h-16 border-t-4 border-l-4 border-primary rounded-tl-lg" /><div className="absolute top-0 right-0 w-16 h-16 border-t-4 border-r-4 border-primary rounded-tr-lg" /><div className="absolute bottom-0 left-0 w-16 h-16 border-b-4 border-l-4 border-primary rounded-bl-lg" /><div className="absolute bottom-0 right-0 w-16 h-16 border-b-4 border-r-4 border-primary rounded-br-lg" /><div className="absolute top-0 left-0 right-0 h-0.5 bg-primary animate-bounce" style={{ animationDuration: "1.5s" }} /></div></div>)}
-              {scannerStatus === "error" && !uploadingImage && (<div className="absolute inset-0 flex flex-col items-center justify-center bg-black/90 p-5 text-center z-20"><AlertCircle className="w-14 h-14 text-red-400 mb-3" /><p className="text-white text-base mb-4">{cameraError}</p><Button onClick={() => startScanner(verifyScannerOpen)} className="bg-primary text-white" size="lg"><RefreshCw className="w-5 h-5 ml-1" />إعادة المحاولة</Button></div>)}
-            </div>
-            <div className="px-6 pb-3 shrink-0"><Button variant="outline" className="w-full gap-2 border-dashed border-primary/50 text-primary h-12 font-bold" onClick={() => fileInputRef.current?.click()} disabled={uploadingImage}><ImageIcon className="w-5 h-5" />رفع صورة QR من المعرض</Button></div>
-            <div className="flex gap-2 px-6 pb-6 shrink-0"><Button variant="ghost" className="w-full" onClick={stopScanner}>إغلاق</Button></div>
+          )}
+
+          <div className="p-6 bg-black/50 border-t border-white/10">
+            <Button variant="outline" className="w-full h-14 text-lg gap-2 bg-white/10 text-white border-white/20 hover:bg-white/20 rounded-2xl" onClick={() => fileInputRef.current?.click()} disabled={uploadingImage}>
+              {uploadingImage ? <Loader2 className="animate-spin w-6 h-6" /> : <ImageIcon className="w-6 h-6" />} رفع صورة من المعرض
+            </Button>
           </div>
         </div>
       )}
 
       {verifyResult && (
         <Dialog open={!!verifyResult} onOpenChange={() => setVerifyResult(null)}>
-          <DialogContent className="max-w-sm text-center" dir="rtl" onInteractOutside={(e) => e.preventDefault()}>
-            <DialogHeader><DialogTitle>نتيجة التحقق</DialogTitle></DialogHeader>
+          <DialogContent className="max-w-sm text-center rounded-3xl" dir="rtl">
             <div className="py-6 space-y-4">
-              {verifyResult.status === "valid" ? <ShieldCheck className="w-20 h-20 text-emerald-500 mx-auto" /> : <ShieldAlert className="w-20 h-20 text-red-500 mx-auto" />}
-              <p className={`font-bold whitespace-pre-wrap text-lg ${verifyResult.status === "valid" ? "text-emerald-700" : "text-red-700"}`}>{verifyResult.message}</p>
-              <Button onClick={() => setVerifyResult(null)} className="w-full">حسناً</Button>
+              {verifyResult.status === "valid" ? <ShieldCheck className="w-24 h-24 text-emerald-500 mx-auto" /> : <ShieldAlert className="w-24 h-24 text-rose-500 mx-auto" />}
+              <p className={`font-bold whitespace-pre-wrap text-lg ${verifyResult.status === "valid" ? "text-emerald-700" : "text-rose-700"}`}>{verifyResult.message}</p>
+              <Button onClick={() => setVerifyResult(null)} className="w-full h-12 rounded-xl">حسناً</Button>
             </div>
           </DialogContent>
         </Dialog>
       )}
 
-      <header className="glass-strong sticky top-0 z-40">
-        <div className="container mx-auto px-4 py-3 flex items-center justify-between flex-wrap gap-3">
-          <div className="flex items-center gap-3"><div className="w-11 h-11 rounded-2xl bg-gradient-primary flex items-center justify-center shadow-glow"><Stethoscope className="w-5 h-5 text-white" /></div><div><h1 className="text-xl font-bold text-foreground">الصندوق والخزينة</h1><p className="text-xs text-muted-foreground">تحصيل ومصروفات اليوم</p></div></div>
-          <div className="flex gap-2 flex-wrap">
-            <Button variant="outline" size="sm" onClick={() => startScanner(false)} className="gap-2"><Camera className="w-4 h-4" />مسح QR</Button>
-            <Button variant="outline" size="sm" onClick={() => navigate("/reception")} className="gap-2"><Users className="w-4 h-4" />الاستقبال</Button>
-            <Button variant="outline" size="sm" onClick={() => navigate("/dashboard")} className="gap-2"><Home className="w-4 h-4" />الرئيسية</Button>
-            <Button variant="outline" size="sm" onClick={signOut} className="gap-2 text-red-600 border-red-200 hover:bg-red-50"><LogOut className="w-4 h-4" />خروج</Button>
+      {/* Header */}
+      <header className="bg-white border-b border-slate-200 sticky top-0 z-40 shadow-sm">
+        <div className="container mx-auto px-4 py-4 flex items-center justify-between flex-wrap gap-4">
+          <div className="flex items-center gap-3">
+            <div className="w-12 h-12 rounded-2xl bg-gradient-to-br from-indigo-600 to-primary flex items-center justify-center shadow-lg shadow-primary/20">
+              <Stethoscope className="w-6 h-6 text-white" />
+            </div>
+            <div>
+              <h1 className="text-2xl font-black text-slate-800">الصندوق والخزينة</h1>
+              <p className="text-xs font-bold text-slate-500">نظام إدارة التحصيل</p>
+            </div>
+          </div>
+          <div className="flex gap-2">
+            <Button onClick={() => startScanner(false)} className="bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl shadow-md h-11 px-6"><Camera className="w-5 h-5 ml-2" />مسح سريع</Button>
+            <Button variant="outline" onClick={() => startScanner(true)} className="text-indigo-600 border-indigo-200 hover:bg-indigo-50 rounded-xl shadow-sm h-11 px-6"><ScanLine className="w-5 h-5 ml-2" />تحقق</Button>
+            <Button variant="outline" onClick={signOut} className="text-rose-600 border-rose-200 hover:bg-rose-50 rounded-xl h-11 px-4"><LogOut className="w-5 h-5" /></Button>
           </div>
         </div>
       </header>
 
-      <div className="glass-strong border-b border-border/40 sticky top-18 z-30">
-        <div className="container mx-auto px-4">
-          <div className="flex gap-1">
-            <button onClick={() => setActiveTab("main")} className={`flex items-center gap-2 px-5 py-3 text-sm font-bold transition-all ${activeTab === "main" ? "text-primary border-b-3 border-primary" : "text-muted-foreground border-transparent hover:text-foreground"}`} style={{ borderBottomWidth: activeTab === "main" ? 3 : 0 }}><Wallet className="w-4 h-4" />الخزينة</button>
-            <button onClick={() => setActiveTab("invoices")} className={`flex items-center gap-2 px-5 py-3 text-sm font-bold transition-all ${activeTab === "invoices" ? "text-primary border-b-3 border-primary" : "text-muted-foreground border-transparent hover:text-foreground"}`} style={{ borderBottomWidth: activeTab === "invoices" ? 3 : 0 }}><FileText className="w-4 h-4" />الفواتير</button>
-            <button onClick={() => setActiveTab("receipts")} className={`flex items-center gap-2 px-5 py-3 text-sm font-bold transition-all ${activeTab === "receipts" ? "text-primary border-b-3 border-primary" : "text-muted-foreground border-transparent hover:text-foreground"}`} style={{ borderBottomWidth: activeTab === "receipts" ? 3 : 0 }}><BookOpen className="w-4 h-4" />الإيصالات</button>
-          </div>
+      {/* Tabs */}
+      <div className="bg-white border-b border-slate-200 sticky top-[81px] z-30">
+        <div className="container mx-auto px-4 flex gap-8">
+          <button onClick={() => setActiveTab("main")} className={`flex items-center gap-2 py-4 text-sm font-bold border-b-2 transition-all ${activeTab === "main" ? "border-primary text-primary" : "border-transparent text-slate-500 hover:text-slate-800"}`}><Wallet className="w-5 h-5" /> الخزينة</button>
+          <button onClick={() => setActiveTab("invoices")} className={`flex items-center gap-2 py-4 text-sm font-bold border-b-2 transition-all ${activeTab === "invoices" ? "border-primary text-primary" : "border-transparent text-slate-500 hover:text-slate-800"}`}><FileText className="w-5 h-5" /> الفواتير</button>
+          <button onClick={() => setActiveTab("receipts")} className={`flex items-center gap-2 py-4 text-sm font-bold border-b-2 transition-all ${activeTab === "receipts" ? "border-primary text-primary" : "border-transparent text-slate-500 hover:text-slate-800"}`}><BookOpen className="w-5 h-5" /> الإيصالات</button>
         </div>
       </div>
 
-      <main className="flex-1 container mx-auto px-4 py-6 space-y-6">
+      <main className="flex-1 container mx-auto px-4 py-8 space-y-6">
         {activeTab === "main" && (
           <>
-            <CashierStats appointments={appointments} expenses={expenses} />
-            <div className="flex flex-col md:flex-row gap-3 md:items-center justify-between">
-              <div className="relative flex-1"><Search className="absolute right-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" /><Input value={search} onChange={(e) => setSearch(e.target.value)} placeholder="بحث باسم المريض أو كود الحجز" className="pr-10" /></div>
-              <Input type="date" value={dateFilter} onChange={(e) => setDateFilter(e.target.value || todayStr)} className="md:w-44" />
-              <select value={statusFilter} onChange={(e) => setStatusFilter(e.target.value)} className="h-10 rounded-md border border-input bg-background px-3 text-sm md:w-40">
-                <option value="active">النشطة</option><option value="all">الكل</option><option value="paid">مدفوع</option><option value="unpaid">بانتظار الدفع</option><option value="arrived">حاضر</option><option value="waiting">لم يصل</option>
-              </select>
-              <div className="flex gap-2">
-                <Button onClick={() => setWalkInOpen(true)} className="bg-primary"><Plus className="w-4 h-4 ml-1" />مريض مباشر</Button>
-                <Button variant="outline" className="text-red-600 border-red-200 hover:bg-red-50" onClick={() => setExpenseModalOpen(true)}><MinusCircle className="w-4 h-4 ml-1" />مصروف</Button>
-                <Button variant="outline" onClick={() => { fetchAppointments(); fetchExpenses(); }}><RefreshCw className="w-4 h-4 ml-1" />تحديث</Button>
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-8">
+              <div className="bg-white rounded-3xl p-6 shadow-sm border border-slate-100 flex items-center gap-4 relative overflow-hidden">
+                <div className="absolute top-0 right-0 w-24 h-24 bg-emerald-50 rounded-b-full -mr-12 -mt-12 opacity-50 z-0"></div>
+                <div className="w-16 h-16 rounded-2xl bg-emerald-100 text-emerald-600 flex items-center justify-center relative z-10"><Banknote className="w-8 h-8" /></div>
+                <div className="relative z-10"><p className="text-sm text-slate-500 font-bold mb-1">إجمالي المقبوضات اليوم</p><p className="text-3xl font-black text-slate-800">{appointments.filter(a=>a.payment_status === "paid").reduce((s,a)=>s+(a.paid_amount||0),0).toLocaleString()} <span className="text-sm text-slate-400">ريال</span></p></div>
+              </div>
+              
+              <div className="bg-white rounded-3xl p-6 shadow-sm border border-slate-100 flex items-center gap-4 relative overflow-hidden">
+                <div className="absolute top-0 right-0 w-24 h-24 bg-rose-50 rounded-b-full -mr-12 -mt-12 opacity-50 z-0"></div>
+                <div className="w-16 h-16 rounded-2xl bg-rose-100 text-rose-600 flex items-center justify-center relative z-10"><MinusCircle className="w-8 h-8" /></div>
+                <div className="relative z-10"><p className="text-sm text-slate-500 font-bold mb-1">إجمالي المصروفات</p><p className="text-3xl font-black text-slate-800">{expenses.reduce((s,e)=>s+e.amount,0).toLocaleString()} <span className="text-sm text-slate-400">ريال</span></p></div>
+              </div>
+
+              <div className="bg-gradient-to-br from-primary to-indigo-700 rounded-3xl p-6 shadow-lg flex items-center gap-4 relative overflow-hidden text-white">
+                <div className="w-16 h-16 rounded-2xl bg-white/20 flex items-center justify-center relative z-10"><Wallet className="w-8 h-8 text-white" /></div>
+                <div className="relative z-10"><p className="text-sm text-white/80 font-bold mb-1">صافي الصندوق المتوقع</p><p className="text-3xl font-black">{(appointments.filter(a=>a.payment_status === "paid").reduce((s,a)=>s+(a.paid_amount||0),0) - expenses.reduce((s,e)=>s+e.amount,0)).toLocaleString()} <span className="text-sm text-white/60">ريال</span></p></div>
               </div>
             </div>
 
-            {expenses.length > 0 && (
-              <div className="card-modern p-4 space-y-2 bg-red-50/30 dark:bg-red-950/10 border-red-200/50">
-                <div className="flex items-center justify-between"><h3 className="text-xs font-bold text-red-600 flex items-center gap-1"><MinusCircle className="w-4 h-4" /> مصروفات اليوم ({expenses.length})</h3><span className="text-xs font-black text-red-600">إجمالي: {expenses.reduce((s, e) => s + Number(e.amount || 0), 0).toLocaleString()}</span></div>
-                <div className="flex gap-2 overflow-x-auto pb-1">{expenses.map((exp) => (<div key={exp.id} className="bg-background border border-border px-3 py-1.5 rounded-xl text-xs shrink-0 flex items-center gap-2"><span className="font-bold text-foreground">{exp.title}</span><span className="text-muted-foreground">({exp.category})</span><span className="font-black text-red-500">{exp.amount}</span><span className="text-[10px] text-muted-foreground">{String(exp.expense_time).slice(0, 5)}</span></div>))}</div>
+            {/* ✅ تم إضافة مكون الإحصائيات هنا ليعرض الرسوم البيانية */}
+            <CashierStats appointments={appointments} expenses={expenses} />
+
+            <div className="bg-white rounded-3xl p-6 shadow-sm border border-slate-100">
+              <div className="flex flex-col md:flex-row justify-between items-center mb-8 gap-4">
+                <div className="relative w-full md:w-96"><Search className="absolute right-4 top-1/2 -translate-y-1/2 w-5 h-5 text-slate-400" /><Input value={search} onChange={e=>setSearch(e.target.value)} placeholder="ابحث باسم المريض أو كود الحجز..." className="pr-12 h-12 rounded-2xl bg-slate-50 border-transparent focus:bg-white focus:border-primary text-base" /></div>
+                <div className="flex gap-3 w-full md:w-auto">
+                  <Button onClick={() => setWalkInOpen(true)} className="h-12 rounded-2xl bg-slate-900 hover:bg-slate-800 flex-1 md:flex-none"><Plus className="w-5 h-5 ml-2" /> مريض مباشر</Button>
+                  <Button variant="outline" onClick={() => setExpenseModalOpen(true)} className="h-12 rounded-2xl text-rose-600 border-rose-200 hover:bg-rose-50 flex-1 md:flex-none"><MinusCircle className="w-5 h-5 ml-2" /> مصروف</Button>
+                </div>
               </div>
-            )}
 
-            <div className="grid gap-3">
-              {filtered.map((a) => {
-                const isPaid = a.payment_status === "paid";
-                const isArrived = !!a.arrived_at;
-                const isPromo = a.is_promo === true;
-                const { cleanName, cleanPhone } = extractCleanInfo(a);
-                const netAmt = computeNetCollected(a);
-                const discLabel = formatDiscountLabel(a);
-
-                return (
-                  <div key={a.id} className={`card-modern p-4 flex flex-col sm:flex-row sm:items-center justify-between gap-3 ${isPromo ? "border-amber-400/60 bg-amber-50/30 dark:bg-amber-950/10" : ""}`}>
-                    <div className="space-y-1">
-                      <div className="flex items-center gap-2 flex-wrap">
-                        <code className="text-primary bg-primary/10 px-2 py-1 rounded-lg font-bold">{a.reservation_code}</code>
-                        {isPromo && <span className="bg-amber-500/20 text-amber-700 px-2 py-0.5 rounded-lg text-xs font-bold">🎁 عرض {a.promo_code ? `(${a.promo_code})` : ""}</span>}
-                        {a.is_walk_in && <span className="bg-emerald-500/15 text-emerald-600 px-2 py-0.5 rounded-lg text-xs font-bold">مباشر</span>}
-                        <span className="text-sm text-muted-foreground"><Clock className="w-3 h-3 inline ml-1" />{String(a.time).slice(0, 5)}</span>
-                        {isArrived ? <span className="px-2 py-0.5 rounded-lg text-xs bg-emerald-500/15 text-emerald-600 font-bold">وصل</span> : <span className="px-2 py-0.5 rounded-lg text-xs bg-amber-500/15 text-amber-600 font-bold">بانتظار</span>}
-                        {isPaid && <span className="px-2 py-0.5 rounded-lg text-xs bg-blue-500/15 text-blue-600 font-bold">مدفوع</span>}
-                        {a.payment_status === "partial" && <span className="px-2 py-0.5 rounded-lg text-xs bg-amber-500/15 text-amber-700 font-bold">دفع جزئي</span>}
-                        {a.payment_method && <span className="px-2 py-0.5 rounded-lg text-xs bg-violet-500/15 text-violet-600 font-bold">{a.payment_method}</span>}
+              <div className="grid gap-4">
+                {filtered.length === 0 && <div className="text-center py-12 text-slate-400 font-bold">لا توجد حجوزات نشطة اليوم</div>}
+                {filtered.map(a => {
+                  const { cleanName, cleanPhone } = extractCleanInfo(a);
+                  return (
+                    <div key={a.id} className="bg-slate-50 rounded-2xl p-5 flex flex-col sm:flex-row justify-between items-center border border-slate-200/60 hover:shadow-md transition-shadow group">
+                      <div className="flex gap-4 items-center w-full sm:w-auto">
+                        <div className={`w-14 h-14 rounded-2xl flex items-center justify-center font-black text-xl shadow-sm ${a.payment_status === 'paid' ? 'bg-emerald-100 text-emerald-700' : 'bg-amber-100 text-amber-700'}`}>
+                          {cleanName.charAt(0)}
+                        </div>
+                        <div>
+                          <div className="flex items-center gap-2 mb-1">
+                            <h3 className="font-bold text-lg text-slate-800">{cleanName}</h3>
+                            <span className="text-xs font-mono bg-white px-2 py-1 rounded-lg border border-slate-200 shadow-sm">{a.reservation_code}</span>
+                          </div>
+                          <p className="text-sm text-slate-500 font-medium">{cleanPhone} • {a.services?.name} {a.is_promo && "• 🎁 عرض"}</p>
+                        </div>
                       </div>
-                      <h2 className="font-bold text-foreground">{cleanName}</h2>
-                      <p className="text-sm text-muted-foreground">{cleanPhone} — <b>{a.services?.name || "بدون خدمة"}</b></p>
-                      {isPromo && (<p className="text-xs text-amber-700">💰 الأصلي: <s>{a.original_price ?? a.services?.price ?? "—"}</s> ← الصافي: <b>{netAmt.toLocaleString()}</b>{discLabel && ` — خصم ${discLabel}`}</p>)}
+                      <div className="flex items-center justify-between w-full sm:w-auto gap-8 mt-4 sm:mt-0 pt-4 sm:pt-0 border-t sm:border-t-0 border-slate-200">
+                        <div className="text-left hidden sm:block">
+                          <p className="text-xs text-slate-400 mb-1 font-bold">الحالة</p>
+                          <p className={`font-bold ${a.payment_status === 'paid' ? 'text-emerald-600' : 'text-amber-600'}`}>{a.payment_status === 'paid' ? 'مدفوع' : (a.payment_status === 'partial' ? 'دفع جزئي' : 'معلق')}</p>
+                        </div>
+                        <Button onClick={() => openPaymentModal(a)} variant={a.payment_status === 'paid' ? 'outline' : 'default'} className={`rounded-xl h-11 px-6 font-bold shadow-sm ${a.payment_status === 'paid' ? 'border-emerald-200 text-emerald-700 hover:bg-emerald-50' : 'bg-primary text-white'}`}>
+                          {a.payment_status === 'paid' ? 'عرض السند' : 'تحصيل المبلغ'}
+                        </Button>
+                      </div>
                     </div>
-                    <div className="flex gap-2 items-center justify-end">
-                      {isPaid ? (
-                        <Button variant="outline" className="text-emerald-600 border-emerald-500/30 bg-emerald-50/50" onClick={() => openPaymentModal(a)}><CheckCircle className="w-4 h-4 ml-1" />عرض السند</Button>
-                      ) : (
-                        <Button className="bg-emerald-600 hover:bg-emerald-700" onClick={() => openPaymentModal(a)}><Banknote className="w-4 h-4 ml-1" />تسجيل الدفع</Button>
-                      )}
-                    </div>
-                  </div>
-                );
-              })}
-              {filtered.length === 0 && <div className="card-modern p-12 text-center text-muted-foreground">لا توجد حالات اليوم</div>}
+                  )
+                })}
+              </div>
             </div>
           </>
         )}
 
         {activeTab === "invoices" && (
-          <>
-            <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
-              <div className="card-modern p-4 bg-gradient-to-br from-emerald-500/20 to-emerald-500/5 border border-border/60"><div className="flex items-center justify-between"><div><p className="text-xs text-muted-foreground font-medium">إجمالي المدفوعات</p><p className="text-2xl font-black text-foreground mt-1">{invoicesStats.totalPaid.toLocaleString()}</p></div><div className="w-11 h-11 rounded-2xl bg-background/60 flex items-center justify-center"><ArrowUpCircle className="w-5 h-5 text-emerald-500" /></div></div></div>
-              <div className="card-modern p-4 bg-gradient-to-br from-primary/20 to-primary/5 border border-border/60"><div className="flex items-center justify-between"><div><p className="text-xs text-muted-foreground font-medium">عدد الفواتير</p><p className="text-2xl font-black text-foreground mt-1">{invoicesStats.count}</p>{invoicesStats.promoCount > 0 && <p className="text-[10px] text-amber-700 font-bold mt-0.5">منها {invoicesStats.promoCount} عرض</p>}</div><div className="w-11 h-11 rounded-2xl bg-background/60 flex items-center justify-center"><FileText className="w-5 h-5 text-primary" /></div></div></div>
-              <div className="card-modern p-4 bg-gradient-to-br from-violet-500/20 to-violet-500/5 border border-border/60 flex items-center justify-center"><Button onClick={() => startScanner(true)} className="w-full bg-violet-600 hover:bg-violet-700 text-white font-bold gap-2"><ScanLine className="w-4 h-4" />تحقق من سند (QR)</Button></div>
-              <div className="card-modern p-4 bg-gradient-to-br from-sky-500/20 to-sky-500/5 border border-border/60 flex items-center justify-center"><Button onClick={openCreateInvoice} className="w-full bg-sky-600 hover:bg-sky-700 text-white font-bold gap-2"><Plus className="w-4 h-4" />إنشاء فاتورة</Button></div>
+          <div className="bg-white rounded-3xl p-6 shadow-sm border border-slate-100">
+            <div className="flex justify-between items-center mb-8">
+              <h2 className="text-2xl font-black text-slate-800 flex items-center gap-3"><FileText className="text-primary w-7 h-7" /> سجل الفواتير</h2>
+              <Button onClick={() => { setInvPatientName(""); setInvPatientPhone(""); setInvItems([{name:"",qty:1,price:0}]); setCreateInvoiceOpen(true); }} className="rounded-xl bg-primary h-11 px-6 shadow-md"><Plus className="w-5 h-5 ml-2" /> فاتورة جديدة</Button>
             </div>
-
-            <div className="card-modern p-4">
-              <div className="flex flex-col md:flex-row gap-3 md:items-center">
-                <div className="relative flex-1"><Search className="absolute right-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" /><Input value={invoicesSearch} onChange={(e) => setInvoicesSearch(e.target.value)} placeholder="بحث..." className="pr-10" /></div>
-                <div className="flex items-center gap-2"><Calendar className="w-4 h-4 text-muted-foreground" /><Input type="date" value={invoicesFrom} onChange={(e) => setInvoicesFrom(e.target.value)} className="w-40" /><span className="text-muted-foreground">→</span><Input type="date" value={invoicesTo} onChange={(e) => setInvoicesTo(e.target.value)} className="w-40" /></div>
-                <label className="flex items-center gap-2 text-sm font-medium cursor-pointer"><input type="checkbox" checked={invoicesOnlyPromo} onChange={(e) => setInvoicesOnlyPromo(e.target.checked)} className="w-4 h-4 accent-amber-600" /><span className="text-amber-700">🎁 عرض فقط</span></label>
-                <Button variant="outline" onClick={fetchInvoices} disabled={invoicesLoading}>{invoicesLoading ? <Loader2 className="w-4 h-4 animate-spin ml-1" /> : <Filter className="w-4 h-4 ml-1" />}تطبيق</Button>
-              </div>
-              <div className="flex flex-wrap gap-2 mt-3 pt-3 border-t border-border/40">
-                <button onClick={() => { setInvoicesFrom(todayStr); setInvoicesTo(todayStr); }} className="px-3 py-1.5 rounded-lg text-xs font-bold bg-primary/10 text-primary">اليوم</button>
-                <button onClick={() => { const d = new Date(); const from = new Date(d.getTime() - 6 * 24 * 60 * 60 * 1000); setInvoicesFrom(format(from, "yyyy-MM-dd")); setInvoicesTo(format(d, "yyyy-MM-dd")); }} className="px-3 py-1.5 rounded-lg text-xs font-bold bg-muted">آخر 7 أيام</button>
-                <button onClick={() => { const d = new Date(); const from = new Date(d.getFullYear(), d.getMonth(), 1); setInvoicesFrom(format(from, "yyyy-MM-dd")); setInvoicesTo(format(d, "yyyy-MM-dd")); }} className="px-3 py-1.5 rounded-lg text-xs font-bold bg-muted">هذا الشهر</button>
-              </div>
+            <div className="grid gap-4">
+              {filteredInvoicesList.length === 0 && <div className="text-center py-12 text-slate-400 font-bold">لا توجد فواتير مسجلة</div>}
+              {filteredInvoicesList.map(inv => (
+                <div key={inv.id} className="bg-white rounded-2xl p-5 flex flex-col sm:flex-row justify-between items-center border border-slate-200 hover:shadow-md transition-shadow">
+                  <div className="flex items-center gap-4 w-full sm:w-auto mb-4 sm:mb-0">
+                    <div className="w-12 h-12 rounded-2xl bg-indigo-50 text-indigo-600 flex items-center justify-center"><Receipt className="w-6 h-6" /></div>
+                    <div>
+                      <div className="flex items-center gap-3 mb-1">
+                        <span className="font-mono font-bold text-indigo-700 bg-indigo-50 px-3 py-1 rounded-lg text-sm border border-indigo-100">{inv.invoice_number}</span>
+                        <span className="text-xs text-slate-500 font-medium">{format(new Date(inv.created_at), "yyyy-MM-dd hh:mm a")}</span>
+                      </div>
+                      <h3 className="font-bold text-lg text-slate-800">{inv.patient_name || "مريض غير محدد"}</h3>
+                    </div>
+                  </div>
+                  <div className="flex items-center gap-6 w-full sm:w-auto justify-between sm:justify-end">
+                    <div className="text-left">
+                      <p className="text-xs text-slate-400 font-bold mb-1">الإجمالي</p>
+                      <p className="text-2xl font-black text-indigo-700">{Number(inv.total_amount).toLocaleString()}</p>
+                    </div>
+                    <Button size="lg" variant="outline" className="rounded-xl border-slate-200" onClick={()=>setSelectedInvoice(inv)}>عرض التفاصيل</Button>
+                  </div>
+                </div>
+              ))}
             </div>
-
-            {invoicesLoading ? (
-              <div className="card-modern p-12 text-center"><Loader2 className="w-10 h-10 animate-spin mx-auto text-primary mb-3" /><p className="text-muted-foreground">جاري التحميل...</p></div>
-            ) : (filteredInvoices.length === 0 && filteredInvoicesList.length === 0) ? (
-              <div className="card-modern p-12 text-center"><FileText className="w-12 h-12 text-muted-foreground mx-auto mb-3" /><p className="text-muted-foreground">لا توجد فواتير</p></div>
-            ) : (
-              <div className="grid gap-3">
-                {filteredInvoicesList.map((inv) => {
-                  const isPayment = isPaymentRecord(inv);
-                  return (
-                    <div key={inv.id} className={`card-modern p-4 flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-sky-400/40 bg-sky-50/30 dark:bg-sky-950/10 ${isPayment ? "border-violet-400/40 bg-violet-50/30 dark:bg-violet-950/10" : ""}`}>
-                      <div className="space-y-1 flex-1">
-                        <div className="flex items-center gap-2 flex-wrap">
-                          <code className={`px-2 py-1 rounded-lg font-bold ${isPayment ? "text-violet-700 bg-violet-500/10" : "text-sky-700 bg-sky-500/10"}`}>{inv.invoice_number}</code>
-                          <span className={`px-2 py-0.5 rounded-lg text-xs font-bold ${isPayment ? "bg-violet-500/15 text-violet-700" : "bg-sky-500/15 text-sky-700"}`}>{isPayment ? "دفعة" : "يدوية"}</span>
-                          {inv.linked_visit_code && (<span className="px-2 py-0.5 rounded-lg text-xs bg-emerald-500/15 text-emerald-700 font-bold flex items-center gap-1"><LinkIcon className="w-3 h-3" /> زيارة: {inv.linked_visit_code}</span>)}
-                          {inv.payment_method && <span className="px-2 py-0.5 rounded-lg text-xs bg-violet-500/15 text-violet-600 font-bold">{inv.payment_method}</span>}
-                          <span className="text-xs text-muted-foreground">{format(new Date(inv.created_at), "yyyy-MM-dd HH:mm")}</span>
-                        </div>
-                        <h2 className="font-bold text-foreground">{inv.patient_name || "—"}</h2>
-                        <p className="text-sm text-muted-foreground">{inv.patient_phone || "—"} — بنود: <b>{inv.items?.length || 0}</b></p>
-                      </div>
-                      <div className="flex flex-col items-end gap-1 shrink-0">
-                        <p className={`text-2xl font-black ${isPayment ? "text-violet-700" : "text-sky-700"}`}>{Number(inv.total_amount || 0).toLocaleString()}</p>
-                        <Button variant="outline" size="sm" className="text-xs gap-1" onClick={() => setSelectedInvoice(inv)}><Receipt className="w-3.5 h-3.5" />عرض السند</Button>
-                      </div>
-                    </div>
-                  );
-                })}
-
-                {filteredInvoices.map((a) => {
-                  const isPromo = a.is_promo === true;
-                  const { cleanName, cleanPhone } = extractCleanInfo(a);
-                  const net = computeNetCollected(a);
-                  const discFmt = formatDiscountLabel(a);
-                  return (
-                    <div key={a.id} className={`card-modern p-4 flex flex-col sm:flex-row sm:items-center justify-between gap-3 ${isPromo ? "border-amber-400/60 bg-amber-50/30 dark:bg-amber-950/10" : ""}`}>
-                      <div className="space-y-1 flex-1">
-                        <div className="flex items-center gap-2 flex-wrap">
-                          <code className="text-primary bg-primary/10 px-2 py-1 rounded-lg font-bold">{a.reservation_code}</code>
-                          {isPromo && <span className="bg-amber-500/20 text-amber-700 px-2 py-0.5 rounded-lg text-xs font-bold">🎁 عرض {a.promo_code ? `(${a.promo_code})` : ""}</span>}
-                          <span className={`px-2 py-0.5 rounded-lg text-xs font-bold ${a.payment_status === "partial" ? "bg-amber-500/15 text-amber-700" : "bg-blue-500/15 text-blue-600"}`}>{a.payment_status === "partial" ? "دفع جزئي" : "مدفوع"}</span>
-                          {a.payment_method && <span className="px-2 py-0.5 rounded-lg text-xs bg-violet-500/15 text-violet-600 font-bold">{a.payment_method}</span>}
-                          <span className="text-xs text-muted-foreground">{a.date} — {String(a.time).slice(0, 5)}</span>
-                        </div>
-                        <h2 className="font-bold text-foreground">{cleanName}</h2>
-                        <p className="text-sm text-muted-foreground">{cleanPhone} — <b>{a.services?.name || "بدون خدمة"}</b></p>
-                        {isPromo && (<p className="text-xs text-amber-700">💰 الأصلي: <s>{a.original_price ?? a.services?.price ?? "—"}</s> ← الصافي: <b>{net.toLocaleString()}</b>{discFmt && ` — خصم ${discFmt}`}</p>)}
-                      </div>
-                      <div className="flex flex-col items-end gap-1 shrink-0">
-                        <p className="text-2xl font-black text-emerald-600">{net.toLocaleString()}</p>
-                        <Button variant="outline" size="sm" className="text-xs gap-1" onClick={() => { const enriched = { ...a, extracted_patient_name: cleanName, extracted_patient_phone: cleanPhone }; openPaymentModal(enriched); setShowReceipt(true); }}><Receipt className="w-3.5 h-3.5" />عرض السند</Button>
-                      </div>
-                    </div>
-                  );
-                })}
-              </div>
-            )}
-          </>
+          </div>
         )}
 
         {activeTab === "receipts" && (
-          <div className="space-y-4">
-            <div className="card-modern p-5">
-              <div className="flex items-center justify-between mb-4"><h2 className="text-xl font-bold flex items-center gap-2"><BookOpen className="w-6 h-6 text-primary" /> دفتر الإيصالات (الحسابات)</h2><p className="text-sm text-muted-foreground">متابعة المدفوعات والمتبقي لكل مريض</p></div>
-              
-              <div className="flex flex-col md:flex-row gap-3 md:items-center mb-4 pb-4 border-b border-border/40">
-                <div className="relative flex-1"><Search className="absolute right-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" /><Input value={invoicesSearch} onChange={(e) => setInvoicesSearch(e.target.value)} placeholder="بحث..." className="pr-10" /></div>
-                <div className="flex items-center gap-2"><Calendar className="w-4 h-4 text-muted-foreground" /><Input type="date" value={invoicesFrom} onChange={(e) => setInvoicesFrom(e.target.value)} className="w-40" /><span className="text-muted-foreground">→</span><Input type="date" value={invoicesTo} onChange={(e) => setInvoicesTo(e.target.value)} className="w-40" /></div>
-                <Button variant="outline" onClick={fetchInvoices} disabled={invoicesLoading}>{invoicesLoading ? <Loader2 className="w-4 h-4 animate-spin ml-1" /> : <Filter className="w-4 h-4 ml-1" />}تطبيق</Button>
-              </div>
-
-              {ledgerPatients.length === 0 ? (<div className="text-center py-12 text-muted-foreground">لا توجد سجلات دفع في هذه الفترة</div>) : (
-                <div className="grid gap-3">
-                  {ledgerPatients.map((p, idx) => (
-                    <div key={idx} className="card-modern p-4 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 border-primary/20 bg-primary/5">
-                      <div className="flex-1"><h3 className="font-bold text-lg text-foreground">{p.name}</h3><p className="text-sm text-muted-foreground">{p.phone}</p></div>
-                      <div className="flex gap-6 text-center bg-background p-3 rounded-xl border border-border/50">
-                        <div><p className="text-[10px] text-muted-foreground font-bold mb-1">الإجمالي</p><p className="font-black text-foreground">{p.total.toLocaleString()}</p></div>
-                        <div className="border-r border-border/50"></div>
-                        <div><p className="text-[10px] text-muted-foreground font-bold mb-1">الواصل</p><p className="font-black text-emerald-600">{p.paid.toLocaleString()}</p></div>
-                        <div className="border-r border-border/50"></div>
-                        <div><p className="text-[10px] text-muted-foreground font-bold mb-1">الباقي</p><p className="font-black text-red-500">{p.remaining.toLocaleString()}</p></div>
-                      </div>
-                      <Button onClick={() => handleOpenLedger(p)} className="bg-primary w-full sm:w-auto shadow-glow">فتح الدفتر</Button>
+          <div className="bg-white rounded-3xl p-6 shadow-sm border border-slate-100">
+            <div className="flex justify-between items-center mb-8">
+              <h2 className="text-2xl font-black text-slate-800 flex items-center gap-3"><BookOpen className="text-primary w-7 h-7" /> دفتر حسابات المرضى</h2>
+            </div>
+            <div className="grid gap-5">
+              {ledgerPatients.length === 0 && <div className="text-center py-12 text-slate-400 font-bold">لا توجد سجلات مدفوعات حتى الآن</div>}
+              {ledgerPatients.map((p, idx) => (
+                <div key={idx} className="bg-slate-50 rounded-3xl p-6 flex flex-col lg:flex-row justify-between items-center border border-slate-200/60 hover:shadow-md transition-shadow">
+                  <div className="flex items-center gap-4 flex-1 mb-6 lg:mb-0 w-full">
+                    <div className="w-14 h-14 rounded-2xl bg-white border border-slate-200 flex items-center justify-center font-black text-slate-700 text-xl shadow-sm">{p.name.charAt(0)}</div>
+                    <div>
+                      <h3 className="font-bold text-xl text-slate-800 mb-1">{p.name}</h3>
+                      <p className="text-sm text-slate-500 font-medium font-mono">{p.phone}</p>
                     </div>
-                  ))}
+                  </div>
+                  <div className="flex gap-8 text-center bg-white px-6 py-4 rounded-2xl border border-slate-200 shadow-sm mb-6 lg:mb-0 lg:mr-8 w-full lg:w-auto justify-between">
+                    <div><p className="text-xs text-slate-500 font-bold mb-1">الإجمالي</p><p className="font-black text-slate-800 text-lg">{p.total.toLocaleString()}</p></div>
+                    <div className="w-px bg-slate-200"></div>
+                    <div><p className="text-xs text-emerald-600 font-bold mb-1">الواصل</p><p className="font-black text-emerald-600 text-lg">{p.paid.toLocaleString()}</p></div>
+                    <div className="w-px bg-slate-200"></div>
+                    <div><p className="text-xs text-rose-600 font-bold mb-1">الباقي</p><p className="font-black text-rose-600 text-lg">{p.remaining.toLocaleString()}</p></div>
+                  </div>
+                  <Button onClick={() => handleOpenLedger(p)} className="w-full lg:w-auto rounded-xl bg-slate-900 hover:bg-slate-800 h-12 px-8 shadow-md">فتح الملف</Button>
                 </div>
-              )}
+              ))}
             </div>
           </div>
         )}
       </main>
 
-      {/* ✨ مودال الدفع */}
+      {/* --- مودال الدفع --- */}
       {selectedAppointment && (
-        <div className="fixed inset-0 z-50 bg-black/80 backdrop-blur-md flex items-center justify-center p-4 overflow-y-auto">
-          <div className="bg-background rounded-3xl max-w-md w-full shadow-2xl p-6 relative border border-border my-8" onClick={(e) => e.stopPropagation()}>
-            <button onClick={() => { setSelectedAppointment(null); setShowReceipt(false); }} className="absolute top-4 right-4 z-10 p-2 rounded-full bg-muted hover:bg-muted/80 text-foreground transition"><X className="w-5 h-5" /></button>
-
-            {!showReceipt ? (
-              <div className="space-y-5 pt-2">
-                <div className="text-center">
-                  <div className="w-12 h-12 rounded-2xl bg-emerald-500/10 text-emerald-600 flex items-center justify-center mx-auto mb-2"><Banknote className="w-6 h-6" /></div>
-                  <h2 className="text-xl font-bold text-foreground">تأكيد تحصيل المبلغ</h2>
-                  {selectedAppointment.is_promo && (<p className="text-xs text-amber-700 font-bold mt-2 bg-amber-50 rounded-lg px-3 py-1.5 inline-block">🎁 حجز من عرض — الخصم {formatDiscountLabel(selectedAppointment)}</p>)}
-                </div>
-
-                <div className="grid grid-cols-3 gap-2 bg-muted/30 p-2 rounded-xl">
-                  <button onClick={() => setVisitType("normal")} className={`flex flex-col items-center justify-center p-2 rounded-lg border transition ${visitType === "normal" ? "bg-primary/10 border-primary text-primary" : "bg-transparent border-transparent text-muted-foreground hover:bg-muted"}`}><Stethoscope className="w-5 h-5 mb-1" /><span className="text-[11px] font-bold">زيارة عادية</span></button>
-                  <button onClick={() => setVisitType("followup")} className={`flex flex-col items-center justify-center p-2 rounded-lg border transition ${visitType === "followup" ? "bg-amber-500/10 border-amber-500 text-amber-600" : "bg-transparent border-transparent text-muted-foreground hover:bg-muted"}`}><RotateCcw className="w-5 h-5 mb-1" /><span className="text-[11px] font-bold">مراجعة طبيب</span></button>
-                  <button onClick={() => setVisitType("link")} className={`flex flex-col items-center justify-center p-2 rounded-lg border transition ${visitType === "link" ? "bg-violet-500/10 border-violet-500 text-violet-600" : "bg-transparent border-transparent text-muted-foreground hover:bg-muted"}`}><LinkIcon className="w-5 h-5 mb-1" /><span className="text-[11px] font-bold">دفع سابق</span></button>
-                </div>
-
-                {visitType === "link" && (
-                  <div className="space-y-2">
-                    <label className="text-xs font-semibold text-muted-foreground block mb-1">اختر الزيارة السابقة للسداد منها</label>
-                    <select value={linkedVisitCode} onChange={(e) => { setLinkedVisitCode(e.target.value); const v = patientPreviousVisits.find(x => x.code === e.target.value); if (v) setPaidAmountInput(String(v.remaining)); }} className="w-full h-10 rounded-md border border-input bg-background px-3 text-sm">
-                      <option value="">-- اختر الزيارة --</option>
-                      {patientPreviousVisits.map((v: any) => (<option key={v.code} value={v.code}>{v.code} - {v.service} (متبقي: {v.remaining})</option>))}
-                    </select>
-                  </div>
-                )}
-
-                <div className="card-modern p-4 bg-muted/40 space-y-3 text-sm">
-                  <div><label className="text-xs font-semibold text-muted-foreground block mb-1">اسم المريض</label><Input value={editPatientName} onChange={(e) => setEditPatientName(e.target.value)} placeholder="الاسم الكامل" className="font-bold text-sm bg-background" /></div>
-                  <div><label className="text-xs font-semibold text-muted-foreground block mb-1">رقم الهاتف</label><Input value={editPatientPhone} onChange={(e) => setEditPatientPhone(e.target.value)} className="font-bold text-sm bg-background" dir="ltr" /></div>
-                  <div className="flex justify-between border-b border-border/60 pb-2 pt-1"><span className="text-muted-foreground">كود الحجز</span><span className="font-mono font-bold text-primary">{selectedAppointment.reservation_code}</span></div>
-                  <div className="flex justify-between border-b border-border/60 pb-2"><span className="text-muted-foreground">الخدمة</span><span className="font-medium text-foreground">{selectedAppointment.services?.name || "فحص طبي"}</span></div>
-
-                  <div>
-                    <label className="text-xs font-semibold text-muted-foreground block mb-1">طريقة الدفع</label>
-                    <div className="grid grid-cols-3 gap-2">
-                      {["نقدي", "تحويل", "بطاقة"].map(m => (<button key={m} onClick={() => setPaymentMethodInput(m)} className={`px-3 py-2 rounded-lg text-sm font-bold border transition ${paymentMethodInput === m ? "bg-primary text-white border-primary" : "bg-background border-border"}`}>{m}</button>))}
-                    </div>
+        <div className="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-sm flex items-center justify-center p-4">
+          <div className="bg-white rounded-3xl w-full max-w-md shadow-2xl overflow-hidden flex flex-col max-h-[90vh] animate-in zoom-in-95 duration-200">
+            <div className="p-5 border-b flex justify-between items-center bg-slate-50">
+              <h3 className="font-black text-xl text-slate-800">تأكيد الدفع</h3>
+              <button onClick={()=>setSelectedAppointment(null)} className="p-2 bg-slate-200 hover:bg-slate-300 rounded-full transition"><X className="w-5 h-5" /></button>
+            </div>
+            
+            <div className="p-6 overflow-y-auto space-y-6">
+              {!showReceipt ? (
+                <>
+                  <div className="grid grid-cols-3 gap-2 bg-slate-100 p-1.5 rounded-2xl">
+                    <button onClick={()=>setVisitType("normal")} className={`py-2.5 text-sm font-bold rounded-xl transition-all ${visitType === 'normal' ? 'bg-white shadow-sm text-primary' : 'text-slate-500 hover:text-slate-700'}`}>زيارة عادية</button>
+                    <button onClick={()=>setVisitType("followup")} className={`py-2.5 text-sm font-bold rounded-xl transition-all ${visitType === 'followup' ? 'bg-white shadow-sm text-primary' : 'text-slate-500 hover:text-slate-700'}`}>مراجعة</button>
+                    <button onClick={()=>setVisitType("link")} className={`py-2.5 text-sm font-bold rounded-xl transition-all ${visitType === 'link' ? 'bg-white shadow-sm text-primary' : 'text-slate-500 hover:text-slate-700'}`}>دفع سابق</button>
                   </div>
 
-                  <div><label className="text-xs font-semibold text-muted-foreground block mb-1">تاريخ الدفع</label><Input type="date" value={paymentDate} onChange={(e) => setPaymentDate(e.target.value)} className="font-bold" /></div>
-
-                  {visitType !== "link" && (
+                  {visitType === "link" && (
                     <div>
-                      <label className="text-xs font-semibold text-amber-600 block mb-1">إجمالي تكلفة الخدمة</label>
-                      <Input type="number" value={totalCostInput} onChange={(e) => setTotalCostInput(e.target.value)} className="font-bold text-lg text-amber-700" placeholder="0" />
+                      <label className="text-xs font-bold text-slate-500 mb-2 block">اختر الزيارة السابقة</label>
+                      <select value={linkedVisitCode} onChange={e=>{setLinkedVisitCode(e.target.value); const v = patientPreviousVisits.find(x=>x.code===e.target.value); if(v) setPaidAmountInput(String(v.remaining));}} className="w-full h-12 rounded-xl border-2 border-slate-200 p-3 font-bold focus:border-primary focus:ring-0">
+                        <option value="">-- اختر --</option>
+                        {patientPreviousVisits.map(v => <option key={v.code} value={v.code}>{v.code} - متبقي: {v.remaining}</option>)}
+                      </select>
                     </div>
                   )}
 
-                  <div className="grid grid-cols-2 gap-3 pt-2">
+                  <div className="space-y-4">
+                    <div><label className="text-xs font-bold text-slate-500 mb-1.5 block">اسم المريض</label><Input value={editPatientName} onChange={e=>setEditPatientName(e.target.value)} className="h-12 rounded-xl border-slate-200 bg-slate-50 focus:bg-white" /></div>
+                    
+                    {visitType !== "link" && (
+                      <div><label className="text-xs font-bold text-slate-500 mb-1.5 block">إجمالي تكلفة الخدمة</label><Input type="number" value={totalCostInput} onChange={e=>setTotalCostInput(e.target.value)} className="h-12 rounded-xl border-slate-200 bg-slate-50 focus:bg-white font-bold text-lg" /></div>
+                    )}
+                    
+                    <div className="grid grid-cols-2 gap-4">
+                      <div><label className="text-xs font-bold text-emerald-600 mb-1.5 block">المبلغ المدفوع الآن</label><Input type="number" value={paidAmountInput} onChange={e=>setPaidAmountInput(e.target.value)} className="h-12 rounded-xl border-emerald-200 bg-emerald-50 focus:bg-white text-lg font-black text-emerald-700" /></div>
+                      <div><label className="text-xs font-bold text-rose-600 mb-1.5 block">الخصم (إن وجد)</label><Input type="number" value={discountInput} onChange={e=>setDiscountInput(e.target.value)} className="h-12 rounded-xl border-rose-200 bg-rose-50 focus:bg-white text-lg font-black text-rose-700" /></div>
+                    </div>
+
                     <div>
-                      <label className="text-xs font-semibold text-muted-foreground block mb-1">المبلغ المدفوع الآن</label>
-                      <Input type="number" value={paidAmountInput} onChange={(e) => setPaidAmountInput(e.target.value)} className="font-bold text-lg text-emerald-600" />
-                    </div>
-                    <div>
-                      <label className="text-xs font-semibold text-muted-foreground block mb-1">الخصم {modalDiscType === "percentage" ? "(نسبة %)" : "(مبلغ)"}</label>
-                      <Input type="number" value={discountInput} onChange={(e) => setDiscountInput(e.target.value)} className="font-bold text-lg text-red-500" />
-                    </div>
-                  </div>
-
-                  {modalDiscountCash > 0 && (<div className="flex justify-between text-sm text-red-600 bg-red-50 rounded-lg p-2"><span>الخصم المحسوب:</span><span className="font-bold">-{modalDiscountCash.toLocaleString()}</span></div>)}
-
-                  <div className="flex justify-between pt-2 border-t border-border/80 text-base"><span className="font-bold text-foreground">الصافي المُستلَم</span><span className="font-black text-emerald-600 text-xl">{modalNetCollected.toLocaleString()}</span></div>
-                </div>
-
-                <Button className="w-full bg-emerald-600 hover:bg-emerald-700 h-11 text-base font-bold" onClick={handlePayNow} disabled={processingPayment}>
-                  {processingPayment ? <Loader2 className="w-5 h-5 animate-spin" /> : <CheckCircle className="w-5 h-5 ml-1" />}
-                  {visitType === "link" ? "تسجيل دفعة للسداد" : "تأكيد الدفع"}
-                </Button>
-              </div>
-            ) : (
-              <div className="space-y-4 pt-1">
-                 <div className="text-center mb-1"><span className="inline-flex items-center gap-1 text-xs font-bold text-emerald-600 bg-emerald-50 dark:bg-emerald-950/50 px-3 py-1 rounded-full border border-emerald-200"><CheckCircle className="w-3.5 h-3.5" /> تم الدفع بنجاح</span></div>
-                 
-                 <div id="receipt-export-container" className="bg-white text-gray-900 rounded-2xl border border-gray-200 shadow-xl overflow-hidden" style={{ direction: 'rtl', fontFamily: 'system-ui, -apple-system, sans-serif' }}>
-                    <div style={{ 
-                      background: selectedAppointment.is_promo ? "linear-gradient(135deg, #7c3aed 0%, #a855f7 50%, #d946ef 100%)" : (selectedAppointment.payment_status === "partial" ? "linear-gradient(135deg, #ea580c 0%, #f97316 50%, #fb923c 100%)" : "linear-gradient(135deg, #059669 0%, #0d9488 50%, #0891b2 100%)"), 
-                      padding: "20px 24px 18px", color: "white", display: "flex", alignItems: "center", gap: "14px" 
-                    }}>
-                      <div style={{ width: "48px", height: "48px", background: "rgba(255,255,255,0.2)", borderRadius: "12px", display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0, border: "1.5px solid rgba(255,255,255,0.3)" }}>{clinic?.logo_url ? <img src={clinic.logo_url} alt="logo" style={{ width: "36px", height: "36px", borderRadius: "8px", objectFit: "cover" }} /> : <span style={{ fontSize: "22px" }}>{selectedAppointment.is_promo ? "🎁" : "🏥"}</span>}</div>
-                      <div style={{ flex: 1 }}><p style={{ fontSize: "9px", opacity: 0.8, marginBottom: "3px", letterSpacing: "1.5px" }}>{selectedAppointment.is_promo ? "PROMO RECEIPT" : selectedAppointment.payment_status === "partial" ? "PARTIAL RECEIPT" : "OFFICIAL RECEIPT"}</p><h2 style={{ fontSize: "17px", fontWeight: 900, margin: 0, lineHeight: 1.2 }}>{clinic?.name || "العيادة"}</h2><p style={{ fontSize: "10px", opacity: 0.85, marginTop: "3px" }}>سند استلام مبلغ</p></div>
-                      <div style={{ background: "rgba(255,255,255,0.2)", borderRadius: "10px", padding: "6px 10px", textAlign: "center", border: "1px solid rgba(255,255,255,0.25)" }}><p style={{ fontSize: "8px", opacity: 0.9, margin: 0 }}>الحالة</p><p style={{ fontSize: "10px", fontWeight: 800, margin: "2px 0 0" }}>{selectedAppointment.payment_status === "partial" ? "دفع جزئي" : "مدفوع ✓"}</p></div>
-                    </div>
-                    <div className="p-5 space-y-2 text-xs">
-                      <div className="flex justify-between items-center text-gray-600"><span>كود الحجز:</span><span className="font-mono font-bold text-gray-900 bg-gray-100 px-2 py-0.5 rounded">{selectedAppointment.reservation_code}</span></div>
-                      <div className="flex justify-between items-center text-gray-600"><span>التاريخ:</span><span className="font-medium text-gray-800">{format(new Date(), "yyyy/MM/dd - hh:mm a")}</span></div>
-                      <div className="flex justify-between items-center text-gray-600"><span>المريض:</span><span className="font-bold text-gray-900 text-sm">{editPatientName || extractCleanInfo(selectedAppointment).cleanName}</span></div>
-                      <div className="flex justify-between items-center text-gray-600"><span>الهاتف:</span><span className="font-medium text-gray-800" dir="ltr">{editPatientPhone || extractCleanInfo(selectedAppointment).cleanPhone}</span></div>
-                      <div className="flex justify-between items-center text-gray-600"><span>الخدمة:</span><span className="font-medium text-gray-800">{selectedAppointment.services?.name || "فحص طبي"}</span></div>
-                      <div className="flex justify-between items-center text-gray-600"><span>طريقة الدفع:</span><span className="font-bold text-gray-900">{paymentMethodInput}</span></div>
-                      
-                      {selectedAppointment.is_promo && (
-                        <>
-                          <div className="my-2 border-t border-dashed border-purple-200" />
-                          <div className="bg-gradient-to-r from-purple-50 to-fuchsia-50 border border-purple-200 rounded-xl p-3 space-y-1.5">
-                            <p className="text-[10px] font-bold text-purple-800 uppercase">🎁 تفاصيل العرض</p>
-                            {selectedAppointment.promo_code && (<div className="flex justify-between items-center"><span className="text-purple-700">كود:</span><span className="font-mono font-bold text-purple-900 bg-white px-2 py-0.5 rounded">{selectedAppointment.promo_code}</span></div>)}
-                            {selectedAppointment.original_price != null && (<div className="flex justify-between items-center"><span className="text-purple-700">السعر الأصلي:</span><span className="font-medium text-purple-900 line-through">{Number(selectedAppointment.original_price).toLocaleString()}</span></div>)}
-                            {formatDiscountLabel(selectedAppointment) && (<div className="flex justify-between items-center"><span className="text-purple-700">نسبة الخصم:</span><span className="font-bold text-purple-700">{formatDiscountLabel(selectedAppointment)}</span></div>)}
-                            {selectedAppointment.discount_applied != null && selectedAppointment.discount_applied > 0 && (<div className="flex justify-between items-center"><span className="text-purple-700">قيمة الخصم:</span><span className="font-bold text-red-600">-{Number(selectedAppointment.discount_applied).toLocaleString()}</span></div>)}
-                            {selectedAppointment.final_price != null && (<div className="flex justify-between items-center border-t border-purple-200 pt-1.5 mt-1"><span className="text-purple-700 font-bold">السعر بعد الخصم:</span><span className="font-black text-purple-900 text-base">{Number(selectedAppointment.final_price).toLocaleString()}</span></div>)}
-                          </div>
-                        </>
-                      )}
-
-                      <div className="my-3 border-t border-dashed border-gray-200" />
-                      <div className={`flex justify-between items-center p-3 rounded-xl border ${selectedAppointment.is_promo ? "bg-purple-50/80 border-purple-100" : selectedAppointment.payment_status === "partial" ? "bg-orange-50/80 border-orange-100" : "bg-emerald-50/80 border-emerald-100"}`}>
-                        <span className={`font-bold text-sm ${selectedAppointment.is_promo ? "text-purple-900" : selectedAppointment.payment_status === "partial" ? "text-orange-900" : "text-emerald-900"}`}>المبلغ المُستلَم:</span>
-                        <span className={`font-black text-xl ${selectedAppointment.is_promo ? "text-purple-700" : selectedAppointment.payment_status === "partial" ? "text-orange-700" : "text-emerald-700"}`}>{Number(selectedAppointment.paid_amount || 0).toLocaleString()}</span>
+                      <label className="text-xs font-bold text-slate-500 mb-2 block">طريقة الدفع</label>
+                      <div className="grid grid-cols-3 gap-2">
+                        {["نقدي", "تحويل", "بطاقة"].map(m => <button key={m} onClick={()=>setPaymentMethodInput(m)} className={`py-2.5 text-sm font-bold rounded-xl border-2 transition-all ${paymentMethodInput === m ? 'border-primary bg-primary/5 text-primary' : 'border-slate-100 text-slate-500 hover:border-slate-200'}`}>{m}</button>)}
                       </div>
-                      <div className="mt-4 pt-3 border-t border-gray-100 flex items-center justify-between"><div><p className="text-[10px] font-bold text-gray-700">رمز التحقق:</p><p className="text-[9px] font-mono text-gray-400 mt-0.5">{getUniquePaymentToken(selectedAppointment)}</p></div><div className="bg-white p-1 rounded-lg border border-gray-200 shrink-0"><img src={`https://api.qrserver.com/v1/create-qr-code/?size=120x100&data=${encodeURIComponent(getUniquePaymentToken(selectedAppointment))}`} alt="QR" className="w-12 h-12" crossOrigin="anonymous" /></div></div>
-                      <div className="mt-3 text-center text-[9px] text-gray-400 border-t border-gray-100 pt-2">معتمد إلكترونياً عبر صندوق الخزينة</div>
                     </div>
                   </div>
-                  <div className="grid grid-cols-2 gap-2 pt-2">
-                    <Button variant="outline" size="sm" className="text-xs gap-1" onClick={downloadReceipt}><Download className="w-3.5 h-3.5" />تنزيل</Button>
-                    <Button variant="outline" size="sm" className="text-xs gap-1" onClick={printReceipt}><Printer className="w-3.5 h-3.5" />طباعة</Button>
-                    <Button size="sm" className="text-xs gap-1 bg-[#25D366] hover:bg-[#20ba5a] text-white font-bold" onClick={sendViaWhatsApp} disabled={sendingReceipt}>{sendingReceipt ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <MessageCircle className="w-3.5 h-3.5" />}واتساب</Button>
-                    {(selectedAppointment.customer_telegram_id || selectedAppointment.patients?.telegram_user_id) && (<Button size="sm" className="text-xs gap-1 bg-[#0088cc] hover:bg-[#0077b5] text-white font-bold" onClick={sendViaTelegram} disabled={sendingTelegram}>{sendingTelegram ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Send className="w-3.5 h-3.5" />}تلجرام</Button>)}
+
+                  <Button onClick={handlePayNow} disabled={processingPayment} className="w-full h-14 rounded-2xl text-lg font-black bg-emerald-600 hover:bg-emerald-700 text-white shadow-lg shadow-emerald-200 mt-2">
+                    {processingPayment ? <Loader2 className="animate-spin w-6 h-6" /> : "تأكيد التحصيل"}
+                  </Button>
+                </>
+              ) : (
+                <div className="space-y-6 text-center animate-in fade-in">
+                  <div className="w-24 h-24 bg-emerald-100 text-emerald-600 rounded-full flex items-center justify-center mx-auto shadow-inner"><CheckCircle className="w-12 h-12" /></div>
+                  <h3 className="text-2xl font-black text-slate-800">تم التحصيل بنجاح!</h3>
+                  
+                  <div id="receipt-export-container" className="bg-white rounded-2xl border border-slate-200 shadow-md overflow-hidden text-right" dir="rtl">
+                    <div className="bg-slate-900 p-5 text-white flex justify-between items-center">
+                      <div><p className="text-[10px] opacity-80 mb-1">سند استلام مبلغ</p><h4 className="font-bold text-lg">{clinic?.name}</h4></div>
+                      {clinic?.logo_url && <img src={clinic.logo_url} className="w-12 h-12 rounded-xl bg-white p-1" />}
+                    </div>
+                    <div className="p-5 space-y-3 text-sm">
+                      <div className="flex justify-between border-b border-dashed border-slate-200 pb-2"><span className="text-slate-500 font-bold">المريض:</span><b className="text-slate-800">{editPatientName}</b></div>
+                      <div className="flex justify-between border-b border-dashed border-slate-200 pb-2"><span className="text-slate-500 font-bold">الكود:</span><b className="font-mono">{selectedAppointment.reservation_code}</b></div>
+                      <div className="flex justify-between items-center pt-2"><span className="text-slate-500 font-bold">المبلغ المستلم:</span><b className="text-emerald-600 text-2xl font-black">{paidAmountInput}</b></div>
+                    </div>
                   </div>
-                  <Button variant="ghost" className="w-full text-xs mt-1" onClick={() => { setSelectedAppointment(null); setShowReceipt(false); }}>إغلاق</Button>
-              </div>
-            )}
+
+                  <div className="grid grid-cols-2 gap-3">
+                    {/* ✅ تم تصحيح الزر ليستدعي handlePrintReceipt بدلاً من handlePrintLedger */}
+                    <Button variant="outline" onClick={handlePrintReceipt} className="h-12 rounded-xl border-slate-200"><Printer className="w-4 h-4 ml-2"/> طباعة</Button>
+                    <Button onClick={()=>setSelectedAppointment(null)} className="h-12 rounded-xl bg-slate-900 hover:bg-slate-800 text-white">إغلاق</Button>
+                  </div>
+                </div>
+              )}
+            </div>
           </div>
         </div>
       )}
 
-      {/* ✨ مودال إنشاء فاتورة */}
+      {/* --- مودال إنشاء فاتورة --- */}
       <Dialog open={createInvoiceOpen} onOpenChange={setCreateInvoiceOpen}>
-        <DialogContent dir="rtl" className="max-w-2xl max-h-[92vh] overflow-y-auto" onInteractOutside={(e) => e.preventDefault()} onEscapeKeyDown={(e) => e.preventDefault()}>
-          <DialogHeader><DialogTitle className="flex items-center gap-2"><FileText className="w-5 h-5 text-sky-600" />إنشاء فاتورة جديدة</DialogTitle></DialogHeader>
-          <div className="space-y-4 pt-2">
-            <div className="grid grid-cols-2 gap-3">
-              <div><label className="text-xs font-semibold text-muted-foreground block mb-1">اسم المريض</label><Input value={invPatientName} onChange={(e) => setInvPatientName(e.target.value)} placeholder="اسم المريض" onKeyDown={(e) => e.key === 'Enter' && e.preventDefault()} /></div>
-              <div><label className="text-xs font-semibold text-muted-foreground block mb-1">رقم الهاتف</label><Input value={invPatientPhone} onChange={(e) => setInvPatientPhone(e.target.value)} placeholder="رقم الهاتف" dir="ltr" onKeyDown={(e) => e.key === 'Enter' && e.preventDefault()} /></div>
-            </div>
-            <div>
-              <div className="flex items-center justify-between mb-2"><label className="text-sm font-bold text-foreground">البنود</label><Button size="sm" variant="outline" onClick={addInvoiceItem} className="gap-1"><Plus className="w-3.5 h-3.5" />إضافة بند</Button></div>
-              <div className="space-y-2">
-                {invItems.map((it, idx) => (
-                  <div key={idx} className="grid grid-cols-[1fr_70px_90px_40px] gap-2 items-center">
-                    <Input value={it.name} onChange={(e) => updateInvoiceItem(idx, { name: e.target.value })} placeholder="اسم الخدمة" className="text-sm" onKeyDown={(e) => e.key === 'Enter' && e.preventDefault()} />
-                    <Input type="number" value={it.qty} onChange={(e) => updateInvoiceItem(idx, { qty: parseInt(e.target.value) || 0 })} placeholder="الكمية" className="text-sm text-center" min={1} onKeyDown={(e) => e.key === 'Enter' && e.preventDefault()} />
-                    <Input type="number" value={it.price} onChange={(e) => updateInvoiceItem(idx, { price: parseFloat(e.target.value) || 0 })} placeholder="السعر" className="text-sm" min={0} onKeyDown={(e) => e.key === 'Enter' && e.preventDefault()} />
-                    <Button size="sm" variant="ghost" onClick={() => removeInvoiceItem(idx)} disabled={invItems.length === 1} className="text-red-600 hover:text-red-700 p-0 h-9"><Trash2 className="w-4 h-4" /></Button>
-                  </div>
-                ))}
-              </div>
-            </div>
-            <div className="bg-muted/30 rounded-xl p-3 space-y-2">
-              <div className="flex justify-between text-sm"><span className="text-muted-foreground">المجموع الفرعي:</span><span className="font-bold">{calcInvoiceSubtotal().toLocaleString()}</span></div>
-              <div className="grid grid-cols-[110px_1fr_auto] gap-2 items-center">
-                <select value={invDiscountType} onChange={(e) => setInvDiscountType(e.target.value as any)} className="h-10 rounded-md border border-input bg-background px-3 text-sm"><option value="fixed">مبلغ ثابت</option><option value="percentage">نسبة %</option></select>
-                <Input type="number" value={invDiscountValue} onChange={(e) => setInvDiscountValue(e.target.value)} placeholder="0" min={0} onKeyDown={(e) => e.key === 'Enter' && e.preventDefault()} />
-                <span className="text-sm font-bold text-red-500 whitespace-nowrap">-{calcInvoiceDiscount(calcInvoiceSubtotal()).toLocaleString()}</span>
-              </div>
-              <div className="flex justify-between items-center pt-2 border-t border-border/60"><span className="font-bold text-foreground">الإجمالي:</span><span className="font-black text-emerald-600 text-xl">{Math.max(0, calcInvoiceSubtotal() - calcInvoiceDiscount(calcInvoiceSubtotal())).toLocaleString()}</span></div>
-            </div>
-            <div className="grid grid-cols-2 gap-3">
-              <div>
-                <label className="text-xs font-semibold text-muted-foreground block mb-1">طريقة الدفع</label>
-                <div className="grid grid-cols-3 gap-1">{["نقدي", "تحويل", "بطاقة"].map(m => (<button key={m} onClick={() => setInvPaymentMethod(m)} className={`px-2 py-2 rounded-lg text-xs font-bold border transition ${invPaymentMethod === m ? "bg-primary text-white border-primary" : "bg-background border-border"}`}>{m}</button>))}</div>
-              </div>
-              <div><label className="text-xs font-semibold text-muted-foreground block mb-1">ملاحظات</label><Input value={invNotes} onChange={(e) => setInvNotes(e.target.value)} placeholder="اختياري" onKeyDown={(e) => e.key === 'Enter' && e.preventDefault()} /></div>
-            </div>
-            <div className="flex gap-2 pt-2">
-              <Button variant="outline" onClick={() => setCreateInvoiceOpen(false)} className="flex-1">إلغاء</Button>
-              <Button onClick={handleSaveInvoice} disabled={invSaving} className="flex-1 bg-sky-600 hover:bg-sky-700 text-white font-bold">{invSaving ? <Loader2 className="w-4 h-4 animate-spin ml-1" /> : <CheckCircle className="w-4 h-4 ml-1" />}حفظ</Button>
-            </div>
+        <DialogContent className="max-w-2xl rounded-3xl overflow-hidden p-0 gap-0" dir="rtl">
+          <div className="bg-slate-50 p-6 border-b border-slate-200">
+            <DialogTitle className="text-xl font-black text-slate-800 flex items-center gap-2"><FileText className="text-primary"/> إنشاء فاتورة جديدة</DialogTitle>
           </div>
-        </DialogContent>
-      </Dialog>
-
-      {/* ✨ مودال عرض الفاتورة اليدوية */}
-      {selectedInvoice && (
-        <div className="fixed inset-0 z-50 bg-black/80 backdrop-blur-md flex items-center justify-center p-4 overflow-y-auto">
-          <div className="bg-background rounded-3xl max-w-md w-full shadow-2xl p-6 relative border border-border my-8">
-            <button onClick={() => setSelectedInvoice(null)} className="absolute top-4 right-4 z-10 p-2 rounded-full bg-muted hover:bg-muted/80 text-foreground transition"><X className="w-5 h-5" /></button>
-            <div id="invoice-card-container" className="bg-white text-gray-900 rounded-2xl border border-gray-200 shadow-xl overflow-hidden" style={{ direction: 'rtl' }}>
-              <div style={{ background: "linear-gradient(135deg, #db2777 0%, #e11d48 100%)", padding: "20px 24px", color: "white", display: "flex", alignItems: "center", gap: "14px" }}>
-                <div style={{ width: "48px", height: "48px", background: "rgba(255,255,255,0.2)", borderRadius: "12px", display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0, border: "1.5px solid rgba(255,255,255,0.3)" }}>{clinic?.logo_url ? <img src={clinic.logo_url} alt="logo" style={{ width: "36px", height: "36px", borderRadius: "8px", objectFit: "cover" }} /> : <span style={{ fontSize: "22px" }}>🏥</span>}</div>
-                <div style={{ flex: 1 }}><p style={{ fontSize: "9px", opacity: 0.8, marginBottom: "3px", letterSpacing: "1.5px" }}>{isPaymentRecord(selectedInvoice) ? "PAYMENT RECEIPT" : "OFFICIAL INVOICE"}</p><h2 style={{ fontSize: "17px", fontWeight: 900, margin: 0, lineHeight: 1.2 }}>{clinic?.name || "العيادة"}</h2><p style={{ fontSize: "10px", opacity: 0.85, marginTop: "3px" }}>{isPaymentRecord(selectedInvoice) ? "سند استلام دفعة" : "فاتورة رسمية"}</p></div>
-              </div>
-              <div className="p-5 space-y-2 text-xs">
-                <div className="flex justify-between"><span className="text-gray-600">الرقم:</span><span className="font-mono font-bold bg-gray-100 px-2 rounded">{selectedInvoice.invoice_number}</span></div>
-                <div className="flex justify-between"><span className="text-gray-600">التاريخ:</span><span className="font-medium">{format(new Date(selectedInvoice.created_at), "yyyy/MM/dd - HH:mm")}</span></div>
-                <div className="flex justify-between"><span className="text-gray-600">المريض:</span><span className="font-bold">{selectedInvoice.patient_name || "—"}</span></div>
-                <div className="flex justify-between"><span className="text-gray-600">الهاتف:</span><span className="font-medium" dir="ltr">{selectedInvoice.patient_phone || "—"}</span></div>
-                <div className="flex justify-between"><span className="text-gray-600">طريقة الدفع:</span><span className="font-bold">{selectedInvoice.payment_method || "—"}</span></div>
-                {selectedInvoice.linked_visit_code && (<div className="flex justify-between"><span className="text-gray-600">مرتبطة بزيارة:</span><span className="font-bold text-emerald-700">{selectedInvoice.linked_visit_code}</span></div>)}
-                <div className="my-3 border-t border-dashed border-gray-200" />
-                <div className="space-y-1.5"><p className="text-[10px] font-bold text-gray-700 uppercase">البنود:</p>{selectedInvoice.items.map((it, i) => (<div key={i} className="flex justify-between items-center bg-gray-50 rounded-lg px-3 py-2"><span className="font-medium">{it.name} × {it.qty}</span><span className="font-bold">{(Number(it.qty) * Number(it.price)).toLocaleString()}</span></div>))}</div>
-                <div className="my-3 border-t border-dashed border-gray-200" />
-                <div className="flex justify-between"><span className="text-gray-600">المجموع الفرعي:</span><span className="font-bold">{Number(selectedInvoice.subtotal).toLocaleString()}</span></div>
-                {selectedInvoice.discount_amount > 0 && (<div className="flex justify-between text-red-600"><span>الخصم {selectedInvoice.discount_type === "percentage" ? `(${selectedInvoice.discount_value}%)` : ""}:</span><span className="font-bold">-{Number(selectedInvoice.discount_amount).toLocaleString()}</span></div>)}
-                <div className="flex justify-between items-center bg-pink-50 rounded-lg p-3 border border-pink-100 mt-2"><span className="font-bold text-pink-900 text-sm">الإجمالي:</span><span className="font-black text-pink-700 text-xl">{Number(selectedInvoice.total_amount).toLocaleString()}</span></div>
-                <div className="mt-4 pt-3 border-t border-gray-100 flex items-center justify-between">
-                  <div><p className="text-[10px] font-bold text-gray-700">رمز التحقق:</p><p className="text-[9px] font-mono text-gray-400">{selectedInvoice.invoice_number}</p></div>
-                  <div className="flex flex-col items-center gap-1"><img src={`https://api.qrserver.com/v1/create-qr-code/?size=120x100&data=${encodeURIComponent(selectedInvoice.invoice_number)}`} alt="QR" className="w-12 h-12" crossOrigin="anonymous" /><img src={`https://barcode.tec-it.com/barcode.ashx?data=${selectedInvoice.invoice_number}&code=Code128&dpi=96`} alt="barcode" style={{ height: "24px", width: "80px", objectFit: "contain" }} crossOrigin="anonymous" /></div>
+          <div className="p-6 space-y-6">
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
+              <div><label className="text-xs font-bold text-slate-500 mb-1.5 block">اسم المريض</label><Input value={invPatientName} onChange={e=>setInvPatientName(e.target.value)} className="h-12 rounded-xl bg-slate-50 focus:bg-white" /></div>
+              <div>
+                <label className="text-xs font-bold text-slate-500 mb-1.5 block">رقم الهاتف</label>
+                <div className="flex gap-2">
+                  <select value={invPatientCountryCode} onChange={e=>setInvPatientCountryCode(e.target.value)} className="w-32 h-12 rounded-xl border border-slate-200 bg-slate-50 px-2 text-sm font-bold focus:border-primary">
+                    {ARAB_COUNTRY_CODES.map(c => <option key={c.code} value={c.code}>{c.name} ({c.code})</option>)}
+                  </select>
+                  <Input value={invPatientPhone} onChange={e=>setInvPatientPhone(e.target.value)} placeholder="رقم الهاتف" className="h-12 rounded-xl flex-1 bg-slate-50 focus:bg-white text-left" dir="ltr" />
                 </div>
               </div>
             </div>
-            <div className="grid grid-cols-2 gap-2 pt-3">
-              <Button variant="outline" size="sm" className="text-xs gap-1" onClick={async () => {
-                try { const el = document.getElementById("invoice-card-container"); if (!el) return; const canvas = await html2canvas(el, { scale: 3, useCORS: true, backgroundColor: "#ffffff" }); const link = document.createElement("a"); link.href = canvas.toDataURL("image/png"); link.download = `سند_${selectedInvoice.invoice_number}.png`; link.click(); } catch { toast({ title: "خطأ", variant: "destructive" }); }
-              }}><Download className="w-3.5 h-3.5" />تنزيل</Button>
-              <Button variant="outline" size="sm" className="text-xs gap-1" onClick={async () => {
-                try { const el = document.getElementById("invoice-card-container"); if (!el) return; const canvas = await html2canvas(el, { scale: 3, useCORS: true, backgroundColor: "#ffffff" }); const imgData = canvas.toDataURL("image/png"); const win = window.open("", "_blank"); if (win) { win.document.write(`<html><head><title>طباعة</title></head><body style="margin:0;display:flex;align-items:center;justify-content:center;min-height:100vh;background:#f4f4f5;"><img src="${imgData}" style="max-width:100%;height:auto;" onload="window.print();window.close();" /></body></html>`); win.document.close(); } } catch { toast({ title: "خطأ", variant: "destructive" }); }
-              }}><Printer className="w-3.5 h-3.5" />طباعة</Button>
+
+            <div className="space-y-3 bg-slate-50 p-4 rounded-2xl border border-slate-100">
+              <div className="flex justify-between items-center mb-2">
+                <label className="text-sm font-black text-slate-700">بنود الفاتورة</label>
+                <Button variant="outline" size="sm" onClick={addInvoiceItem} className="rounded-lg h-8 text-xs border-dashed border-primary text-primary hover:bg-primary/5"><Plus className="w-3.5 h-3.5 ml-1"/> إضافة بند</Button>
+              </div>
+              {invItems.map((it, i) => (
+                <div key={i} className="flex gap-2 items-center">
+                  <Input value={it.name} onChange={e=>updateInvoiceItem(i, {name: e.target.value})} placeholder="اسم الخدمة" className="flex-1 rounded-xl bg-white" />
+                  <Input type="number" value={it.price} onChange={e=>updateInvoiceItem(i, {price: Number(e.target.value)})} placeholder="السعر" className="w-28 rounded-xl bg-white font-bold" />
+                  <Button variant="ghost" size="icon" onClick={()=>removeInvoiceItem(i)} className="text-rose-500 hover:bg-rose-50 shrink-0"><Trash2 className="w-5 h-5"/></Button>
+                </div>
+              ))}
             </div>
-            <Button variant="ghost" className="w-full text-xs mt-2" onClick={() => setSelectedInvoice(null)}>إغلاق</Button>
+
+            <div className="bg-emerald-50 p-5 rounded-2xl flex justify-between items-center border border-emerald-100">
+              <span className="font-black text-emerald-800 text-lg">الإجمالي النهائي:</span>
+              <span className="text-3xl font-black text-emerald-600">{Math.max(0, calcInvoiceSubtotal() - calcInvoiceDiscount(calcInvoiceSubtotal())).toLocaleString()} <span className="text-sm">ريال</span></span>
+            </div>
+
+            <Button onClick={handleSaveInvoice} disabled={invSaving} className="w-full h-14 rounded-2xl bg-indigo-600 hover:bg-indigo-700 text-lg font-black shadow-lg shadow-indigo-200 text-white">
+              {invSaving ? <Loader2 className="animate-spin w-6 h-6" /> : "حفظ وإرسال الفاتورة"}
+            </Button>
+          </div>
+        </DialogContent>
+      </Dialog>
+
+      {/* --- مودال عرض الفاتورة اليدوية --- */}
+      {selectedInvoice && (
+        <div className="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-sm flex items-center justify-center p-4">
+          <div className="bg-white rounded-3xl w-full max-w-lg shadow-2xl overflow-hidden flex flex-col max-h-[90vh]">
+            <div className="p-4 border-b flex justify-between items-center bg-slate-50">
+              <h3 className="font-bold text-lg">تفاصيل الفاتورة</h3>
+              <button onClick={()=>setSelectedInvoice(null)} className="p-2 bg-slate-200 hover:bg-slate-300 rounded-full"><X className="w-5 h-5"/></button>
+            </div>
+            <div className="p-6 overflow-y-auto">
+              <div id="invoice-card-container" className="bg-white border text-slate-800 border-slate-200 rounded-2xl overflow-hidden shadow-sm" dir="rtl">
+                <div className="bg-gradient-to-r from-pink-600 to-rose-600 p-6 text-white flex justify-between items-center">
+                  <div><p className="text-xs opacity-80 mb-1">فاتورة مبيعات</p><h2 className="text-xl font-black">{clinic?.name}</h2></div>
+                  {clinic?.logo_url ? <img src={clinic.logo_url} className="w-12 h-12 rounded-xl bg-white p-1" /> : <Receipt className="w-10 h-10 opacity-50"/>}
+                </div>
+                <div className="p-6 space-y-4 text-sm">
+                  <div className="flex justify-between border-b border-dashed border-slate-200 pb-2"><span className="text-slate-500">رقم الفاتورة:</span><span className="font-mono font-bold bg-slate-100 px-2 py-0.5 rounded">{selectedInvoice.invoice_number}</span></div>
+                  <div className="flex justify-between border-b border-dashed border-slate-200 pb-2"><span className="text-slate-500">التاريخ:</span><span className="font-bold">{format(new Date(selectedInvoice.created_at), "yyyy/MM/dd HH:mm")}</span></div>
+                  <div className="flex justify-between border-b border-dashed border-slate-200 pb-2"><span className="text-slate-500">المريض:</span><span className="font-bold">{selectedInvoice.patient_name || "—"}</span></div>
+                  
+                  <div className="py-2 space-y-2">
+                    <p className="text-xs font-bold text-slate-400">البنود:</p>
+                    {selectedInvoice.items.map((it, i) => (
+                      <div key={i} className="flex justify-between items-center bg-slate-50 p-2 rounded-lg">
+                        <span>{it.name} <span className="text-slate-400 text-xs">× {it.qty}</span></span>
+                        <span className="font-bold">{(Number(it.qty)*Number(it.price)).toLocaleString()}</span>
+                      </div>
+                    ))}
+                  </div>
+
+                  <div className="flex justify-between items-center bg-pink-50 p-4 rounded-xl border border-pink-100 mt-4">
+                    <span className="font-bold text-pink-900">الإجمالي المستلم:</span>
+                    <span className="text-2xl font-black text-pink-600">{Number(selectedInvoice.total_amount).toLocaleString()}</span>
+                  </div>
+                </div>
+              </div>
+            </div>
+            <div className="p-4 bg-slate-50 border-t flex gap-2 justify-end">
+              <Button variant="outline" onClick={()=>window.print()} className="rounded-xl"><Printer className="w-4 h-4 ml-2"/> طباعة</Button>
+              <Button onClick={()=>setSelectedInvoice(null)} className="rounded-xl bg-slate-900 text-white">إغلاق</Button>
+            </div>
           </div>
         </div>
       )}
 
-      {/* ✨ مودال دفتر المريض */}
+      {/* --- مودال دفتر المريض (Ledger) --- */}
       <Dialog open={ledgerModalOpen} onOpenChange={setLedgerModalOpen}>
-        <DialogContent dir="rtl" className="max-w-4xl max-h-[90vh] overflow-y-auto" onInteractOutside={(e) => e.preventDefault()}>
-          <DialogHeader><DialogTitle className="flex items-center gap-2"><BookOpen className="w-5 h-5 text-primary" />دفتر المريض: {selectedLedgerPatient?.name}</DialogTitle></DialogHeader>
+        <DialogContent className="max-w-4xl max-h-[90vh] overflow-y-auto rounded-3xl p-0 gap-0" dir="rtl">
+          <div className="bg-slate-900 p-6 text-white sticky top-0 z-10 flex justify-between items-center">
+            <div>
+              <DialogTitle className="text-2xl font-black mb-1">ملف المريض: {selectedLedgerPatient?.name}</DialogTitle>
+              <p className="text-slate-400 text-sm font-mono">{selectedLedgerPatient?.phone}</p>
+            </div>
+            <div className="flex gap-2">
+              <Button onClick={handleSendLedgerNow} disabled={sendingTelegram} className="bg-[#0088cc] hover:bg-[#0077b5] rounded-xl h-10 px-4"><Send className="w-4 h-4 ml-2"/> إرسال</Button>
+              <Button onClick={handlePrintLedger} variant="outline" className="rounded-xl h-10 border-slate-700 text-slate-300 hover:bg-slate-800 hover:text-white"><Printer className="w-4 h-4 ml-2"/> طباعة</Button>
+            </div>
+          </div>
           
-          <div className="space-y-5">
-            <div className="flex flex-wrap gap-2 p-3 bg-rose-50/50 border border-rose-200/60 rounded-xl">
-              <Button size="sm" variant="outline" className="gap-1 text-xs" onClick={handlePrintLedger}><Printer className="w-4 h-4" />طباعة الكشف</Button>
-              <Button size="sm" className="gap-1 text-xs bg-[#0088cc] hover:bg-[#0077b5] text-white" onClick={handleSendLedgerNow} disabled={sendingTelegram}>
-                {sendingTelegram ? <Loader2 className="w-4 h-4 animate-spin" /> : <Send className="w-4 h-4" />}
-                إرسال للتليجرام
-              </Button>
+          <div className="p-6 space-y-8 bg-slate-50">
+            <div className="bg-white rounded-2xl p-6 border border-slate-200 shadow-sm">
+              <h4 className="font-bold text-slate-800 mb-4 flex items-center gap-2"><PlusCircle className="w-5 h-5 text-emerald-500"/> تسجيل دفعة جديدة (يدوياً)</h4>
+              <div className="grid grid-cols-1 md:grid-cols-4 gap-3">
+                <Input type="number" value={ledgerAmount} onChange={e=>setLedgerAmount(e.target.value)} placeholder="المبلغ" className="rounded-xl h-12 font-bold text-lg" />
+                <select value={ledgerMethod} onChange={e=>setLedgerMethod(e.target.value)} className="rounded-xl border border-slate-200 p-3 text-sm font-bold bg-slate-50"><option>نقدي</option><option>تحويل</option><option>بطاقة</option></select>
+                <select value={ledgerLinkedVisit} onChange={e=>setLedgerLinkedVisit(e.target.value)} className="rounded-xl border border-slate-200 p-3 text-sm font-bold bg-slate-50">
+                  <option value="">بدون ربط بزيارة</option>
+                  {fullPatientHistory?.visits.map((v:any) => <option key={v.code} value={v.code}>{v.code} - متبقي: {v.amount-v.paid}</option>)}
+                </select>
+                <Button onClick={handleAddLedgerPayment} className="rounded-xl h-12 bg-emerald-600 hover:bg-emerald-700 text-white font-bold">تسجيل الدفعة</Button>
+              </div>
             </div>
 
-            <div className="space-y-2">
-              <h3 className="font-bold text-sm text-foreground flex items-center gap-1"><Clock className="w-4 h-4 text-primary"/> سجل الزيارات</h3>
-              <div className="overflow-x-auto rounded-xl border border-border max-h-60">
-                <table className="w-full text-sm text-right bg-card relative">
-                  <thead className="bg-muted sticky top-0 z-10"><tr><th className="p-3 font-bold text-muted-foreground">الزيارات</th><th className="p-3 font-bold text-muted-foreground">التاريخ</th><th className="p-3 font-bold text-muted-foreground">نوع العمل</th><th className="p-3 font-bold text-muted-foreground">المبلغ</th><th className="p-3 font-bold text-muted-foreground">الواصل</th><th className="p-3 font-bold text-muted-foreground">الباقي</th></tr></thead>
-                  <tbody className="divide-y divide-border">
-                    {fullPatientHistory?.visits.map((v: any, i: number) => (
-                      <tr key={i} className="hover:bg-muted/50 transition">
-                        <td className="p-3 font-mono text-xs">{v.code}</td><td className="p-3">{v.date}</td><td className="p-3">{v.service}{v.discount && <span className="block text-[10px] text-amber-600 font-bold">خصم: {v.discount}</span>}</td>
-                        <td className="p-3 font-bold">{v.amount.toLocaleString()}</td><td className="p-3 font-bold text-emerald-600">{v.paid.toLocaleString()}</td><td className="p-3 font-bold text-red-500">{(v.amount - v.paid).toLocaleString()}</td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
+            <div className="space-y-6">
+              <div>
+                <h3 className="font-black text-lg text-slate-800 mb-3 flex items-center gap-2"><Clock className="w-5 h-5 text-primary"/> سجل الزيارات</h3>
+                <div className="grid gap-3">
+                  {fullPatientHistory?.visits.map((v:any, i:number) => (
+                    <div key={i} className="bg-white p-4 rounded-xl border border-slate-200 flex flex-wrap gap-4 justify-between items-center">
+                      <div className="flex items-center gap-3">
+                        <span className="font-mono font-bold bg-slate-100 px-2 py-1 rounded text-sm">{v.code}</span>
+                        <span className="text-sm font-medium text-slate-600">{v.date} • {v.service}</span>
+                      </div>
+                      <div className="flex gap-4 text-sm">
+                        <div className="text-slate-500">المبلغ: <span className="font-bold text-slate-800">{v.amount}</span></div>
+                        <div className="text-emerald-600">الواصل: <span className="font-bold">{v.paid}</span></div>
+                        <div className="text-rose-600">الباقي: <span className="font-bold">{v.amount - v.paid}</span></div>
+                      </div>
+                    </div>
+                  ))}
+                </div>
               </div>
-            </div>
-            <div className="space-y-2">
-              <h3 className="font-bold text-sm text-foreground flex items-center gap-1"><Wallet className="w-4 h-4 text-emerald-600"/> سجل الدفعات (السندات)</h3>
-              <div className="overflow-x-auto rounded-xl border border-border max-h-60">
-                <table className="w-full text-sm text-right bg-card relative">
-                  <thead className="bg-emerald-50/50 sticky top-0 z-10"><tr><th className="p-3 font-bold text-emerald-800">المرجع</th><th className="p-3 font-bold text-emerald-800">التاريخ</th><th className="p-3 font-bold text-emerald-800">المبلغ</th><th className="p-3 font-bold text-emerald-800">طريقة الدفع</th><th className="p-3 font-bold text-emerald-800">مرتبطة بزيارة</th></tr></thead>
-                  <tbody className="divide-y divide-border">
-                    {fullPatientHistory?.payments.map((p: any, i: number) => (
-                      <tr key={i} className="hover:bg-emerald-50/30 transition">
-                        <td className="p-3 font-mono text-xs text-emerald-700 font-bold">{p.ref}</td><td className="p-3">{p.date}</td><td className="p-3 font-bold text-emerald-600">{p.amount.toLocaleString()}</td>
-                        <td className="p-3">{p.method}</td><td className="p-3 font-mono text-xs">{p.linkedVisit ? <span className="bg-primary/10 text-primary px-2 py-0.5 rounded flex items-center w-fit gap-1"><LinkIcon className="w-3 h-3"/>{p.linkedVisit}</span> : "—"}</td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
+
+              <div>
+                <h3 className="font-black text-lg text-slate-800 mb-3 flex items-center gap-2"><Wallet className="w-5 h-5 text-emerald-600"/> سجل الدفعات (السندات)</h3>
+                <div className="grid gap-3">
+                  {fullPatientHistory?.payments.map((p:any, i:number) => (
+                    <div key={i} className="bg-white p-4 rounded-xl border border-slate-200 flex flex-wrap gap-4 justify-between items-center">
+                      <div className="flex items-center gap-3">
+                        <span className="font-mono text-xs font-bold text-indigo-600 bg-indigo-50 px-2 py-1 rounded border border-indigo-100">{p.ref}</span>
+                        <span className="text-sm font-medium text-slate-600">{p.date}</span>
+                        {p.linkedVisit && <span className="text-xs bg-sky-100 text-sky-700 px-2 py-1 rounded-md font-bold">مرتبطة بـ {p.linkedVisit}</span>}
+                      </div>
+                      <div className="flex gap-4 text-sm">
+                        <div className="text-slate-500">الطريقة: <span className="font-bold text-slate-800">{p.method}</span></div>
+                        <div className="text-emerald-600 font-black text-lg">{p.amount}</div>
+                      </div>
+                    </div>
+                  ))}
+                </div>
               </div>
-            </div>
-            <div className="p-4 bg-muted/30 rounded-xl space-y-3 border border-border/50">
-              <h4 className="font-bold text-foreground">تسجيل دفعة جديدة</h4>
-              <div className="grid grid-cols-1 md:grid-cols-4 gap-3">
-                <div><label className="text-xs font-semibold text-muted-foreground block mb-1">المبلغ</label><Input type="number" value={ledgerAmount} onChange={(e) => setLedgerAmount(e.target.value)} placeholder="المبلغ" className="font-bold text-lg" /></div>
-                <div><label className="text-xs font-semibold text-muted-foreground block mb-1">طريقة الدفع</label><select value={ledgerMethod} onChange={(e) => setLedgerMethod(e.target.value)} className="h-10 rounded-md border border-input bg-background px-3 text-sm w-full"><option value="نقدي">نقدي</option><option value="تحويل">تحويل</option><option value="بطاقة">بطاقة</option></select></div>
-                <div><label className="text-xs font-semibold text-muted-foreground block mb-1">ربط بزيارة (اختياري)</label><select value={ledgerLinkedVisit} onChange={(e) => setLedgerLinkedVisit(e.target.value)} className="h-10 rounded-md border border-input bg-background px-3 text-sm w-full"><option value="">بدون ربط</option>{fullPatientHistory?.visits.filter((v: any) => v.amount > v.paid).map((v: any) => (<option key={v.code} value={v.code}>{v.code} - متبقي: {v.amount - v.paid}</option>))}</select></div>
-                <div><label className="text-xs font-semibold text-muted-foreground block mb-1">ملاحظات</label><Input value={ledgerNotes} onChange={(e) => setLedgerNotes(e.target.value)} placeholder="اختياري" /></div>
-              </div>
-              <Button onClick={handleAddLedgerPayment} className="w-full bg-emerald-600 hover:bg-emerald-700 text-white font-bold mt-2"><CheckCircle className="w-4 h-4 ml-1" />تسجيل الدفعة</Button>
             </div>
           </div>
         </DialogContent>
       </Dialog>
 
-      {/* ✨ حاوية مخفية لتصدير دفتر الحساب */}
-      {fullPatientHistory && (
+      {/* ✅ الحاوية المخفية لكشف الحساب (ممتلئة الآن لتعمل الطباعة) */}
+      {fullPatientHistory && selectedLedgerPatient && (
         <div className="absolute -left-[9999px] top-0">
-          <div id="ledger-export-container" className="p-8 bg-gray-50 w-[800px] text-right" dir="rtl" style={{ fontFamily: 'system-ui, -apple-system, sans-serif' }}>
-            <div style={{ background: "linear-gradient(135deg, #e11d48 0%, #be123c 100%)", padding: "30px", color: "white", borderRadius: "16px", marginBottom: "24px", display: "flex", justifyContent: "space-between", alignItems: "center" }}>
-              <div><h1 className="text-2xl font-bold mb-2">{clinic?.name} - كشف حساب</h1><p className="text-sm opacity-90">المريض: {selectedLedgerPatient?.name} | {selectedLedgerPatient?.phone}</p><p className="text-sm opacity-90">التاريخ: {format(new Date(), "yyyy/MM/dd")}</p></div>
-              {clinic?.logo_url && <img src={clinic.logo_url} alt="logo" className="w-20 h-20 rounded-xl object-cover bg-white p-1" />}
-            </div>
-            <div className="flex justify-between items-center bg-rose-50 p-6 rounded-xl border border-rose-200 mb-6 text-rose-900">
-              <div className="text-center flex-1"><p className="text-xs text-rose-600 font-bold mb-1">الإجمالي</p><p className="font-black text-2xl">{fullPatientHistory.total.toLocaleString()}</p></div>
-              <div className="w-px h-12 bg-rose-200"></div>
-              <div className="text-center flex-1"><p className="text-xs text-rose-600 font-bold mb-1">الواصل</p><p className="font-black text-2xl">{fullPatientHistory.paid.toLocaleString()}</p></div>
-              <div className="w-px h-12 bg-rose-200"></div>
-              <div className="text-center flex-1"><p className="text-xs text-rose-600 font-bold mb-1">المتبقي</p><p className="font-black text-2xl text-rose-500">{fullPatientHistory.remaining.toLocaleString()}</p></div>
-            </div>
-            <div className="mb-6">
-              <h3 className="font-bold text-gray-700 mb-2">سجل الزيارات</h3>
-              <table className="w-full text-sm text-right bg-white rounded-xl overflow-hidden shadow-sm border border-gray-200">
-                <thead className="bg-gray-100 text-gray-600 font-bold"><tr><th className="p-3">الزيارة</th><th className="p-3">التاريخ</th><th className="p-3">الخدمة</th><th className="p-3">المبلغ</th><th className="p-3">الواصل</th><th className="p-3">الباقي</th></tr></thead>
-                <tbody className="divide-y divide-gray-100">
-                  {fullPatientHistory.visits.map((v: any, i: number) => (
-                    <tr key={i}><td className="p-3 font-mono text-xs">{v.code}</td><td className="p-3">{v.date}</td><td className="p-3">{v.service} {v.discount && <span className="text-[10px] text-amber-600 block">خصم: {v.discount}</span>}</td><td className="p-3 font-bold">{v.amount.toLocaleString()}</td><td className="p-3 font-bold text-emerald-600">{v.paid.toLocaleString()}</td><td className="p-3 font-bold text-red-500">{(v.amount - v.paid).toLocaleString()}</td></tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
-            {fullPatientHistory.payments.length > 0 && (
+          <div id="ledger-export-container" style={{ width: '800px', backgroundColor: '#f8fafc', padding: '40px', direction: 'rtl', fontFamily: "'Segoe UI', Tahoma, Geneva, Verdana, sans-serif" }}>
+            
+            <div style={{ background: 'linear-gradient(135deg, #be123c 0%, #e11d48 50%, #f43f5e 100%)', padding: '40px', color: 'white', borderRadius: '28px', marginBottom: '28px', display: 'flex', justifyContent: 'space-between', alignItems: 'center', boxShadow: '0 20px 40px -10px rgba(225,29,72,0.3)' }}>
               <div>
-                <h3 className="font-bold text-gray-700 mb-2">سجل الدفعات (السندات)</h3>
-                <table className="w-full text-sm text-right bg-white rounded-xl overflow-hidden shadow-sm border border-gray-200">
-                  <thead className="bg-rose-50 text-rose-800 font-bold"><tr><th className="p-3">المرجع</th><th className="p-3">التاريخ</th><th className="p-3">المبلغ</th><th className="p-3">طريقة الدفع</th><th className="p-3">مرتبطة بزيارة</th></tr></thead>
-                  <tbody className="divide-y divide-gray-100">
-                    {fullPatientHistory.payments.map((p: any, i: number) => (
-                      <tr key={i}><td className="p-3 font-mono text-xs text-rose-700">{p.ref}</td><td className="p-3">{p.date}</td><td className="p-3 font-bold text-rose-600">{p.amount.toLocaleString()}</td><td className="p-3">{p.method}</td><td className="p-3 text-xs">{p.linkedVisit ? p.linkedVisit : "—"}</td></tr>
-                    ))}
-                  </tbody>
-                </table>
+                <h1 style={{ fontSize: '28px', fontWeight: 900, margin: '0 0 12px', letterSpacing: '-0.5px' }}>{clinic?.name} - كشف حساب شامل</h1>
+                <p style={{ margin: '0 0 6px', fontSize: '16px', opacity: 0.95, fontWeight: 700 }}>المريض: {selectedLedgerPatient.name}</p>
+                <p style={{ margin: 0, fontSize: '14px', opacity: 0.85, fontWeight: 600 }}>رقم الهاتف: {selectedLedgerPatient.phone} | تاريخ الإصدار: {format(new Date(), 'yyyy/MM/dd')}</p>
               </div>
-            )}
-            <p className="text-center text-xs text-gray-400 mt-8 border-t border-gray-200 pt-4">معتمد إلكترونياً - {clinic?.name}</p>
+              {clinic?.logo_url && <img src={clinic.logo_url} style={{ width: '90px', height: '90px', borderRadius: '24px', objectFit: 'cover', background: 'white', padding: '4px' }} />}
+            </div>
+
+            <div style={{ display: 'flex', gap: '20px', marginBottom: '36px' }}>
+              <div style={{ flex: 1, background: 'white', padding: '24px', borderRadius: '24px', textAlign: 'center', boxShadow: '0 10px 25px -5px rgba(0,0,0,0.05)', border: '1px solid #e2e8f0' }}>
+                <p style={{ fontSize: '13px', color: '#64748b', fontWeight: 800, margin: '0 0 8px' }}>إجمالي المبالغ</p>
+                <p style={{ fontSize: '32px', fontWeight: 900, margin: 0, color: '#0f172a' }}>{fullPatientHistory.total.toLocaleString()}</p>
+              </div>
+              <div style={{ flex: 1, background: 'white', padding: '24px', borderRadius: '24px', textAlign: 'center', boxShadow: '0 10px 25px -5px rgba(0,0,0,0.05)', border: '1px solid #e2e8f0' }}>
+                <p style={{ fontSize: '13px', color: '#059669', fontWeight: 800, margin: '0 0 8px' }}>إجمالي الواصل</p>
+                <p style={{ fontSize: '32px', fontWeight: 900, margin: 0, color: '#059669' }}>{fullPatientHistory.paid.toLocaleString()}</p>
+              </div>
+              <div style={{ flex: 1, background: 'white', padding: '24px', borderRadius: '24px', textAlign: 'center', boxShadow: '0 10px 25px -5px rgba(0,0,0,0.05)', border: '1px solid #e2e8f0' }}>
+                <p style={{ fontSize: '13px', color: '#e11d48', fontWeight: 800, margin: '0 0 8px' }}>إجمالي المتبقي</p>
+                <p style={{ fontSize: '32px', fontWeight: 900, margin: 0, color: '#e11d48' }}>{fullPatientHistory.remaining.toLocaleString()}</p>
+              </div>
+            </div>
+
+            <div style={{ marginBottom: '36px' }}>
+              <h3 style={{ fontSize: '20px', fontWeight: 900, color: '#1e293b', margin: '0 0 16px', borderRight: '6px solid #e11d48', paddingRight: '10px' }}>سجل الزيارات</h3>
+              {fullPatientHistory.visits.map((v: any, i: number) => (
+                <div key={i} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', background: 'white', padding: '16px', borderRadius: '16px', marginBottom: '10px', border: '1px solid #f1f5f9' }}>
+                  <div>
+                    <span style={{ fontFamily: 'monospace', fontSize: '12px', fontWeight: 'bold', background: '#f1f5f9', padding: '2px 8px', borderRadius: '6px', marginLeft: '8px' }}>{v.code}</span>
+                    <span style={{ fontSize: '12px', color: '#64748b', fontWeight: 600 }}>{v.date}</span>
+                    <div style={{ fontSize: '15px', fontWeight: 800, color: '#0f172a', marginTop: '6px' }}>{v.service}</div>
+                  </div>
+                  <div style={{ textAlign: 'left', background: '#f8fafc', padding: '8px 12px', borderRadius: '12px' }}>
+                    <div style={{ fontSize: '12px', color: '#64748b', fontWeight: 600 }}>المبلغ: {v.amount.toLocaleString()}</div>
+                    <div style={{ fontSize: '15px', fontWeight: 900, color: '#059669' }}>مدفوع: {v.paid.toLocaleString()}</div>
+                    <div style={{ fontSize: '12px', fontWeight: 'bold', color: '#dc2626' }}>باقي: {(v.amount - v.paid).toLocaleString()}</div>
+                  </div>
+                </div>
+              ))}
+              {fullPatientHistory.visits.length === 0 && <div style={{ textAlign: 'center', padding: '30px', background: 'white', borderRadius: '16px', color: '#94a3b8' }}>لا توجد زيارات</div>}
+            </div>
+
+            <div>
+              <h3 style={{ fontSize: '20px', fontWeight: 900, color: '#1e293b', margin: '0 0 16px', borderRight: '6px solid #0ea5e9', paddingRight: '10px' }}>سجل الدفعات</h3>
+              {fullPatientHistory.payments.map((p: any, i: number) => (
+                <div key={i} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', background: 'white', padding: '16px', borderRadius: '16px', marginBottom: '10px', border: '1px solid #f1f5f9' }}>
+                  <div>
+                    <span style={{ fontFamily: 'monospace', fontSize: '12px', fontWeight: 'bold', color: '#0284c7' }}>{p.ref}</span>
+                    <span style={{ fontSize: '12px', color: '#64748b', fontWeight: 600, marginRight: '8px' }}>{p.date}</span>
+                    {p.linkedVisit && <span style={{ fontSize: '11px', background: '#e0f2fe', color: '#0369a1', padding: '2px 8px', borderRadius: '6px', marginRight: '8px' }}>مرتبطة بـ {p.linkedVisit}</span>}
+                  </div>
+                  <div style={{ textAlign: 'left', background: '#f8fafc', padding: '8px 12px', borderRadius: '12px' }}>
+                    <div style={{ fontSize: '16px', fontWeight: 900, color: '#059669' }}>+ {p.amount.toLocaleString()}</div>
+                    <div style={{ fontSize: '11px', color: '#64748b', textAlign: 'center', background: '#e2e8f0', padding: '2px 6px', borderRadius: '6px', marginTop: '4px' }}>{p.method}</div>
+                  </div>
+                </div>
+              ))}
+              {fullPatientHistory.payments.length === 0 && <div style={{ textAlign: 'center', padding: '30px', background: 'white', borderRadius: '16px', color: '#94a3b8' }}>لا توجد دفعات</div>}
+            </div>
+
+            <p style={{ textAlign: 'center', fontSize: '14px', color: '#94a3b8', marginTop: '40px', borderTop: '1px solid #cbd5e1', paddingTop: '24px', fontWeight: 800 }}>معتمد إلكترونياً - {clinic?.name}</p>
           </div>
         </div>
       )}
 
+      {/* مودال إضافة مريض مباشر */}
       <Dialog open={walkInOpen} onOpenChange={setWalkInOpen}>
-        <DialogContent dir="rtl" className="max-w-md" onInteractOutside={(e) => e.preventDefault()}>
-          <DialogHeader><DialogTitle>إضافة مريض مباشر</DialogTitle></DialogHeader>
-          <div className="space-y-3 pt-2">
-            <Input value={patientNameInput} onChange={(e) => setPatientNameInput(e.target.value)} placeholder="اسم المريض بالكامل" />
-            <Input value={patientPhoneInput} onChange={(e) => setPatientPhoneInput(e.target.value)} placeholder="رقم الهاتف" />
-            <Button onClick={addWalkIn} className="w-full bg-primary"><UserPlus className="w-4 h-4 ml-1" />إضافة وتسجيل الحجز</Button>
+        <DialogContent className="max-w-md rounded-3xl" dir="rtl">
+          <DialogHeader><DialogTitle className="text-xl font-black">مريض مباشر (Walk-in)</DialogTitle></DialogHeader>
+          <div className="space-y-4 py-4">
+            <Input value={patientNameInput} onChange={(e) => setPatientNameInput(e.target.value)} placeholder="اسم المريض بالكامل" className="h-12 rounded-xl" />
+            <Input value={patientPhoneInput} onChange={(e) => setPatientPhoneInput(e.target.value)} placeholder="رقم الهاتف" className="h-12 rounded-xl text-left" dir="ltr" />
+            <Button onClick={addWalkIn} className="w-full h-12 rounded-xl bg-primary">تسجيل المريض</Button>
           </div>
         </DialogContent>
       </Dialog>
 
+      {/* مودال المصروفات */}
       <Dialog open={expenseModalOpen} onOpenChange={setExpenseModalOpen}>
-        <DialogContent dir="rtl" className="max-w-md" onInteractOutside={(e) => e.preventDefault()}>
-          <DialogHeader><DialogTitle className="text-red-600 flex items-center gap-1"><MinusCircle className="w-5 h-5" /> تسجيل مصروف</DialogTitle></DialogHeader>
-          <div className="space-y-3 pt-2">
-            <div><label className="text-xs font-semibold text-muted-foreground block mb-1">البيان</label><Input value={expenseTitle} onChange={(e) => setExpenseTitle(e.target.value)} placeholder="سبب المصروف" /></div>
-            <div className="grid grid-cols-3 gap-2">
-              <div><label className="text-xs font-semibold text-muted-foreground block mb-1">المبلغ</label><Input type="number" value={expenseAmount} onChange={(e) => setExpenseAmount(e.target.value)} placeholder="0.00" /></div>
-              <div><label className="text-xs font-semibold text-muted-foreground block mb-1">التاريخ</label><Input type="date" value={expenseDate} onChange={(e) => setExpenseDate(e.target.value)} /></div>
-              <div><label className="text-xs font-semibold text-muted-foreground block mb-1">الوقت</label><Input type="time" value={expenseTime} onChange={(e) => setExpenseTime(e.target.value)} /></div>
-            </div>
-            <div>
-              <label className="text-xs font-semibold text-muted-foreground block mb-1">الفئة</label>
-              <select value={expenseCategory} onChange={(e) => setExpenseCategory(e.target.value)} className="h-10 rounded-md border border-input bg-background px-3 text-sm w-full">
-                <option value="نثريات">نثريات</option><option value="أدوات طبية">أدوات طبية</option><option value="صيانة">صيانة</option><option value="كهرباء/ماء">كهرباء/ماء</option><option value="إيجار">إيجار</option><option value="رواتب">رواتب</option><option value="أخرى">أخرى</option>
-              </select>
-            </div>
-            <Button onClick={handleAddExpense} className="w-full bg-red-600 hover:bg-red-700 text-white font-bold"><MinusCircle className="w-4 h-4 ml-1" />قيد المصروف</Button>
+        <DialogContent className="max-w-md rounded-3xl" dir="rtl">
+          <DialogHeader><DialogTitle className="text-xl font-black text-rose-600">تسجيل مصروف</DialogTitle></DialogHeader>
+          <div className="space-y-4 py-4">
+            <Input value={expenseTitle} onChange={(e) => setExpenseTitle(e.target.value)} placeholder="سبب المصروف" className="h-12 rounded-xl" />
+            <Input type="number" value={expenseAmount} onChange={(e) => setExpenseAmount(e.target.value)} placeholder="المبلغ" className="h-12 rounded-xl font-bold" />
+            <select value={expenseCategory} onChange={(e) => setExpenseCategory(e.target.value)} className="w-full h-12 rounded-xl border p-2"><option>نثريات</option><option>أدوات طبية</option><option>صيانة</option><option>رواتب</option><option>أخرى</option></select>
+            <Button onClick={handleAddExpense} className="w-full h-12 rounded-xl bg-rose-600 text-white">قيد المصروف</Button>
           </div>
         </DialogContent>
       </Dialog>
@@ -1993,9 +1583,8 @@ if (isTrialExpired && role !== "owner") {
     </div>
   );
 }
-
 // ============================================================
-// CashierStats
+// CashierStats (لوحة الإحصائيات والرسوم البيانية)
 // ============================================================
 function CashierStats({ appointments, expenses }: { appointments: Appointment[]; expenses: Expense[] }) {
   const paid = appointments.filter((a) => a.payment_status === "paid" || a.payment_status === "partial");
@@ -2072,9 +1661,9 @@ function CashierStats({ appointments, expenses }: { appointments: Appointment[];
   const PIE_COLORS = ["#10b981", "#f59e0b", "#8b5cf6", "#06b6d4", "#ec4899", "#f43f5e", "#84cc16", "#0ea5e9"];
 
   const stats = [
-    { label: "المقبوضات", value: totalRevenue.toLocaleString(), icon: ArrowUpCircle, tint: "from-emerald-500/20 to-emerald-500/5", iconClass: "text-emerald-500" },
-    { label: "الخصومات", value: totalDiscountCash.toLocaleString(), icon: Receipt, tint: "from-amber-500/20 to-amber-500/5", iconClass: "text-amber-500" },
-    { label: "المصروفات", value: totalExpenses.toLocaleString(), icon: ArrowDownCircle, tint: "from-red-500/20 to-red-500/5", iconClass: "text-red-500" },
+    { label: "إجمالي المقبوضات", value: totalRevenue.toLocaleString(), icon: ArrowUpCircle, tint: "from-emerald-500/20 to-emerald-500/5", iconClass: "text-emerald-500" },
+    { label: "الخصومات الممنوحة", value: totalDiscountCash.toLocaleString(), icon: Receipt, tint: "from-amber-500/20 to-amber-500/5", iconClass: "text-amber-500" },
+    { label: "إجمالي المصروفات", value: totalExpenses.toLocaleString(), icon: ArrowDownCircle, tint: "from-rose-500/20 to-rose-500/5", iconClass: "text-rose-500" },
     { label: "صافي الصندوق", value: netInDrawer.toLocaleString(), icon: Wallet, tint: "from-primary/20 to-primary/5", iconClass: "text-primary" },
     { label: "متوسط الفاتورة", value: avgTicket.toLocaleString(), icon: TrendingUp, tint: "from-violet-500/20 to-violet-500/5", iconClass: "text-violet-500" },
   ];
@@ -2082,38 +1671,46 @@ function CashierStats({ appointments, expenses }: { appointments: Appointment[];
   const paymentTotal = byPaymentMethod.reduce((s, x) => s + x.value, 0);
 
   return (
-    <div className="space-y-5">
-      <div className="grid grid-cols-2 lg:grid-cols-5 gap-3">
+    <div className="space-y-6">
+      {/* البطاقات العلوية */}
+      <div className="grid grid-cols-2 lg:grid-cols-5 gap-4">
         {stats.map((s) => (
-          <div key={s.label} className={`card-modern p-4 bg-gradient-to-br ${s.tint} border border-border/60`}>
-            <div className="flex items-center justify-between">
+          <div key={s.label} className={`card-modern p-5 rounded-3xl bg-white border border-slate-100 shadow-sm hover:shadow-md transition-all relative overflow-hidden`}>
+            <div className={`absolute top-0 right-0 w-24 h-24 bg-gradient-to-br ${s.tint} rounded-bl-full opacity-50 z-0`}></div>
+            <div className="flex items-center justify-between relative z-10">
               <div>
-                <p className="text-xs text-muted-foreground font-medium">{s.label}</p>
-                <p className="text-2xl font-black text-foreground mt-1">{s.value}</p>
+                <p className="text-xs text-slate-500 font-bold mb-1">{s.label}</p>
+                <p className="text-2xl font-black text-slate-800 mt-1">{s.value} <span className="text-[10px] text-slate-400">ريال</span></p>
               </div>
-              <div className="w-11 h-11 rounded-2xl bg-background/60 flex items-center justify-center backdrop-blur"><s.icon className={`w-5 h-5 ${s.iconClass}`} /></div>
+              <div className={`w-12 h-12 rounded-2xl bg-white shadow-sm border border-slate-100 flex items-center justify-center`}>
+                <s.icon className={`w-6 h-6 ${s.iconClass}`} />
+              </div>
             </div>
           </div>
         ))}
       </div>
 
-      <div className="grid grid-cols-1 lg:grid-cols-[2fr_1fr] gap-4">
-        <div className="card-modern p-5">
-          <div className="flex items-center justify-between mb-4">
-            <div className="flex items-center gap-2">
-              <div className="w-8 h-8 rounded-xl bg-emerald-500/15 flex items-center justify-center"><TrendingUp className="w-4 h-4 text-emerald-600" /></div>
-              <h3 className="font-bold text-foreground">تدفق الإيرادات والمصروفات (24 ساعة)</h3>
+      {/* الرسوم البيانية (الجزء الأول) */}
+      <div className="grid grid-cols-1 lg:grid-cols-[2fr_1fr] gap-6">
+        <div className="bg-white rounded-3xl p-6 border border-slate-100 shadow-sm">
+          <div className="flex items-center justify-between mb-6">
+            <div className="flex items-center gap-3">
+              <div className="w-10 h-10 rounded-xl bg-emerald-50 flex items-center justify-center"><TrendingUp className="w-5 h-5 text-emerald-600" /></div>
+              <div>
+                <h3 className="font-bold text-slate-800">تدفق الإيرادات والمصروفات</h3>
+                <p className="text-xs text-slate-500">على مدار 24 ساعة</p>
+              </div>
             </div>
-            <div className="flex items-center gap-3 text-xs">
-              <span className="flex items-center gap-1"><div className="w-3 h-3 rounded-sm" style={{ background: "linear-gradient(135deg, #10b981, #06b6d4)" }} /> إيرادات</span>
-              <span className="flex items-center gap-1"><div className="w-3 h-3 rounded-sm" style={{ background: "linear-gradient(135deg, #f43f5e, #f59e0b)" }} /> مصروفات</span>
+            <div className="flex items-center gap-4 text-xs font-bold">
+              <span className="flex items-center gap-2"><div className="w-3 h-3 rounded-sm" style={{ background: "linear-gradient(135deg, #10b981, #06b6d4)" }} /> إيرادات</span>
+              <span className="flex items-center gap-2"><div className="w-3 h-3 rounded-sm" style={{ background: "linear-gradient(135deg, #f43f5e, #f59e0b)" }} /> مصروفات</span>
             </div>
           </div>
-          <ResponsiveContainer width="100%" height={260}>
-            <AreaChart data={financialFlow} margin={{ top: 5, right: 8, left: -20, bottom: 0 }}>
+          <ResponsiveContainer width="100%" height={280}>
+            <AreaChart data={financialFlow} margin={{ top: 5, right: 0, left: -20, bottom: 0 }}>
               <defs>
                 <linearGradient id="revenueGrad" x1="0" y1="0" x2="0" y2="1">
-                  <stop offset="0%" stopColor="#10b981" stopOpacity={0.7} />
+                  <stop offset="0%" stopColor="#10b981" stopOpacity={0.6} />
                   <stop offset="100%" stopColor="#10b981" stopOpacity={0.05} />
                 </linearGradient>
                 <linearGradient id="expenseGrad" x1="0" y1="0" x2="0" y2="1">
@@ -2121,44 +1718,44 @@ function CashierStats({ appointments, expenses }: { appointments: Appointment[];
                   <stop offset="100%" stopColor="#f43f5e" stopOpacity={0.05} />
                 </linearGradient>
               </defs>
-              <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" vertical={false} />
-              <XAxis dataKey="hourShort" tick={{ fill: "hsl(var(--muted-foreground))", fontSize: 10 }} tickLine={false} interval={2} />
-              <YAxis tick={{ fill: "hsl(var(--muted-foreground))", fontSize: 10 }} tickLine={false} />
+              <CartesianGrid strokeDasharray="3 3" stroke="#f1f5f9" vertical={false} />
+              <XAxis dataKey="hourShort" tick={{ fill: "#94a3b8", fontSize: 11, fontWeight: "bold" }} tickLine={false} axisLine={false} interval={2} />
+              <YAxis tick={{ fill: "#94a3b8", fontSize: 11, fontWeight: "bold" }} tickLine={false} axisLine={false} />
               <Tooltip
-                contentStyle={{ background: "hsl(var(--popover))", border: "1px solid hsl(var(--border))", borderRadius: 12, fontSize: 12, direction: "rtl" }}
+                contentStyle={{ background: "#ffffff", border: "1px solid #e2e8f0", borderRadius: 16, fontSize: 13, direction: "rtl", boxShadow: "0 10px 15px -3px rgba(0,0,0,0.1)", fontWeight: "bold" }}
                 labelFormatter={(v: any) => `الساعة ${v}:00`}
               />
-              <Area type="monotone" dataKey="revenue" name="إيرادات" stroke="#10b981" strokeWidth={2.5} fill="url(#revenueGrad)" />
-              <Area type="monotone" dataKey="expense" name="مصروفات" stroke="#f43f5e" strokeWidth={2.5} fill="url(#expenseGrad)" />
+              <Area type="monotone" dataKey="revenue" name="إيرادات" stroke="#10b981" strokeWidth={3} fill="url(#revenueGrad)" />
+              <Area type="monotone" dataKey="expense" name="مصروفات" stroke="#f43f5e" strokeWidth={3} fill="url(#expenseGrad)" />
             </AreaChart>
           </ResponsiveContainer>
         </div>
 
-        <div className="card-modern p-5">
-          <div className="flex items-center gap-2 mb-4">
-            <div className="w-8 h-8 rounded-xl bg-violet-500/15 flex items-center justify-center"><CreditCard className="w-4 h-4 text-violet-600" /></div>
-            <h3 className="font-bold text-foreground">طرق الدفع</h3>
+        <div className="bg-white rounded-3xl p-6 border border-slate-100 shadow-sm flex flex-col">
+          <div className="flex items-center gap-3 mb-6">
+            <div className="w-10 h-10 rounded-xl bg-violet-50 flex items-center justify-center"><CreditCard className="w-5 h-5 text-violet-600" /></div>
+            <h3 className="font-bold text-slate-800">توزيع طرق الدفع</h3>
           </div>
           {byPaymentMethod.length === 0 ? (
-            <p className="text-center text-sm text-muted-foreground py-20">لا توجد مدفوعات بعد</p>
+            <div className="flex-1 flex items-center justify-center text-sm text-slate-400 font-bold">لا توجد مدفوعات بعد</div>
           ) : (
-            <div className="relative">
-              <ResponsiveContainer width="100%" height={220}>
+            <div className="relative flex-1 flex flex-col items-center justify-center">
+              <ResponsiveContainer width="100%" height={200}>
                 <PieChart>
-                  <Pie data={byPaymentMethod} dataKey="value" nameKey="name" innerRadius={55} outerRadius={85} paddingAngle={4} stroke="hsl(var(--background))" strokeWidth={2}>
+                  <Pie data={byPaymentMethod} dataKey="value" nameKey="name" innerRadius={60} outerRadius={85} paddingAngle={6} stroke="none">
                     {byPaymentMethod.map((_, i) => <Cell key={i} fill={PIE_COLORS[i % PIE_COLORS.length]} />)}
                   </Pie>
-                  <Tooltip contentStyle={{ background: "hsl(var(--popover))", border: "1px solid hsl(var(--border))", borderRadius: 12, fontSize: 12, direction: "rtl" }} />
+                  <Tooltip contentStyle={{ background: "#ffffff", border: "1px solid #e2e8f0", borderRadius: 12, fontSize: 12, direction: "rtl", fontWeight: "bold" }} />
                 </PieChart>
               </ResponsiveContainer>
-              <div className="absolute inset-0 flex flex-col items-center justify-center pointer-events-none">
-                <p className="text-[10px] text-muted-foreground">الإجمالي</p>
-                <p className="text-xl font-black text-foreground">{paymentTotal.toLocaleString()}</p>
+              <div className="absolute inset-0 flex flex-col items-center justify-center pointer-events-none mb-4">
+                <p className="text-[10px] text-slate-400 font-bold mb-1">الإجمالي</p>
+                <p className="text-2xl font-black text-slate-800">{paymentTotal.toLocaleString()}</p>
               </div>
-              <div className="flex flex-wrap gap-2 justify-center mt-2">
+              <div className="flex flex-wrap gap-x-4 gap-y-2 justify-center mt-4 w-full">
                 {byPaymentMethod.map((m, i) => (
-                  <span key={m.name} className="flex items-center gap-1 text-[10px] font-bold">
-                    <span className="w-2.5 h-2.5 rounded-full" style={{ background: PIE_COLORS[i % PIE_COLORS.length] }} />
+                  <span key={m.name} className="flex items-center gap-1.5 text-xs font-bold text-slate-600">
+                    <span className="w-3 h-3 rounded-full" style={{ background: PIE_COLORS[i % PIE_COLORS.length] }} />
                     {m.name}: {m.value.toLocaleString()}
                   </span>
                 ))}
@@ -2168,54 +1765,55 @@ function CashierStats({ appointments, expenses }: { appointments: Appointment[];
         </div>
       </div>
 
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
-        <div className="card-modern p-5">
-          <div className="flex items-center gap-2 mb-4">
-            <div className="w-8 h-8 rounded-xl bg-primary/15 flex items-center justify-center"><Receipt className="w-4 h-4 text-primary" /></div>
-            <h3 className="font-bold text-foreground">الإيرادات حسب الخدمات</h3>
+      {/* الرسوم البيانية (الجزء الثاني) */}
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+        <div className="bg-white rounded-3xl p-6 border border-slate-100 shadow-sm">
+          <div className="flex items-center gap-3 mb-6">
+            <div className="w-10 h-10 rounded-xl bg-primary/10 flex items-center justify-center"><Receipt className="w-5 h-5 text-primary" /></div>
+            <h3 className="font-bold text-slate-800">الإيرادات حسب الخدمات</h3>
           </div>
           {byService.length === 0 ? (
-            <p className="text-center text-sm text-muted-foreground py-16">لا توجد إيرادات بعد</p>
+            <div className="h-[250px] flex items-center justify-center text-sm text-slate-400 font-bold">لا توجد إيرادات بعد</div>
           ) : (
             <ResponsiveContainer width="100%" height={250}>
-              <BarChart data={byService} layout="vertical" margin={{ top: 5, right: 20, left: 10, bottom: 0 }}>
+              <BarChart data={byService} layout="vertical" margin={{ top: 0, right: 0, left: 10, bottom: 0 }}>
                 <defs>
                   <linearGradient id="serviceGrad" x1="0" y1="0" x2="1" y2="0">
-                    <stop offset="0%" stopColor="#10b981" stopOpacity={0.9} />
-                    <stop offset="100%" stopColor="#06b6d4" stopOpacity={0.9} />
+                    <stop offset="0%" stopColor="#10b981" stopOpacity={0.8} />
+                    <stop offset="100%" stopColor="#06b6d4" stopOpacity={0.8} />
                   </linearGradient>
                 </defs>
-                <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" horizontal={false} />
-                <XAxis type="number" tick={{ fill: "hsl(var(--muted-foreground))", fontSize: 10 }} tickLine={false} />
-                <YAxis type="category" dataKey="name" tick={{ fill: "hsl(var(--foreground))", fontSize: 11 }} tickLine={false} width={110} />
-                <Tooltip contentStyle={{ background: "hsl(var(--popover))", border: "1px solid hsl(var(--border))", borderRadius: 12, fontSize: 12, direction: "rtl" }} />
-                <Bar dataKey="value" name="الإيراد" fill="url(#serviceGrad)" radius={[0, 8, 8, 0]} />
+                <CartesianGrid strokeDasharray="3 3" stroke="#f1f5f9" horizontal={false} />
+                <XAxis type="number" tick={{ fill: "#94a3b8", fontSize: 10, fontWeight: "bold" }} tickLine={false} axisLine={false} />
+                <YAxis type="category" dataKey="name" tick={{ fill: "#334155", fontSize: 12, fontWeight: "bold" }} tickLine={false} axisLine={false} width={120} />
+                <Tooltip cursor={{ fill: "#f8fafc" }} contentStyle={{ background: "#ffffff", border: "1px solid #e2e8f0", borderRadius: 12, fontSize: 12, direction: "rtl", fontWeight: "bold" }} />
+                <Bar dataKey="value" name="الإيراد" fill="url(#serviceGrad)" radius={[0, 8, 8, 0]} barSize={24} />
               </BarChart>
             </ResponsiveContainer>
           )}
         </div>
 
-        <div className="card-modern p-5">
-          <div className="flex items-center gap-2 mb-4">
-            <div className="w-8 h-8 rounded-xl bg-red-500/15 flex items-center justify-center"><PieIcon className="w-4 h-4 text-red-500" /></div>
-            <h3 className="font-bold text-foreground">توزيع المصروفات حسب الفئة</h3>
+        <div className="bg-white rounded-3xl p-6 border border-slate-100 shadow-sm">
+          <div className="flex items-center gap-3 mb-6">
+            <div className="w-10 h-10 rounded-xl bg-rose-50 flex items-center justify-center"><PieIcon className="w-5 h-5 text-rose-500" /></div>
+            <h3 className="font-bold text-slate-800">توزيع المصروفات حسب الفئة</h3>
           </div>
           {byExpenseCategory.length === 0 ? (
-            <p className="text-center text-sm text-muted-foreground py-16">لا توجد مصروفات بعد</p>
+            <div className="h-[250px] flex items-center justify-center text-sm text-slate-400 font-bold">لا توجد مصروفات بعد</div>
           ) : (
             <ResponsiveContainer width="100%" height={250}>
-              <BarChart data={byExpenseCategory} layout="vertical" margin={{ top: 5, right: 20, left: 10, bottom: 0 }}>
+              <BarChart data={byExpenseCategory} layout="vertical" margin={{ top: 0, right: 0, left: 10, bottom: 0 }}>
                 <defs>
                   <linearGradient id="expenseCatGrad" x1="0" y1="0" x2="1" y2="0">
-                    <stop offset="0%" stopColor="#f43f5e" stopOpacity={0.9} />
-                    <stop offset="100%" stopColor="#f59e0b" stopOpacity={0.9} />
+                    <stop offset="0%" stopColor="#f43f5e" stopOpacity={0.8} />
+                    <stop offset="100%" stopColor="#f59e0b" stopOpacity={0.8} />
                   </linearGradient>
                 </defs>
-                <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" horizontal={false} />
-                <XAxis type="number" tick={{ fill: "hsl(var(--muted-foreground))", fontSize: 10 }} tickLine={false} />
-                <YAxis type="category" dataKey="name" tick={{ fill: "hsl(var(--foreground))", fontSize: 11 }} tickLine={false} width={110} />
-                <Tooltip contentStyle={{ background: "hsl(var(--popover))", border: "1px solid hsl(var(--border))", borderRadius: 12, fontSize: 12, direction: "rtl" }} />
-                <Bar dataKey="value" name="المبلغ" fill="url(#expenseCatGrad)" radius={[0, 8, 8, 0]} />
+                <CartesianGrid strokeDasharray="3 3" stroke="#f1f5f9" horizontal={false} />
+                <XAxis type="number" tick={{ fill: "#94a3b8", fontSize: 10, fontWeight: "bold" }} tickLine={false} axisLine={false} />
+                <YAxis type="category" dataKey="name" tick={{ fill: "#334155", fontSize: 12, fontWeight: "bold" }} tickLine={false} axisLine={false} width={120} />
+                <Tooltip cursor={{ fill: "#f8fafc" }} contentStyle={{ background: "#ffffff", border: "1px solid #e2e8f0", borderRadius: 12, fontSize: 12, direction: "rtl", fontWeight: "bold" }} />
+                <Bar dataKey="value" name="المبلغ" fill="url(#expenseCatGrad)" radius={[0, 8, 8, 0]} barSize={24} />
               </BarChart>
             </ResponsiveContainer>
           )}
@@ -2224,3 +1822,4 @@ function CashierStats({ appointments, expenses }: { appointments: Appointment[];
     </div>
   );
 }
+
