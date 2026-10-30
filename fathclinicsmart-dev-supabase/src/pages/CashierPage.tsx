@@ -272,7 +272,6 @@ export default function CashierPage() {
   const [createInvoiceOpen, setCreateInvoiceOpen] = useState(false);
   const [invPatientName, setInvPatientName] = useState("");
   const [invPatientPhone, setInvPatientPhone] = useState("");
-  const [invCountryCode, setInvCountryCode] = useState("+967");
   const [invItems, setInvItems] = useState<InvoiceItem[]>([{ name: "", qty: 1, price: 0 }]);
   const [invDiscountType, setInvDiscountType] = useState<"fixed" | "percentage">("fixed");
   const [invDiscountValue, setInvDiscountValue] = useState<string>("0");
@@ -416,7 +415,7 @@ export default function CashierPage() {
       const qrParsed = parseQRText(rawText);
       const targetCode = qrParsed.code || rawText.trim();
 
-      // ✨ إصلاح: البحث المباشر في قاعدة البيانات بدون فلترة تاريخ
+      // البحث المباشر في قاعدة البيانات بدون فلترة تاريخ
       const { data: inv } = await supabase.from("invoices").select("*").eq("invoice_number", targetCode).maybeSingle();
       if (inv) {
         const isPayment = isPaymentRecord(inv);
@@ -424,7 +423,7 @@ export default function CashierPage() {
         setScannerOpen(false); stopScanner(); return;
       }
 
-      const { data: appt } = await supabase.from("appointments").select("*").eq("reservation_code", targetCode).maybeSingle();
+      const { data: appt } = await supabase.from("appointments").select("*, patients(name)").eq("reservation_code", targetCode).maybeSingle();
       if (appt) {
         setVerifyResult({ status: "valid", message: `✅ سند دفع صحيح\nكود: ${appt.reservation_code}\nالمريض: ${appt.patients?.name || appt.notes || 'غير محدد'}\nالمبلغ المدفوع: ${Number(appt.paid_amount || 0).toLocaleString()}` });
         setScannerOpen(false); stopScanner(); return;
@@ -468,7 +467,7 @@ export default function CashierPage() {
       setScannerMessage(`❌ لم يتم العثور — الكود: ${targetCode}`);
       setTimeout(() => setScannerMessage(null), 4000);
     }
-  }, [clinic, verifyScannerOpen, invoicesList, invoiceAppointments]);
+  }, [clinic, verifyScannerOpen]);
 
   const stopScanner = useCallback(async () => {
     await destroyScanner();
@@ -659,7 +658,7 @@ export default function CashierPage() {
             <div style="border-top:1px dashed #e5e7eb; margin:10px 0;"></div>
             <div style="background:${colorCode}; border:1px solid ${bgColor}40; padding:16px; border-radius:12px; display:flex; justify-content:space-between; align-items:center;">
               <span style="font-weight:bold; color:${textColor};">المبلغ المستلم:</span>
-              <span style="font-size:24px; font-weight:900; color:${bgColor};">${payload.amount.toLocaleString()}</span>
+              <span style="font-size:24px; font-weight:900; color:${bgColor};">${Number(payload.amount).toLocaleString()}</span>
             </div>
             <div style="display:flex; justify-content:space-between; align-items:center; margin-top:10px; border-top:1px solid #f3f4f6; padding-top:10px;">
               <div><p style="font-size:9px; color:#9ca3af; margin:0;">رمز التحقق:</p><p style="font-size:9px; font-family:monospace; color:#9ca3af; margin:0;">PAY-VERIFIED|${payload.code}</p></div>
@@ -701,7 +700,7 @@ export default function CashierPage() {
     }
   };
 
-  const sendTelegramLedger = async (history: any, patientName: string, phone: string, patientId?: string) => {
+  const sendTelegramLedger = async (patientName: string, phone: string) => {
     setSendingTelegram(true);
     try {
       let tgId = "";
@@ -715,18 +714,51 @@ export default function CashierPage() {
 
       if (!tgId) { setSendingTelegram(false); return; }
 
-      const visitsHtml = history.visits.map((v: any) => `
+      let appts: any[] = [];
+      if (pData?.id) {
+          const { data } = await supabase.from("appointments").select("reservation_code, date, final_price, paid_amount, services(name), payment_status").eq("patient_id", pData.id);
+          appts = data || [];
+      } else {
+          const { data } = await supabase.from("appointments").select("reservation_code, date, final_price, paid_amount, services(name), payment_status, patients!inner(phone)").eq("patients.phone", phone);
+          appts = data || [];
+      }
+
+      const { data: invs } = await supabase.from("invoices").select("*").eq("clinic_id", clinic?.id).or(`patient_phone.eq.${phone},patient_name.eq.${patientName}`);
+
+      const validAppts = appts.filter(a => a.payment_status === "paid" || a.payment_status === "partial" || Number(a.paid_amount) > 0);
+
+      const visits = validAppts.map(a => ({
+          code: a.reservation_code, 
+          date: a.date, 
+          service: a.services?.name || "فحص", 
+          amount: round2(Number(a.final_price || 0)), 
+          paid: round2(Number(a.paid_amount || 0))
+      })).sort((a,b) => new Date(b.date).getTime() - new Date(a.date).getTime());
+
+      const payments = (invs || []).filter(i => isPaymentRecord(i)).map(i => ({
+          ref: i.invoice_number, 
+          date: i.created_at.split('T')[0], 
+          amount: round2(Number(i.total_amount || 0)), 
+          method: i.payment_method || "نقدي", 
+          linkedVisit: extractLinkedVisit(i) || "—"
+      })).sort((a,b) => new Date(b.date).getTime() - new Date(a.date).getTime());
+
+      const total = round2(visits.reduce((s, v) => s + v.amount, 0));
+      const paid = round2(visits.reduce((s, v) => s + v.paid, 0));
+      const remaining = round2(Math.max(0, total - paid));
+
+      const visitsHtml = visits.map((v: any) => `
         <tr>
           <td style="padding:10px; border-bottom:1px solid #f3f4f6; font-family:monospace; font-size:12px;">${v.code}</td>
           <td style="padding:10px; border-bottom:1px solid #f3f4f6; font-size:12px;">${v.date}</td>
-          <td style="padding:10px; border-bottom:1px solid #f3f4f6; font-size:12px;">${v.service} ${v.discount ? `<br><span style="font-size:10px; color:#d97706;">خصم: ${v.discount}</span>` : ''}</td>
+          <td style="padding:10px; border-bottom:1px solid #f3f4f6; font-size:12px;">${v.service}</td>
           <td style="padding:10px; border-bottom:1px solid #f3f4f6; font-weight:bold; font-size:12px;">${v.amount.toLocaleString()}</td>
           <td style="padding:10px; border-bottom:1px solid #f3f4f6; font-weight:bold; color:#059669; font-size:12px;">${v.paid.toLocaleString()}</td>
           <td style="padding:10px; border-bottom:1px solid #f3f4f6; font-weight:bold; color:#dc2626; font-size:12px;">${(v.amount - v.paid).toLocaleString()}</td>
         </tr>
       `).join("");
 
-      const paymentsHtml = history.payments.map((p: any) => `
+      const paymentsHtml = payments.map((p: any) => `
         <tr>
           <td style="padding:10px; border-bottom:1px solid #f3f4f6; font-family:monospace; font-size:12px; color:#059669;">${p.ref}</td>
           <td style="padding:10px; border-bottom:1px solid #f3f4f6; font-size:12px;">${p.date}</td>
@@ -747,11 +779,11 @@ export default function CashierPage() {
             ${clinic?.logo_url ? `<img src="${clinic.logo_url}" style="width:80px; height:80px; border-radius:12px; object-fit:cover; background:white; padding:4px;" />` : ''}
           </div>
           <div style="display:flex; justify-content:space-between; align-items:center; background:#fff1f2; padding:24px; border-radius:12px; border:1px solid #fecdd3; margin-bottom:24px;">
-            <div style="text-align:center; flex:1;"><p style="font-size:12px; color:#9f1239; font-weight:bold; margin:0 0 4px;">الإجمالي</p><p style="font-size:24px; font-weight:900; margin:0;">${history.total.toLocaleString()}</p></div>
+            <div style="text-align:center; flex:1;"><p style="font-size:12px; color:#9f1239; font-weight:bold; margin:0 0 4px;">الإجمالي</p><p style="font-size:24px; font-weight:900; margin:0;">${total.toLocaleString()}</p></div>
             <div style="width:1px; height:40px; background:#fecdd3;"></div>
-            <div style="text-align:center; flex:1;"><p style="font-size:12px; color:#9f1239; font-weight:bold; margin:0 0 4px;">الواصل</p><p style="font-size:24px; font-weight:900; margin:0; color:#be123c;">${history.paid.toLocaleString()}</p></div>
+            <div style="text-align:center; flex:1;"><p style="font-size:12px; color:#9f1239; font-weight:bold; margin:0 0 4px;">الواصل</p><p style="font-size:24px; font-weight:900; margin:0; color:#be123c;">${paid.toLocaleString()}</p></div>
             <div style="width:1px; height:40px; background:#fecdd3;"></div>
-            <div style="text-align:center; flex:1;"><p style="font-size:12px; color:#be123c; font-weight:bold; margin:0 0 4px;">المتبقي</p><p style="font-size:24px; font-weight:900; margin:0; color:#e11d48;">${history.remaining.toLocaleString()}</p></div>
+            <div style="text-align:center; flex:1;"><p style="font-size:12px; color:#be123c; font-weight:bold; margin:0 0 4px;">المتبقي</p><p style="font-size:24px; font-weight:900; margin:0; color:#e11d48;">${remaining.toLocaleString()}</p></div>
           </div>
           <div style="margin-bottom:24px;">
             <h3 style="font-size:16px; color:#374151; margin:0 0 12px;">سجل الزيارات</h3>
@@ -760,7 +792,7 @@ export default function CashierPage() {
               <tbody>${visitsHtml}</tbody>
             </table>
           </div>
-          ${history.payments.length > 0 ? `
+          ${payments.length > 0 ? `
           <div>
             <h3 style="font-size:16px; color:#374151; margin:0 0 12px;">سجل الدفعات (السندات)</h3>
             <table style="width:100%; text-align:right; background:white; border-radius:12px; overflow:hidden; border:1px solid #e5e7eb; border-collapse:collapse;">
@@ -905,41 +937,9 @@ export default function CashierPage() {
     }
 
     setProcessingPayment(false);
-    await fetchAppointments();
-    await fetchInvoices();
+    fetchAppointments();
+    fetchInvoices();
     
-    // بناء كشف حساب محدث ببيانات الوقت الحقيقي
-    const updatedVisits = invoiceAppointments.map(a => {
-        const isCurrent = a.id === selectedAppointment.id;
-        const originalAmount = round2(a.original_price ?? a.services?.price ?? 0);
-        const discount = round2(isCurrent ? calcDiscountAmount(totalCost, discountValue, discType) : (a.discount_applied || 0));
-        const finalAmount = round2(isCurrent ? totalCost - discount : (a.final_price ?? (originalAmount - discount) ?? a.paid_amount ?? 0));
-        let paid = round2(isCurrent ? ((a.paid_amount || 0) + netCollected) : (a.paid_amount || 0));
-        if (visitType === "link" && a.reservation_code === linkedVisitCode) {
-            paid = round2((a.paid_amount || 0) + netCollected);
-        }
-        return {
-            code: a.reservation_code, date: a.date, service: a.services?.name || "فحص",
-            amount: finalAmount, paid: paid, method: a.payment_method || "نقدي",
-            discount: discount > 0 ? discount : undefined
-        };
-    });
-
-    const newPaymentRecord = {
-        ref: typeToSend === "previous" ? generatePaymentReference(editPatientPhone || "0000") : selectedAppointment.reservation_code,
-        date: format(new Date(), "yyyy-MM-dd"), amount: netCollected, method: paymentMethodInput, linkedVisit: linkedVisitCode || undefined
-    };
-
-    const updatedPayments = [...invoicesList, newPaymentRecord].map(i => ({
-        ref: i.invoice_number, date: i.created_at?.split('T')[0] || i.date, amount: round2(i.total_amount), method: i.payment_method, linkedVisit: extractLinkedVisit(i)
-    }));
-
-    const historyTotal = updatedVisits.reduce((s, v) => s + v.amount, 0);
-    const historyPaid = updatedVisits.reduce((s, v) => s + v.paid, 0);
-    const historyRemaining = Math.max(0, historyTotal - historyPaid);
-
-    const newHistory = { visits: updatedVisits, payments: updatedPayments, total: historyTotal, paid: historyPaid, remaining: historyRemaining };
-
     setTimeout(async () => {
        await autoSendToTelegram({
          type: typeToSend,
@@ -954,7 +954,7 @@ export default function CashierPage() {
          discountType: discType
        });
        
-       await sendTelegramLedger(newHistory, editPatientName, editPatientPhone, patientId);
+       await sendTelegramLedger(editPatientName, editPatientPhone);
     }, 1000);
   };
 
@@ -1060,12 +1060,9 @@ export default function CashierPage() {
     try {
       const discountAmount = calcInvoiceDiscount(subtotal);
       const totalAmount = round2(Math.max(0, subtotal - discountAmount));
-      // ✨ إصلاح مشكلة التكرار: استخدام رقم عشوائي بدلاً من الوقت فقط
       const invoiceNumber = `INV-${Date.now().toString().slice(-6)}${Math.floor(Math.random() * 100)}`;
       
-      const fullPhone = invPatientPhone.trim() ? `${invCountryCode}${invPatientPhone.trim().replace(/^0+/, '')}` : null;
-
-      const newInvoiceData = { clinic_id: clinic.id, patient_name: invPatientName.trim() || null, patient_phone: fullPhone, invoice_number: invoiceNumber, items: invItems.filter(it => it.name.trim() && Number(it.price) > 0), subtotal, discount_type: invDiscountType, discount_value: parseFloat(invDiscountValue) || 0, discount_amount: discountAmount, total_amount: totalAmount, paid_status: "paid", paid_amount: totalAmount, payment_method: invPaymentMethod, notes: invNotes.trim() || null, paid_at: new Date().toISOString() };
+      const newInvoiceData = { clinic_id: clinic.id, patient_name: invPatientName.trim() || null, patient_phone: invPatientPhone.trim() || null, invoice_number: invoiceNumber, items: invItems.filter(it => it.name.trim() && Number(it.price) > 0), subtotal, discount_type: invDiscountType, discount_value: parseFloat(invDiscountValue) || 0, discount_amount: discountAmount, total_amount: totalAmount, paid_status: "paid", paid_amount: totalAmount, payment_method: invPaymentMethod, notes: invNotes.trim() || null, paid_at: new Date().toISOString() };
 
       const { data: inserted, error } = await supabase.from("invoices").insert(newInvoiceData).select().single();
       if (error) throw error;
@@ -1076,15 +1073,14 @@ export default function CashierPage() {
       if (inserted) { 
         setSelectedInvoice({ ...inserted, payment_reference: undefined, linked_visit_code: null } as Invoice); 
         
-        // ✨ إرسال الفاتورة إلى التليجرام على الرقم المكتوب مباشرة
-        if (fullPhone) {
+        if (invPatientPhone.trim()) {
           await autoSendToTelegram({
             type: "invoice",
             code: invoiceNumber,
             name: invPatientName.trim() || "غير محدد",
             service: "فاتورة جديدة",
             amount: totalAmount,
-            tgId: fullPhone, // نرسل على الرقم مباشرة
+            tgId: invPatientPhone.trim(),
             items: newInvoiceData.items
           });
         }
@@ -1154,14 +1150,15 @@ export default function CashierPage() {
       const finalAmount = round2(a.final_price ?? (originalAmount - discount) ?? a.paid_amount ?? 0);
       const paid = round2(a.paid_amount || 0);
       
-      p.visits.push({
-        code: a.reservation_code, date: a.date, service: a.services?.name || "فحص",
-        amount: finalAmount, paid: paid, method: a.payment_method || "نقدي",
-        discount: discount > 0 ? discount : undefined
-      });
-      
-      p.total = round2(p.total + finalAmount); 
-      p.paid = round2(p.paid + paid);
+      if (paid > 0 || a.payment_status === "partial") {
+          p.visits.push({
+            code: a.reservation_code, date: a.date, service: a.services?.name || "فحص",
+            amount: finalAmount, paid: paid, method: a.payment_method || "نقدي",
+            discount: discount > 0 ? discount : undefined
+          });
+          p.total = round2(p.total + finalAmount); 
+          p.paid = round2(p.paid + paid);
+      }
     });
 
     invoicesList.forEach(inv => {
@@ -1242,34 +1239,16 @@ export default function CashierPage() {
     await fetchInvoices(); 
     await fetchAppointments();
     
-    // بناء كشف حساب محدث محلياً وإرساله
-    const updatedVisits = fullPatientHistory?.visits.map(v => {
-      if (ledgerLinkedVisit && v.code === ledgerLinkedVisit) {
-        return { ...v, paid: round2(v.paid + amount) };
-      }
-      return v;
-    }) || [];
-
-    const newPaymentRecord = {
-      ref: paymentRef, date: format(new Date(), "yyyy-MM-dd"), amount: amount, method: ledgerMethod, linkedVisit: ledgerLinkedVisit || undefined
-    };
-    const updatedPayments = [newPaymentRecord, ...(fullPatientHistory?.payments || [])];
-    const newTotal = fullPatientHistory?.total || 0;
-    const newPaid = (fullPatientHistory?.paid || 0) + amount;
-    const newRemaining = Math.max(0, newTotal - newPaid);
-
-    const newHistory = { visits: updatedVisits, payments: updatedPayments, total: newTotal, paid: newPaid, remaining: newRemaining };
-
-    setFullPatientHistory(newHistory);
-    if (selectedLedgerPatient) {
-      setSelectedLedgerPatient({
-        ...selectedLedgerPatient,
-        visits: updatedVisits,
-        payments: updatedPayments,
-        total: newTotal,
-        paid: newPaid,
-        remaining: newRemaining
-      });
+    const refreshed = ledgerPatients.find(p => p.phone === selectedLedgerPatient.phone || p.name === selectedLedgerPatient.name);
+    if (refreshed) {
+       setSelectedLedgerPatient(refreshed);
+       setFullPatientHistory({
+           visits: refreshed.visits,
+           payments: refreshed.payments,
+           total: refreshed.total,
+           paid: refreshed.paid,
+           remaining: refreshed.remaining
+       });
     }
 
     setTimeout(async () => {
@@ -1285,7 +1264,7 @@ export default function CashierPage() {
           await autoSendToTelegram({
             type: "manual", code: paymentRef, name: selectedLedgerPatient.name, service: ledgerLinkedVisit ? `دفعة للزيارة ${ledgerLinkedVisit}` : "دفعة يدوية", amount, tgId, linkedVisit: ledgerLinkedVisit || undefined
           });
-          await sendTelegramLedger(newHistory, selectedLedgerPatient.name, selectedLedgerPatient.phone, selectedLedgerPatient.id || "");
+          await sendTelegramLedger(selectedLedgerPatient.name, selectedLedgerPatient.phone);
        }
        setLedgerModalOpen(false);
     }, 1000);
@@ -1683,19 +1662,7 @@ export default function CashierPage() {
           <div className="space-y-4 pt-2">
             <div className="grid grid-cols-2 gap-3">
               <div><label className="text-xs font-semibold text-muted-foreground block mb-1">اسم المريض</label><Input value={invPatientName} onChange={(e) => setInvPatientName(e.target.value)} placeholder="اسم المريض" onKeyDown={(e) => e.key === 'Enter' && e.preventDefault()} /></div>
-              <div>
-                <label className="text-xs font-semibold text-muted-foreground block mb-1">رقم الهاتف</label>
-                <div className="flex gap-1" dir="ltr">
-                  <select value={invCountryCode} onChange={(e) => setInvCountryCode(e.target.value)} className="w-24 h-10 rounded-md border border-input bg-background px-1 text-sm">
-                    <option value="+967">🇾🇪 +967</option>
-                    <option value="+966">🇸🇦 +966</option>
-                    <option value="+971">🇦🇪 +971</option>
-                    <option value="+20">🇪🇬 +20</option>
-                    <option value="+1">🇺🇸 +1</option>
-                  </select>
-                  <Input value={invPatientPhone} onChange={(e) => setInvPatientPhone(e.target.value)} placeholder="771234567" onKeyDown={(e) => e.key === 'Enter' && e.preventDefault()} />
-                </div>
-              </div>
+              <div><label className="text-xs font-semibold text-muted-foreground block mb-1">رقم الهاتف</label><Input value={invPatientPhone} onChange={(e) => setInvPatientPhone(e.target.value)} placeholder="مثال: +967771234567" dir="ltr" onKeyDown={(e) => e.key === 'Enter' && e.preventDefault()} /></div>
             </div>
             <div>
               <div className="flex items-center justify-between mb-2"><label className="text-sm font-bold text-foreground">البنود</label><Button size="sm" variant="outline" onClick={addInvoiceItem} className="gap-1"><Plus className="w-3.5 h-3.5" />إضافة بند</Button></div>
